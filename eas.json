@@ -1,29 +1,9 @@
 {
   "cli": {
-    "version": ">= 3.15.1"
+    "version": ">= 5.2.0"
   },
   "build": {
-    "development": {
-      "extends": "production",
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk",
-        "withoutCredentials": true,
-        "gradleCommand": ":app:assembleDebug"
-      },
-      "ios": {
-        "buildConfiguration": "Debug",
-        "simulator": true
-      }
-    },
-    "development_tv": {
-      "extends": "development",
-      "env": {
-        "EXPO_TV": "1"
-      }
-    },
-    "preview": {
-      "extends": "production",
+    "base": {
       "distribution": "internal",
       "ios": {
         "simulator": true
@@ -33,21 +13,40 @@
         "withoutCredentials": true
       }
     },
+    "development": {
+      "extends": "base",
+      "android": {
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "ios": {
+        "buildConfiguration": "Debug"
+      }
+    },
+    "development_tv": {
+      "extends": "development",
+      "env": {
+        "EXPO_TV": "1"
+      }
+    },
+    "preview": {
+      "extends": "base"
+    },
     "preview_tv": {
       "extends": "preview",
       "env": {
         "EXPO_TV": "1"
       }
     },
-    "production": {},
-    "production_tv": {
-      "extends": "production", 
+    "production_android": {
+      "extends": "base",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
       "env": {
         "EXPO_TV": "1"
       }
     }
   },
-  "submit": {
-    "production": {}
-  }
+  "submit": {}
 }

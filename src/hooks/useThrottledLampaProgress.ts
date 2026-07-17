@@ -1,0 +1,72 @@
+import { useCallback, useEffect, useRef } from 'react';
+
+import { putLampaProgress } from '@/api/progress';
+import { isEpisodeCompleted, lampaSeasonEpisodeForWatch } from '@/lib/progressUtils';
+import { queryClient } from '@/providers/QueryProvider';
+import type { LampaProgressPut } from '@/types/progress';
+
+const DEFAULT_SYNC_INTERVAL_MS = 20_000;
+
+export function useThrottledLampaProgress(
+  enabled: boolean,
+  lampaId: string,
+  isSerial: boolean,
+  season?: number,
+  episode?: number,
+  intervalMs = DEFAULT_SYNC_INTERVAL_MS,
+) {
+  const lastSyncRef = useRef(0);
+  const pendingRef = useRef<LampaProgressPut | null>(null);
+  const completedSentRef = useRef(false);
+
+  useEffect(() => {
+    lastSyncRef.current = 0;
+    pendingRef.current = null;
+    completedSentRef.current = false;
+  }, [lampaId, season, episode]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingRef.current) {
+        void putLampaProgress(pendingRef.current).finally(() => {
+          void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
+        });
+      }
+    };
+  }, []);
+
+  return useCallback(
+    (current: number, duration: number) => {
+      if (!enabled || !lampaId.trim()) return;
+
+      const coords = lampaSeasonEpisodeForWatch(isSerial, season, episode);
+      if (!coords) return;
+
+      const progress =
+        duration > 1 ? Math.min(1, Math.max(0, current / duration)) : Math.min(0.95, current / 1440);
+      const completed = isEpisodeCompleted(progress);
+      const payload: LampaProgressPut = {
+        lampaId: lampaId.trim(),
+        seasonOrdinal: coords.seasonOrdinal,
+        episodeOrdinal: coords.episodeOrdinal,
+        progress,
+        completed,
+      };
+      pendingRef.current = payload;
+
+      const now = Date.now();
+      const shouldSyncCompleted = completed && !completedSentRef.current;
+      const shouldSyncInterval = now - lastSyncRef.current >= intervalMs;
+      const shouldSyncInitial = lastSyncRef.current === 0;
+
+      if (shouldSyncInitial || shouldSyncCompleted || shouldSyncInterval) {
+        lastSyncRef.current = now;
+        if (completed) completedSentRef.current = true;
+        void putLampaProgress(payload).then(() => {
+          void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
+        });
+      }
+    },
+    [enabled, lampaId, isSerial, season, episode, intervalMs],
+  );
+}

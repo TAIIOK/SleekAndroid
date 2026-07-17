@@ -1,87 +1,138 @@
-# Expo Router TV demo 👋
+# AniVerse Native (react-native-tvos)
 
-This is an Expo project that can be built for Apple TV and Android TV targets, and also supports mobile and web platforms.
+Нативное приложение **Android phone + Android TV** (один APK) на базе Expo SDK 56 и `react-native-tvos`.
 
-In addition to Expo SDK packages, this project uses
+> В монорепо пакет называется `aniverse-tv` (историческое имя). Это и есть native-клиент из плана `aniverse-native`.
 
-- the [React Native TV fork](https://github.com/react-native-tvos/react-native-tvos), which supports both phone (Android and iOS) and TV (Android TV and Apple TV) targets
-- the [React Native TV config plugin](https://github.com/react-native-tvos/config-tv/tree/main/packages/config-tv) to allow Expo prebuild to modify the project's native files for TV builds
+## Стек
 
-The application code is based on the [revamped default project template](https://expo.dev/changelog/sdk-55-beta#revamped-default-project-template) introduced in SDK 55, with modifications and additions to support multiplatform development, including TV.
+| Слой | Технология |
+|------|------------|
+| UI | React Native + expo-router |
+| TV focus | `Platform.isTV`, `Pressable`, `useTVEventHandler` |
+| API | `@aniverse/api`, `@aniverse/types`, `@aniverse/playback` |
+| Auth | AsyncStorage + JWT refresh |
+| TV login | Device-code / QR (`DeviceQrLogin`) |
+| Player | `expo-video` (ExoPlayer / AVPlayer) |
+| Кеш | `@tanstack/react-query` |
 
-## 🚀 How to use
+## Платформы
 
-#### Creating a new project
+| Платформа | Клиент |
+|-----------|--------|
+| Android phone | `aniverse-tv` APK |
+| Android TV / Fire TV | тот же APK (`EXPO_TV=1` prebuild) |
+| Smart TV браузеры | [`site/`](../site/) web + TVShell |
+| Capacitor | [`site/android/`](../site/android/) — **заморожен** |
 
-- Create a project: `npx create-expo-app -e with-router-tv`
-- `cd` into the project
-
-- For TV development:
-
-```sh
-yarn
-yarn prebuild:tv # Executes clean Expo prebuild with TV modifications
-yarn ios # Build and run for Apple TV
-yarn android # Build for Android TV
-```
-- For mobile development:
-
-```sh
-yarn
-yarn prebuild # Executes Expo prebuild with no TV modifications
-yarn ios # Build and run for iOS
-yarn android # Build for Android mobile
-```
-
-- For web development:
-
-```sh
-yarn web # Run the project on web from localhost
-```
-
-> **_NOTE:_**
-> Setting the environment variable `EXPO_TV=1` enables the `@react-native-tvos/config-tv` plugin to modify the project for TV.
-> This can also be done by setting the parameter `isTV` to true in the `app.json`.
-
-## Development
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-This project includes a [demo](./src/components/tv-event-demo.tsx) showing how to use React Native TV APIs to highlight controls as the user navigates the screen with the remote control.
-
-## Deploy
-
-Deploy on all platforms with Expo Application Services (EAS).
-
-- Deploy the website: `npx eas-cli deploy` — [Learn more](https://docs.expo.dev/eas/hosting/get-started/)
-- Deploy on iOS and Android using: `npx eas-cli build` — [Learn more](https://expo.dev/eas)
-
-## Get a fresh project
-
-When you're ready, run:
+## Разработка
 
 ```bash
-npm run reset-project
+# из корня монорепо
+npm install
+
+cd aniverse-tv
+npm run postinstall   # symlink expo-router для @expo/cli (npm workspaces)
+npm run start
+
+# Android phone emulator
+npm run android
+
+# Android TV (leanback launcher + banner)
+# запускает AVD Television_1080p (не phone)
+npm run prebuild:tv
+npm run android:tv
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+API URL задаётся в `app.json` → `expo.extra`:
 
-## Other setup steps
+```json
+{
+  "apiUrl": "https://api.taiiok.ru",
+  "watchHubUrl": "https://watchhub.taiiok.ru",
+  "sitePublicUrl": "https://preview.taiiok.ru"
+}
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Сборка release APK (sideload)
 
-## Learn more
+```bash
+cd aniverse-tv
 
-To learn more about developing your project with Expo, look at the following resources:
+# 1. Prebuild с TV-манифестом (LEANBACK_LAUNCHER, banner)
+npm run prebuild:tv
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/learn): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+# 2. Release APK
+npm run android:release
+# → android/app/build/outputs/apk/release/app-release.apk
+```
 
-## Join the community
+### Подпись release
 
-Join our community of developers creating universal apps.
+1. Создайте keystore (храните вне git):
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+keytool -genkeypair -v -storetype PKCS12 -keystore aniverse-release.keystore \
+  -alias aniverse -keyalg RSA -keysize 2048 -validity 10000
+```
+
+2. Добавьте в `android/gradle.properties` (не коммитьте пароли в git):
+
+```properties
+ANIVERSE_UPLOAD_STORE_FILE=aniverse-release.keystore
+ANIVERSE_UPLOAD_KEY_ALIAS=aniverse
+ANIVERSE_UPLOAD_STORE_PASSWORD=***
+ANIVERSE_UPLOAD_KEY_PASSWORD=***
+```
+
+3. Настройте `android/app/build.gradle` signingConfigs (после prebuild) и пересоберите.
+
+Или используйте EAS:
+
+```bash
+eas build --profile production_android --platform android
+```
+
+## TV MVP scope
+
+Включено: Home, Anime, Movies, Series, Search, History, Profile, Watch (anime), Device QR auth.
+
+Скрыто на TV (`Platform.isTV`): manga, downloads, feed, party — см. `src/lib/tvRoutes.ts`.
+
+## Структура
+
+```
+src/
+  api/           # HTTP client, auth, catalog, progress
+  app/           # expo-router screens
+  components/    # PosterRail, AppShell, VideoPlayer, DeviceQrLogin
+  lib/           # storage, config, tvRoutes
+  providers/     # AuthProvider, QueryProvider
+```
+
+## QA
+
+- Android TV Emulator (API 31+, Leanback)
+- Реальная приставка: D-pad навигация, QR login, HLS playback
+- Телефон: таб-бар, password login, те же API
+
+См. также [`site/docs/TV_QA.md`](../site/docs/TV_QA.md) для web TV регрессии.
+
+## Troubleshooting
+
+### `Cannot find module 'expo-router/...'` или `@expo/metro-runtime`
+
+npm workspaces держит Expo-пакеты в `aniverse-tv/node_modules`, а `@expo/cli` из корня монорепо ищет их в `AniverseWeb/node_modules/`.
+
+**Исправление (уже в проекте):**
+1. `@expo/metro-runtime` добавлен как прямая зависимость
+2. `npm run postinstall` → `scripts/link-workspace-deps.js` (symlink всех workspace-пакетов в корень)
+3. Скрипты `start` / `android` / `prebuild` идут через `scripts/with-expo-path.js`
+
+После `npm install` в корне:
+
+```bash
+cd aniverse-tv
+npm run postinstall
+npm run start
+```

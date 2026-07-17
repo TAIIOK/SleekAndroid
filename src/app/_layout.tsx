@@ -1,22 +1,24 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from 'expo-router';
-import React from 'react';
-import { Platform, useColorScheme } from 'react-native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import '@/global.css';
+import { GlobalShell } from '@/components/shell/GlobalShell';
+import { AuthProvider } from '@/providers/AuthProvider';
+import { QueryProvider } from '@/providers/QueryProvider';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {Platform.OS === 'ios' || !Platform.isTV ? (
-        <AnimatedSplashOverlay />
-      ) : null}
-      <AppTabs />
-    </ThemeProvider>
+    <QueryProvider>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <GlobalShell />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#13121b' } }}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="auth/device" />
+          <Stack.Screen name="(main)" />
+          <Stack.Screen name="watch" options={{ presentation: 'fullScreenModal' }} />
+        </Stack>
+      </AuthProvider>
+    </QueryProvider>
   );
 }

@@ -1,0 +1,501 @@
+import type { AnimeEpisode, AnimeListItem } from '@aniverse/types';
+import {
+  CATALOG_PAGE_SIZE,
+  catalogPagedPath,
+  decodeAnimeList,
+  decodeLampaList,
+  decodeLampaRecommendationList,
+  decodeRecommendationFeed,
+  filterLampaItemsByKind,
+  isLampaRecommendationEndpoint,
+  normalizeCatalogPath,
+  parseLampaRecommendationSectionId,
+  parseRecommendationSectionsQuery,
+  resolveLampaRecommendationUrlPath,
+  type LampaListItem,
+  type RecommendationFeedSection,
+} from '@aniverse/catalog';
+
+export {
+  CATALOG_PAGE_SIZE,
+  decodeAnimeList,
+  decodeLampaList,
+  decodeRecommendationFeed,
+  isAnimeRecommendationShowcaseId,
+  isLampaRecommendationEndpoint,
+  normalizeCatalogPath,
+  type RecommendationFeedSection,
+} from '@aniverse/catalog';
+
+import { resolveLampaPosterUrl } from '@/lib/config';
+import {
+  decodeLampaDetail,
+  mergeLampaWithTmdb,
+  resolveLampaTmdbId,
+} from '@/lib/lampaDetail';
+import type { SkipResponse } from '@/lib/playerSkip';
+
+import { ApiError, request, requestData, unwrapData } from './client';
+import { fetchTmdbLampaDetail } from './lampaExtras';
+
+export type LampaItem = LampaListItem;
+
+export interface AnimeDetail {
+  id: number;
+  title?: string;
+  titleEn?: string;
+  alternativeTitle?: string;
+  description?: string;
+  poster?: string | string[];
+  screenshots?: unknown;
+  banner?: unknown;
+  score?: number;
+  year?: number;
+  status?: string;
+  type?: string;
+  ageRating?: string;
+  episodesTotal?: number;
+  genres?: Array<string | { name?: string; id?: number }>;
+  studios?: Array<string | { name?: string; id?: number }>;
+  aggregatedRating?: { rating?: number };
+}
+
+export interface LampaSeason {
+  seasonNumber?: number;
+  episodeCount?: number;
+  name?: string;
+  overview?: string;
+  air_date?: string;
+  airDate?: string;
+  poster_path?: string;
+  posterPath?: string;
+}
+
+export interface LampaDetail {
+  id: string | number;
+  objectId?: string;
+  tmdbId?: number | string;
+  title?: string;
+  name?: string;
+  originalTitle?: string;
+  original_title?: string;
+  originalName?: string;
+  original_name?: string;
+  overview?: string;
+  description?: string;
+  poster?: string;
+  poster_path?: string;
+  posterPath?: string;
+  backdrop_path?: string;
+  backdropPath?: string;
+  vote_average?: number;
+  voteAverage?: number;
+  release_date?: string;
+  releaseDate?: string;
+  first_air_date?: string;
+  firstAirDate?: string;
+  year?: number;
+  status?: string;
+  runtime?: number;
+  pg?: number;
+  kind?: string;
+  genres?: Array<string | { name?: string; id?: number }>;
+  seasons?: LampaSeason[] | Record<string, number> | unknown;
+}
+
+export interface LampaSectionFetch {
+  method?: string;
+  path?: string;
+  query?: Record<string, string>;
+  urlPath?: string;
+  hint?: string;
+}
+
+export interface LampaSection {
+  endpoint: string;
+  title: string;
+  fetch?: LampaSectionFetch;
+}
+
+export interface LampaKind {
+  id: string;
+  name: string;
+  sectionsPath?: string;
+}
+
+export interface LampaCategoriesData {
+  kinds?: LampaKind[];
+}
+
+export interface CatalogShowcase {
+  id: string;
+  name: string;
+  path: string;
+}
+
+export interface CatalogFilter {
+  id: string;
+  name: string;
+  type: string;
+  sourcePath?: string;
+  itemPathTemplate?: string;
+  values?: string[];
+  path?: string;
+  params?: string[];
+}
+
+export interface AnimeCategoriesData {
+  filters?: CatalogFilter[];
+  showcases?: CatalogShowcase[];
+}
+
+export interface CatalogContentType {
+  id: string;
+  name: string;
+}
+
+export async function fetchCatalog(): Promise<CatalogContentType[]> {
+  return requestData<CatalogContentType[]>('/api/catalog');
+}
+
+export async function fetchAnimeCategories(): Promise<AnimeCategoriesData> {
+  return requestData<AnimeCategoriesData>('/api/catalog/anime/categories');
+}
+
+export async function fetchLampaCategories(): Promise<LampaCategoriesData> {
+  return requestData<LampaCategoriesData>('/api/catalog/lampa/categories');
+}
+
+export async function fetchLampaSections(kind: string): Promise<LampaSection[]> {
+  return requestData<LampaSection[]>(`/api/catalog/lampa/categories/${kind}/sections`);
+}
+
+export async function fetchLampaSection(
+  kind: string,
+  endpoint: string,
+  page = 1,
+  limit = CATALOG_PAGE_SIZE,
+): Promise<LampaItem[]> {
+  const enc = encodeURIComponent(endpoint);
+  const json = await request<unknown>(
+    `/api/lampa/tmdb/catalog/${kind}/section?endpoint=${enc}&page=${page}&limit=${limit}`,
+  );
+  return decodeLampaList(json);
+}
+
+export async function fetchLampaSectionByUrlPath(
+  urlPath: string,
+  page = 1,
+  limit = CATALOG_PAGE_SIZE,
+  options?: {
+    kind?: 'movie' | 'tv';
+    sectionId?: string | null;
+  },
+): Promise<LampaItem[]> {
+  const kind = options?.kind;
+  const resolved = kind
+    ? resolveLampaRecommendationUrlPath(urlPath, kind)
+    : normalizeCatalogPath(urlPath);
+  const normalized = resolved.startsWith('/') ? resolved : `/${resolved}`;
+  const requestPath = catalogPagedPath(normalized, page, limit);
+  const json = await request<unknown>(requestPath);
+  if (normalized.includes('/catalog/recommendations/lampa')) {
+    const sectionFilter =
+      parseRecommendationSectionsQuery(normalized) ?? options?.sectionId ?? null;
+    const items = decodeLampaRecommendationList(json, sectionFilter);
+    return kind ? filterLampaItemsByKind(items, kind) : items;
+  }
+  const items = decodeLampaList(json);
+  return kind ? filterLampaItemsByKind(items, kind) : items;
+}
+
+export async function fetchLampaSectionItems(
+  kind: string,
+  section: LampaSection,
+  page = 1,
+  limit = CATALOG_PAGE_SIZE,
+): Promise<LampaItem[]> {
+  const isRecommendation = isLampaRecommendationEndpoint(section.endpoint);
+  const useRecommendationFetch = isRecommendation && Boolean(section.fetch?.urlPath);
+
+  if (isRecommendation && !section.fetch?.urlPath) {
+    return [];
+  }
+
+  try {
+    if (useRecommendationFetch && section.fetch?.urlPath) {
+      return fetchLampaSectionByUrlPath(section.fetch.urlPath, page, limit, {
+        kind: kind as 'movie' | 'tv',
+        sectionId: parseLampaRecommendationSectionId(section.endpoint),
+      });
+    }
+    const items = await fetchLampaSection(kind, section.endpoint, page, limit);
+    return filterLampaItemsByKind(items, kind as 'movie' | 'tv');
+  } catch {
+    if (isRecommendation) return [];
+    throw new Error('Не удалось загрузить секцию каталога');
+  }
+}
+
+export async function fetchAnimeRecommendationFeed(
+  limit = 24,
+): Promise<RecommendationFeedSection[]> {
+  const json = await request<unknown>(`/api/v2/catalog/recommendations/anime?limit=${limit}`);
+  return decodeRecommendationFeed(json);
+}
+
+export async function fetchAnimeList(
+  path: string,
+  page = 1,
+  limit = CATALOG_PAGE_SIZE,
+): Promise<AnimeListItem[]> {
+  const resolved = normalizeCatalogPath(path);
+  const normalized = resolved.startsWith('/') ? resolved : `/${resolved}`;
+  const requestPath = catalogPagedPath(normalized, page, limit);
+  const json = await request<unknown>(requestPath);
+  return decodeAnimeList(json);
+}
+
+const ANIME_BATCH_LIMIT = 100;
+
+export async function fetchAnimeBatch(animeIds: number[]): Promise<AnimeListItem[]> {
+  const ids = [...new Set(animeIds.filter((id) => Number.isFinite(id) && id > 0))].slice(
+    0,
+    ANIME_BATCH_LIMIT,
+  );
+  if (!ids.length) return [];
+  try {
+    const json = await request<unknown>(`/api/v1/animes/batch?animes=${ids.join(',')}`);
+    return decodeAnimeList(json);
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchAnimeDetail(animeId: number): Promise<AnimeDetail> {
+  return requestData<AnimeDetail>(`/api/animes/${animeId}`);
+}
+
+export interface AnimeRelated {
+  id?: number;
+  animeId?: number;
+  relatedAnimeId?: number;
+  relationType?: string;
+  title?: string;
+  poster?: unknown;
+  anime?: AnimeListItem;
+  relatedAnime?: AnimeListItem;
+}
+
+export async function fetchAnimeRelated(animeId: number): Promise<AnimeRelated[]> {
+  try {
+    const json = await request<unknown>(`/api/animes/get/related/${animeId}`);
+    if (Array.isArray(json)) return json as AnimeRelated[];
+    const data = json && typeof json === 'object' && 'data' in json
+      ? (json as { data: unknown }).data
+      : json;
+    return Array.isArray(data) ? (data as AnimeRelated[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchGenres(): Promise<{ id: number; name: string }[]> {
+  try {
+    const json = await requestData<{ id: number; name: string }[] | { genres?: { id: number; name: string }[] }>(
+      '/api/catalog/genres',
+    );
+    if (Array.isArray(json)) return json;
+    return json.genres ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchAnimeSkip(
+  animeId: number,
+  episode: number,
+  type: 'opening' | 'ending' = 'opening',
+): Promise<SkipResponse | null> {
+  try {
+    const json = await request<SkipResponse>(
+      `/api/animes/get/opening?id=${animeId}&episode=${episode}&type=${type}`,
+    );
+    return json ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAnimeEpisodes(
+  animeId: number,
+  page = 1,
+  limit = 50,
+): Promise<{ episodes: AnimeEpisode[]; totalPages: number }> {
+  const json = await request<{
+    data?: AnimeEpisode[];
+    meta?: { totalPages?: number; total?: number };
+  }>(`/api/animes/${animeId}/episodes?page=${page}&limit=${limit}`);
+  const episodes = json.data ?? [];
+  const total = json.meta?.total;
+  const totalPages =
+    json.meta?.totalPages ??
+    (total && limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1);
+  return { episodes, totalPages: Math.max(1, totalPages) };
+}
+
+export function mapLampaToRailItem(item: LampaItem) {
+  const posterPath = lampaItemPoster(item);
+  return {
+    id: item.id,
+    title: lampaItemTitle(item),
+    // Resolve here so cards always get a full WatchHub/TMDB URL
+    poster: posterPath ? resolveLampaPosterUrl(posterPath) : undefined,
+    score:
+      item.vote_average ??
+      (typeof (item as { voteAverage?: number }).voteAverage === 'number'
+        ? (item as { voteAverage: number }).voteAverage
+        : undefined),
+  };
+}
+
+export async function fetchLampaDetail(kind: string, routeId: string): Promise<LampaDetail> {
+  const normalizedKind = kind === 'home' ? 'tv' : kind;
+  const mediaKind = (normalizedKind === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv';
+
+  if (!/^\d+$/.test(routeId)) {
+    throw new ApiError('Неверный идентификатор', 400);
+  }
+
+  let payload;
+  try {
+    const raw = await request<unknown>(`/api/lampa/item/${normalizedKind}/${routeId}`);
+    payload = decodeLampaDetail(unwrapData(raw));
+  } catch (e) {
+    const tmdb = await fetchTmdbLampaDetail(mediaKind, Number(routeId));
+    if (tmdb) return mergeLampaWithTmdb(null, tmdb, normalizedKind).detail;
+    throw e;
+  }
+
+  const tmdbId = resolveLampaTmdbId(payload.detail, routeId);
+  if (tmdbId != null) {
+    try {
+      const tmdb = await fetchTmdbLampaDetail(mediaKind, tmdbId);
+      if (tmdb) return mergeLampaWithTmdb(payload, tmdb, normalizedKind).detail;
+    } catch {
+      /* keep backend payload */
+    }
+  }
+
+  return payload.detail;
+}
+
+export interface CatalogSearchParams {
+  q: string;
+  type?: string;
+  limit?: number;
+  page?: number;
+}
+
+export interface CatalogSearchData {
+  anime?: AnimeListItem[];
+  lampa?: LampaItem[];
+}
+
+export async function searchCatalog(params: CatalogSearchParams): Promise<CatalogSearchData> {
+  const qs = new URLSearchParams({ q: params.q });
+  if (params.type) qs.set('type', params.type);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.page) qs.set('page', String(params.page));
+  const json = await request<{ data?: CatalogSearchData } | CatalogSearchData>(
+    `/api/catalog/search?${qs}`,
+  );
+  if (json && typeof json === 'object' && 'data' in json) {
+    return (json as { data: CatalogSearchData }).data ?? {};
+  }
+  return json as CatalogSearchData;
+}
+
+export async function fetchEpisodeById(episodeId: number): Promise<AnimeEpisode | null> {
+  try {
+    const json = await request<unknown>(`/api/episodes/${episodeId}`);
+    const raw =
+      json && typeof json === 'object' && 'data' in json
+        ? (json as { data: unknown }).data
+        : json;
+    return raw as AnimeEpisode;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+export async function fetchHistory(): Promise<HistoryItem[]> {
+  try {
+    const json = await request<{ data?: HistoryItem[] } | HistoryItem[]>(
+      '/api/user/history?limit=100',
+    );
+    if (Array.isArray(json)) return json;
+    return json.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export interface HistoryItem {
+  id?: string | number;
+  animeId?: number;
+  episodeId?: number;
+  title?: string;
+  poster?: string;
+  kind?: string;
+  lampaId?: string;
+  progress?: number;
+}
+
+export function lampaItemTitle(item: LampaItem): string {
+  const raw = item as LampaItem & {
+    names?: Array<string | { name?: string }>;
+    original_title?: string;
+    originalTitle?: string;
+    original_name?: string;
+    originalName?: string;
+  };
+  for (const value of [
+    raw.title,
+    raw.name,
+    raw.originalTitle,
+    raw.original_title,
+    raw.originalName,
+    raw.original_name,
+  ]) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  if (Array.isArray(raw.names)) {
+    for (const entry of raw.names) {
+      if (typeof entry === 'string' && entry.trim()) return entry.trim();
+      if (entry && typeof entry === 'object' && typeof entry.name === 'string' && entry.name.trim()) {
+        return entry.name.trim();
+      }
+    }
+  }
+  return 'Без названия';
+}
+
+export function lampaItemPoster(item: LampaItem): string | undefined {
+  const raw = item as LampaItem & {
+    posterPath?: string;
+    backdrop_path?: string;
+    backdropPath?: string;
+  };
+  for (const value of [
+    raw.poster,
+    raw.poster_path,
+    raw.posterPath,
+    raw.backdrop_path,
+    raw.backdropPath,
+  ]) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}

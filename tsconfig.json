@@ -8,13 +8,20 @@
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "@aniverse/types": [
+        "../packages/types/src/index.ts"
+      ],
+      "@aniverse/api": [
+        "../packages/api/src/index.ts"
+      ],
+      "@aniverse/playback": [
+        "../packages/playback/src/index.ts"
       ]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "**/*.tsx"
   ]
 }
