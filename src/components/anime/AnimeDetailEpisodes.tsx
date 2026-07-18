@@ -12,7 +12,7 @@ import {
 import { resolveAnimePosterUrl } from '@/lib/config';
 import type { AnimeEpisode } from '@aniverse/types';
 
-const CARD_WIDTH = Platform.isTV ? 220 : 168;
+const CARD_WIDTH = Platform.isTV ? 176 : 168;
 
 interface AnimeDetailEpisodesProps {
   episodes: AnimeEpisode[];

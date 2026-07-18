@@ -4,6 +4,7 @@ import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { PosterSkeleton } from '@/components/ui/Skeleton';
 import { colors, layout, spacing } from '@/constants/aniverse';
+import { tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 
 interface PaginatedContentRowProps<T> {
   title: string;
@@ -44,7 +45,7 @@ export function PaginatedContentRow<T>({
   }
 
   return (
-    <View style={styles.section}>
+    <View style={styles.section} {...tvRailSectionSnapProps}>
       {!hideTitle ? (
         <SectionHeader
           title={title}
@@ -63,7 +64,7 @@ export function PaginatedContentRow<T>({
           {...(Platform.isTV
             ? ({
                 snapToAlignment: 'start',
-                snapToInterval: layout.posterWidthRail + 12,
+                snapToInterval: layout.posterWidthRail + (Platform.isTV ? 10 : 12),
                 scrollAnimationEnabled: true,
               } as object)
             : {})}
@@ -80,7 +81,7 @@ export function PaginatedContentRow<T>({
           {...(Platform.isTV
             ? ({
                 snapToAlignment: 'start',
-                snapToInterval: layout.posterWidthRail + 12,
+                snapToInterval: layout.posterWidthRail + (Platform.isTV ? 10 : 12),
                 scrollAnimationEnabled: true,
               } as object)
             : {})}
@@ -104,11 +105,13 @@ export function PaginatedContentRow<T>({
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: Platform.isTV ? spacing.lg : 32,
+    marginBottom: Platform.isTV ? spacing.md : 32,
   },
   scroll: {
-    paddingBottom: spacing.sm,
-    gap: 12,
+    // Extra vertical room so TV focus rings are not clipped by ScrollView.
+    paddingTop: Platform.isTV ? 8 : 0,
+    paddingBottom: Platform.isTV ? 10 : spacing.sm,
+    gap: Platform.isTV ? 10 : 12,
   },
   hint: {
     color: colors.textSecondary,

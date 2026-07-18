@@ -11,12 +11,13 @@ import { ContinueWatchingRow } from '@/components/home/ContinueWatchingRow';
 import { HomeSettingsSheet } from '@/components/home/HomeSettingsSheet';
 import { QuickActionsSection } from '@/components/home/QuickActionsSection';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { colors, layout, spacing } from '@/constants/aniverse';
+import { colors, spacing } from '@/constants/aniverse';
 import { useContinueWatching } from '@/hooks/useContinueWatching';
 import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
 import { buildContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
 import { resolveEnabledContentTypes } from '@/lib/homeSettings';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 
 export default function HomeScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -88,6 +89,7 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.content, Platform.isTV && styles.contentTv]}
+        {...tvVerticalCatalogScrollProps}
       >
         <ContinueWatchingRow items={continueItems} />
 
@@ -149,10 +151,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   contentTv: {
+    // Keep room for the first row focus ring under the shell edge.
     paddingTop: spacing.lg,
-    paddingHorizontal: layout.gutterDesktop,
   },
   group: {
-    marginBottom: Platform.isTV ? spacing.lg : 0,
+    marginBottom: Platform.isTV ? spacing.md : 0,
   },
 });

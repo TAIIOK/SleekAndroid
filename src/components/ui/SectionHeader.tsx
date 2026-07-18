@@ -79,15 +79,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   accent: {
-    width: 48,
-    height: 6,
+    width: Platform.isTV ? 32 : 48,
+    height: Platform.isTV ? 4 : 6,
     borderRadius: 999,
     backgroundColor: colors.brand,
     marginTop: spacing.xs,
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: Platform.isTV ? 12 : 14,
     backgroundColor: 'transparent',
   },
   seeAll: {
@@ -95,8 +95,8 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     backgroundColor: colors.glass,
     borderRadius: 999,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    paddingHorizontal: Platform.isTV ? 16 : 24,
+    paddingVertical: Platform.isTV ? 8 : 10,
     marginBottom: 2,
   },
   seeAllText: {

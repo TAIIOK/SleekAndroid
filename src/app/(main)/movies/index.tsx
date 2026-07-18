@@ -3,11 +3,16 @@ import { Platform, ScrollView, StyleSheet } from 'react-native';
 import { LampaKindRails } from '@/components/catalog/LampaKindRails';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, spacing } from '@/constants/aniverse';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { EMPTY_HOME_CONFIG } from '@/types/homeConfig';
 
 export default function MoviesBrowseScreen() {
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      {...tvVerticalCatalogScrollProps}
+    >
       {Platform.isTV ? <SectionHeader title="Фильмы" showAccent /> : null}
       <LampaKindRails kind="movie" config={EMPTY_HOME_CONFIG} />
     </ScrollView>

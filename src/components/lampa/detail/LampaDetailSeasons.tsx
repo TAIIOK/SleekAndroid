@@ -14,7 +14,7 @@ import { resolveLampaPosterUrl } from '@/lib/config';
 import { lampaProgressKey } from '@/lib/lampaDetail';
 
 /** Matches web desktop `max-h-[32rem]` / mobile `max-h-[24rem]`. */
-const EPISODE_LIST_MAX_HEIGHT = Platform.isTV ? 420 : 360;
+const EPISODE_LIST_MAX_HEIGHT = 360;
 
 interface LampaDetailSeasonsProps {
   seasons: LampaSeason[];
@@ -184,8 +184,8 @@ function EpisodeCard({
   );
 }
 
-const STILL_WIDTH = Platform.isTV ? 160 : 120;
-const STILL_HEIGHT = Platform.isTV ? 90 : 68;
+const STILL_WIDTH = Platform.isTV ? 140 : 120;
+const STILL_HEIGHT = Platform.isTV ? 79 : 68;
 
 const styles = StyleSheet.create({
   section: {

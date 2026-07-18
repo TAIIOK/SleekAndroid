@@ -85,7 +85,7 @@ export function AnimeDetailSidebar({
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: Platform.isTV ? 340 : '100%',
+    width: Platform.isTV ? 280 : '100%',
     gap: spacing.lg,
   },
   block: {

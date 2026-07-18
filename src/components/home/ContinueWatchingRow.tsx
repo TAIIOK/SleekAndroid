@@ -5,11 +5,13 @@ import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { colors, layout, radii, spacing } from '@/constants/aniverse';
+import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
 import {
   formatProgressTime,
   type ContinueWatchingItem,
 } from '@/lib/continueWatching';
+import { tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 const CARD_WIDTH = layout.continueCardWidth;
 
@@ -31,7 +33,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   if (!items.length) return null;
 
   return (
-    <View style={styles.section}>
+    <View style={styles.section} {...tvRailSectionSnapProps}>
       <SectionHeader title="Продолжить просмотр" variant="continue" />
       <ScrollView
         horizontal
@@ -40,7 +42,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
         {...(Platform.isTV
           ? ({
               snapToAlignment: 'start',
-              snapToInterval: CARD_WIDTH + 12,
+              snapToInterval: CARD_WIDTH + (Platform.isTV ? 10 : 12),
               scrollAnimationEnabled: true,
             } as object)
           : {})}
@@ -55,6 +57,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
                     item={item}
                     onPress={() => openItem(router, item)}
                     isContentEntry={columnIndex === 0 && rowIndex === 0}
+                    railStart={columnIndex === 0}
                   />
                 ))}
               </View>
@@ -67,6 +70,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
               item={item}
               onPress={() => openItem(router, item)}
               isContentEntry={index === 0}
+              railStart={index === 0}
               spaced
             />
           ))
@@ -101,19 +105,32 @@ function ContinueCard({
   item,
   onPress,
   isContentEntry,
+  railStart,
   spaced,
 }: {
   item: ContinueWatchingItem;
   onPress: () => void;
   isContentEntry?: boolean;
+  railStart?: boolean;
   spaced?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const shellFocus = useTvShellFocus();
+  const exitLeft = Platform.isTV && Boolean(railStart || isContentEntry);
+  const exitUp = Platform.isTV && Boolean(isContentEntry);
 
   return (
     <Pressable
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={() => {
+        setFocused(true);
+        if (exitLeft) shellFocus?.setExitLeftEnabled(true);
+        if (exitUp) shellFocus?.setExitUpEnabled(true);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        if (exitLeft) shellFocus?.setExitLeftEnabled(false);
+        if (exitUp) shellFocus?.setExitUpEnabled(false);
+      }}
       onPress={onPress}
       style={[
         styles.card,
@@ -121,29 +138,34 @@ function ContinueCard({
         { width: CARD_WIDTH },
         focused && styles.cardFocused,
       ]}
-      {...(isContentEntry ? { hasTVPreferredFocus: true } : {})}
+      {...(isContentEntry && Platform.isTV ? { hasTVPreferredFocus: true } : {})}
     >
-      <View style={styles.posterWrap}>
-        {item.poster ? (
-          <Image source={{ uri: item.poster }} style={styles.poster} contentFit="cover" />
-        ) : (
-          <View style={[styles.poster, styles.posterFallback]}>
-            <Text style={styles.posterFallbackText}>{item.title.slice(0, 1)}</Text>
+      <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
+        <View style={styles.posterWrap}>
+          {item.poster ? (
+            <Image source={{ uri: item.poster }} style={styles.poster} contentFit="cover" />
+          ) : (
+            <View style={[styles.poster, styles.posterFallback]}>
+              <Text style={styles.posterFallbackText}>{item.title.slice(0, 1)}</Text>
+            </View>
+          )}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.8)']}
+            style={styles.posterGradient}
+          />
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(item.progress * 100)}%` }]} />
           </View>
-        )}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.8)']}
-          style={styles.posterGradient}
-        />
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${Math.round(item.progress * 100)}%` }]} />
+          {focused ? (
+            <View style={[StyleSheet.absoluteFill, styles.focusWash]} pointerEvents="none" />
+          ) : null}
         </View>
       </View>
       <View style={styles.meta}>
-        <Text style={styles.title} numberOfLines={2}>
+        <Text style={[styles.title, focused && styles.titleFocused]} numberOfLines={2}>
           {item.title}
         </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
+        <Text style={[styles.subtitle, focused && styles.subtitleFocused]} numberOfLines={1}>
           {item.subtitle}
           {item.progress > 0 ? ` · ${formatProgressTime(item.progress)}` : ''}
         </Text>
@@ -154,35 +176,50 @@ function ContinueCard({
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: Platform.isTV ? spacing.lg : 32,
+    marginBottom: Platform.isTV ? spacing.md : 32,
   },
   scroll: {
-    paddingBottom: spacing.sm,
-    gap: 12,
+    paddingTop: Platform.isTV ? 8 : 0,
+    paddingBottom: Platform.isTV ? 10 : spacing.sm,
+    gap: Platform.isTV ? 10 : 12,
   },
   twoRowGrid: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Platform.isTV ? 10 : 12,
   },
   twoRowColumn: {
-    gap: 12,
+    gap: Platform.isTV ? 10 : 12,
   },
   card: {
     marginRight: 0,
   },
   cardSpaced: {
-    marginRight: 12,
+    marginRight: Platform.isTV ? 10 : 12,
   },
   cardFocused: {
-    transform: Platform.isTV ? undefined : [{ scale: 1.02 }],
+    zIndex: 2,
+    ...(Platform.isTV ? {} : { transform: [{ scale: 1.02 }] }),
+  },
+  posterFrame: {
+    borderRadius: radii.lg,
+    borderWidth: Platform.isTV ? tvFocus.borderWidth : 0,
+    borderColor: 'transparent',
+  },
+  posterFrameFocused: {
+    borderColor: Platform.isTV ? tvFocus.borderColor : 'transparent',
+    backgroundColor: Platform.isTV ? tvFocus.wash : 'transparent',
+    ...(Platform.isTV ? tvFocus.glow : {}),
   },
   posterWrap: {
-    borderRadius: radii.lg,
+    borderRadius: Platform.isTV ? radii.md : radii.lg,
     overflow: 'hidden',
     aspectRatio: 16 / 9,
     backgroundColor: colors.bgCard,
-    borderWidth: 1,
+    borderWidth: Platform.isTV ? 0 : 1,
     borderColor: 'rgba(255,255,255,0.1)',
+  },
+  focusWash: {
+    backgroundColor: tvFocus.wash,
   },
   poster: {
     width: '100%',
@@ -231,6 +268,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     backgroundColor: 'transparent',
   },
+  titleFocused: {
+    color: tvFocus.titleColor,
+    fontWeight: '700',
+  },
   subtitle: {
     color: colors.textSecondary,
     marginTop: 2,
@@ -238,5 +279,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     backgroundColor: 'transparent',
+  },
+  subtitleFocused: {
+    color: colors.brand,
   },
 });

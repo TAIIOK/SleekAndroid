@@ -10,7 +10,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 
 ### Shared
 
-- [x] TV/wide layout uses two-column main + ~340px sidebar; phone uses stacked scroll
+- [x] TV/wide layout uses two-column main + ~280px sidebar; phone uses stacked scroll
 - [x] Focusable controls use `TvFocusable` / Pressable focus rings
 - [x] Loading skeleton and error state for both detail types
 

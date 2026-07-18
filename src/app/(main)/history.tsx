@@ -18,6 +18,7 @@ import {
   hideHistoryIds,
   type HistoryMediaFilter,
 } from '@/lib/history';
+import { tvRailSectionSnapProps, tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function HistoryScreen() {
@@ -73,7 +74,11 @@ export default function HistoryScreen() {
 
   return (
     <>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        {...tvVerticalCatalogScrollProps}
+      >
         <View style={[styles.header, { paddingHorizontal: horizontalPad }]}>
           <Text style={styles.title}>История просмотра</Text>
           {filteredItems.length > 0 ? (
@@ -93,7 +98,7 @@ export default function HistoryScreen() {
           <Text style={[styles.hint, { paddingHorizontal: horizontalPad }]}>История пуста</Text>
         ) : (
           groups.map((group) => (
-            <View key={group.key} style={styles.group}>
+            <View key={group.key} style={styles.group} {...tvRailSectionSnapProps}>
               <Text style={[styles.groupTitle, { paddingHorizontal: horizontalPad }]}>
                 {group.label}
               </Text>
@@ -102,7 +107,7 @@ export default function HistoryScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={[styles.rail, { paddingHorizontal: horizontalPad }]}
               >
-                {group.items.map((item) => (
+                {group.items.map((item, index) => (
                   <CatalogPosterCard
                     key={item.id}
                     title={item.title}
@@ -114,6 +119,7 @@ export default function HistoryScreen() {
                     }
                     onPress={() => router.push(item.href as never)}
                     variant="rail"
+                    railStart={index === 0}
                   />
                 ))}
               </ScrollView>
@@ -142,7 +148,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 32 : 24,
+    fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
   },
   clear: {

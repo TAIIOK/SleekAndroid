@@ -20,6 +20,8 @@ export function CatalogPosterCard({
   onPress,
   variant = 'rail',
   width,
+  railStart,
+  contentEntry,
 }: CatalogPosterCardProps) {
   return (
     <PosterCard
@@ -30,6 +32,8 @@ export function CatalogPosterCard({
       onPress={onPress}
       width={width ?? (variant === 'grid' ? undefined : layout.posterWidthRail)}
       variant={variant}
+      railStart={railStart}
+      contentEntry={contentEntry}
     />
   );
 }

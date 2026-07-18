@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, useTVEventHandler, type HWEvent } from 'react-native';
+import { BackHandler } from 'react-native';
 
 import type { PlayerEpisodeNav, PlayerMenuOption } from '@/components/player/types';
 import {
@@ -10,6 +10,7 @@ import {
   type TvPlayerOverlay,
   type TvPlayerPanelFocus,
 } from '@/components/player/tv/tvPlayerTypes';
+import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
 import { cyclePlaybackRate, cycleVideoFit, type PlayerPreferences } from '@/lib/playerPreferences';
 
 interface UseTvPlayerRemoteOptions {
@@ -344,7 +345,7 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
     }
   }, [clearHideTimer, options.playing]);
 
-  useTVEventHandler((event: HWEvent) => {
+  useTvEventHandlerSafe((event) => {
     if (event.eventType === 'focus' || event.eventType === 'blur') return;
 
     const opts = optionsRef.current;

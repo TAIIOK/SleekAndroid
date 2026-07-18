@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useSegments } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -9,12 +9,14 @@ import {
   StyleSheet,
   Text,
   View,
+  type View as ViewType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SleekLogo } from '@/components/brand/SleekLogo';
 import { SleekWordmark } from '@/components/brand/SleekWordmark';
 import { NavIcon } from '@/components/navigation/NavIcon';
+import { TvFocusGuide } from '@/components/tv/TvFocusGuide';
 import { GlassSurface } from '@/components/ui/GlassSurface';
 import {
   colors,
@@ -23,11 +25,13 @@ import {
   mobileTopChromeInset,
   radii,
   spacing,
+  tvFocus,
   typography,
 } from '@/constants/aniverse';
 import { openHomeSettings } from '@/lib/homeSettingsBridge';
 import { isTvAllowedPath, tvRedirectPath } from '@/lib/tvRoutes';
 import { useAuth } from '@/providers/AuthProvider';
+import { TvShellFocusProvider, useTvShellFocus } from '@/providers/TvShellFocus';
 
 const TV_NAV_ITEMS = [
   { label: 'Главная', path: '/' },
@@ -81,43 +85,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (Platform.isTV) {
     return (
-      <View style={[styles.tvRoot, { paddingTop: insets.top }]}>
-        <View style={styles.tvSideNav}>
-          <View style={styles.tvBrandRow}>
-            <SleekLogo size={48} />
-            <View style={styles.tvBrandText}>
-              <SleekWordmark size="md" />
-              <Text style={styles.tvBrandSubtitle}>TV</Text>
-            </View>
-          </View>
-          <ScrollView style={styles.tvNavScroll} contentContainerStyle={styles.tvNavList}>
-            {TV_NAV_ITEMS.map((item) => (
-              <NavItem
-                key={item.path}
-                label={item.label}
-                path={item.path}
-                active={isActivePath(currentPath, item.path)}
-                onPress={() => router.push(item.path as '/')}
-              />
-            ))}
-          </ScrollView>
-          <Pressable
-            onPress={() => router.push('/profile')}
-            style={[styles.tvProfile, isActivePath(currentPath, '/profile') && styles.tvProfileActive]}
-          >
-            <View style={styles.tvProfileAvatar}>
-              <Ionicons name="person" size={20} color={colors.brand} />
-            </View>
-            <View style={styles.tvProfileText}>
-              <Text style={styles.tvProfileName} numberOfLines={1}>
-                {user?.nickname ?? 'Медиатека'}
-              </Text>
-              <Text style={styles.tvProfileHint}>Профиль</Text>
-            </View>
-          </Pressable>
-        </View>
-        <View style={styles.tvContent}>{children}</View>
-      </View>
+      <TvShellFocusProvider>
+        <TvAppShellFrame currentPath={currentPath} userNickname={user?.nickname}>
+          {children}
+        </TvAppShellFrame>
+      </TvShellFocusProvider>
     );
   }
 
@@ -230,14 +202,120 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function TvAppShellFrame({
+  children,
+  currentPath,
+  userNickname,
+}: {
+  children: React.ReactNode;
+  currentPath: string;
+  userNickname?: string | null;
+}) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const activeNavIndex = TV_NAV_ITEMS.findIndex((item) => isActivePath(currentPath, item.path));
+  const sidebarAnchorIndex = activeNavIndex >= 0 ? activeNavIndex : 0;
+
+  return (
+    <View style={[styles.tvRoot, { paddingTop: insets.top }]}>
+      <TvFocusGuide style={styles.tvSideNav} autoFocus trapFocusLeft>
+        <View style={styles.tvBrandRow}>
+          <SleekLogo size={36} />
+          <View style={styles.tvBrandText}>
+            <SleekWordmark size="sm" />
+            <Text style={styles.tvBrandSubtitle}>← Меню с контента</Text>
+          </View>
+        </View>
+        <ScrollView style={styles.tvNavScroll} contentContainerStyle={styles.tvNavList}>
+          {TV_NAV_ITEMS.map((item, index) => (
+            <NavItem
+              key={item.path}
+              label={item.label}
+              path={item.path}
+              active={isActivePath(currentPath, item.path)}
+              isSidebarAnchor={index === sidebarAnchorIndex}
+              onPress={() => router.push(item.path as '/')}
+            />
+          ))}
+        </ScrollView>
+        <ProfileChip
+          nickname={userNickname}
+          active={isActivePath(currentPath, '/profile')}
+          onPress={() => router.push('/profile')}
+        />
+      </TvFocusGuide>
+      <TvFocusGuide style={styles.tvContent} autoFocus>
+        {children}
+      </TvFocusGuide>
+    </View>
+  );
+}
+
 function NavItem({
   label,
   path,
   active,
   onPress,
+  isSidebarAnchor,
 }: {
   label: string;
   path: string;
+  active: boolean;
+  onPress: () => void;
+  isSidebarAnchor?: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
+  const shellFocus = useTvShellFocus();
+  const pressableRef = useRef<ViewType | null>(null);
+
+  const publishAnchor = () => {
+    if (isSidebarAnchor && pressableRef.current) {
+      shellFocus?.registerSidebarAnchor(pressableRef.current);
+    }
+  };
+
+  return (
+    <Pressable
+      ref={(node) => {
+        pressableRef.current = node as unknown as ViewType | null;
+        if (node) publishAnchor();
+      }}
+      onLayout={publishAnchor}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onPress={onPress}
+      style={[
+        styles.sideItem,
+        active && styles.sideItemActive,
+        focused && styles.sideItemFocused,
+        active && focused && styles.sideItemActiveFocused,
+      ]}
+    >
+      <NavIcon
+        path={path}
+        size={22}
+        focused={active || focused}
+        color={focused ? '#ffffff' : active ? colors.brand : colors.textSecondary}
+      />
+      <Text
+        style={[
+          styles.sideLabel,
+          active && styles.sideLabelActive,
+          focused && styles.sideLabelFocused,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ProfileChip({
+  nickname,
+  active,
+  onPress,
+}: {
+  nickname?: string | null;
   active: boolean;
   onPress: () => void;
 }) {
@@ -249,13 +327,20 @@ function NavItem({
       onBlur={() => setFocused(false)}
       onPress={onPress}
       style={[
-        styles.sideItem,
-        active && styles.sideItemActive,
-        focused && styles.sideItemFocused,
+        styles.tvProfile,
+        active && styles.tvProfileActive,
+        focused && styles.tvProfileFocused,
       ]}
     >
-      <NavIcon path={path} size={26} focused={active || focused} />
-      <Text style={[styles.sideLabel, (active || focused) && styles.sideLabelActive]}>{label}</Text>
+      <View style={[styles.tvProfileAvatar, focused && styles.tvProfileAvatarFocused]}>
+        <Ionicons name="person" size={16} color={colors.brand} />
+      </View>
+      <View style={styles.tvProfileText}>
+        <Text style={styles.tvProfileName} numberOfLines={1}>
+          {nickname ?? 'Медиатека'}
+        </Text>
+        <Text style={styles.tvProfileHint}>Профиль</Text>
+      </View>
     </Pressable>
   );
 }
@@ -281,7 +366,7 @@ function TabItem({
           : undefined
       }
     >
-      <NavIcon path={path} size={20} focused={active} color={colors.textSecondary} />
+      <NavIcon path={path} size={20} focused={active} />
       <Text
         style={Platform.OS === 'web' ? undefined : [styles.tabLabel, active && styles.tabLabelActive]}
         numberOfLines={1}
@@ -348,9 +433,9 @@ const styles = StyleSheet.create({
   tvBrandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: 20,
-    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+    paddingHorizontal: 14,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -359,16 +444,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   tvBrandSubtitle: {
-    color: colors.textSecondary,
-    fontSize: 12,
+    color: colors.brand,
+    fontSize: 11,
+    fontWeight: '600',
   },
   tvNavScroll: {
     flex: 1,
   },
   tvNavList: {
-    paddingHorizontal: 12,
-    paddingVertical: spacing.md,
-    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: spacing.sm,
+    gap: 2,
   },
   tvContent: {
     flex: 1,
@@ -376,26 +462,34 @@ const styles = StyleSheet.create({
   tvProfile: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    margin: spacing.md,
-    padding: 12,
-    borderRadius: radii.lg,
+    gap: spacing.sm,
+    margin: spacing.sm,
+    padding: 10,
+    borderRadius: radii.md,
     backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: 'transparent',
   },
   tvProfileActive: {
     borderColor: colors.brand,
   },
+  tvProfileFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+    ...tvFocus.glow,
+  },
   tvProfileAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(195,192,255,0.2)',
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  tvProfileAvatarFocused: {
+    borderColor: tvFocus.borderColor,
   },
   tvProfileText: {
     flex: 1,
@@ -403,13 +497,13 @@ const styles = StyleSheet.create({
   },
   tvProfileName: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   tvProfileHint: {
     color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
   },
   mobileRoot: {
     flex: 1,
@@ -520,28 +614,43 @@ const styles = StyleSheet.create({
   sideItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.lg,
-    minHeight: 52,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    minHeight: 44,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: 'transparent',
   },
+  // Route selected — soft tint only (never solid brand; that hides D-pad focus).
   sideItemActive: {
-    backgroundColor: colors.brand,
+    backgroundColor: 'rgba(195,192,255,0.12)',
+    borderColor: 'rgba(195,192,255,0.28)',
   },
   sideItemFocused: {
-    borderWidth: 2,
-    borderColor: colors.brandTint,
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+    ...tvFocus.glow,
+  },
+  // Active + focused: high-contrast white ring so focus stays obvious on the current section.
+  sideItemActiveFocused: {
+    backgroundColor: 'rgba(195,192,255,0.28)',
+    borderColor: '#ffffff',
+    ...tvFocus.glow,
   },
   sideLabel: {
     color: colors.textSecondary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
     flex: 1,
   },
   sideLabelActive: {
-    color: colors.brandOn,
+    color: colors.brand,
     fontWeight: '600',
+  },
+  sideLabelFocused: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
   moreBackdrop: {
     flex: 1,

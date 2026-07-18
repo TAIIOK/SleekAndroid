@@ -142,11 +142,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
-    minHeight: Platform.isTV ? 420 : 320,
+    minHeight: Platform.isTV ? 340 : 320,
   },
   backdrop: {
     flex: 1,
-    minHeight: Platform.isTV ? 420 : 320,
+    minHeight: Platform.isTV ? 340 : 320,
     justifyContent: 'flex-end',
   },
   content: {
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 42 : 28,
+    fontSize: Platform.isTV ? 32 : 28,
     fontWeight: '700',
     letterSpacing: -0.4,
   },

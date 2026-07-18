@@ -86,6 +86,40 @@ for (const parent of ['expo-router', 'expo']) {
   linkDirectoryEntries(path.join(workspaceModules, parent, 'node_modules'));
 }
 
+/**
+ * npm workspaces sometimes install plain `react-native` under aniverse-tv while
+ * the root has `react-native-tvos`. Dual copies break Metro/native registration.
+ */
+function ensureReactNativeTvos() {
+  const localRn = path.join(workspaceModules, 'react-native');
+  const rootRn = path.join(rootModules, 'react-native');
+  const tvMarker = path.join(rootRn, 'Libraries/Components/TV/useTVEventHandler.js');
+
+  if (!fs.existsSync(tvMarker)) {
+    console.warn('[aniverse-tv] root react-native-tvos missing; skip RN link');
+    return;
+  }
+
+  const localIsTvos = fs.existsSync(
+    path.join(localRn, 'Libraries/Components/TV/useTVEventHandler.js'),
+  );
+  if (localIsTvos) return;
+
+  try {
+    if (fs.existsSync(localRn) || fs.lstatSync(localRn).isSymbolicLink()) {
+      fs.rmSync(localRn, { recursive: true, force: true });
+    }
+  } catch {
+    /* missing or already removed */
+  }
+
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.symlinkSync(rootRn, localRn, type);
+  console.log('[aniverse-tv] Linked local react-native → monorepo react-native-tvos');
+}
+
+ensureReactNativeTvos();
+
 if (linked.length) {
   console.log(`[aniverse-tv] Linked ${linked.length} package(s) to monorepo root: ${linked.join(', ')}`);
 } else {

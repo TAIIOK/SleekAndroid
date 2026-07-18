@@ -35,9 +35,10 @@ interface NavIconProps {
   focused?: boolean;
 }
 
-export function NavIcon({ path, size = 22, color = colors.textSecondary, focused }: NavIconProps) {
+export function NavIcon({ path, size = 22, color, focused }: NavIconProps) {
   const name = focused
     ? (ICON_MAP_ACTIVE[path] ?? ICON_MAP[path] ?? 'ellipse')
     : (ICON_MAP[path] ?? 'ellipse-outline');
-  return <Ionicons name={name} size={size} color={focused ? colors.brand : color} />;
+  const resolvedColor = color ?? (focused ? colors.brand : colors.textSecondary);
+  return <Ionicons name={name} size={size} color={resolvedColor} />;
 }

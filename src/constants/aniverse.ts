@@ -38,17 +38,18 @@ export const spacing = {
 };
 
 export const layout = {
-  tvSideNavWidth: 288,
+  tvSideNavWidth: 220,
   mobileTopBarHeight: 56,
   mobileTabHeight: 84,
   mobileTabMaxWidth: 512,
   gutterMobile: 16,
-  gutterDesktop: 48,
+  /** Used as the TV content gutter (`Platform.isTV ? gutterDesktop : gutterMobile`). */
+  gutterDesktop: Platform.isTV ? 28 : 48,
   posterAspect: 120 / 170,
-  posterWidthRail: Platform.isTV ? 184 : 120,
-  posterWidthShowcase: Platform.isTV ? 180 : 140,
+  posterWidthRail: Platform.isTV ? 140 : 120,
+  posterWidthShowcase: Platform.isTV ? 140 : 140,
   maxContentWidth: 1440,
-  continueCardWidth: Platform.isTV ? 280 : 260,
+  continueCardWidth: Platform.isTV ? 220 : 260,
   quickActionCardWidth: 168,
   quickActionCardHeight: 88,
 };
@@ -63,46 +64,46 @@ export function mobileBottomChromeInset(safeBottom: number): number {
 
 export const typography = {
   headlineLg: {
-    fontSize: Platform.isTV ? 32 : 24,
-    lineHeight: Platform.isTV ? 40 : 32,
+    fontSize: Platform.isTV ? 26 : 24,
+    lineHeight: Platform.isTV ? 32 : 32,
     fontWeight: '700' as const,
     letterSpacing: -0.3,
   },
   titleMd: {
-    fontSize: Platform.isTV ? 22 : 20,
-    lineHeight: Platform.isTV ? 30 : 28,
+    fontSize: Platform.isTV ? 18 : 20,
+    lineHeight: Platform.isTV ? 24 : 28,
     fontWeight: '600' as const,
   },
   homeContinueTitle: {
-    fontSize: Platform.isTV ? 32 : 20,
-    lineHeight: Platform.isTV ? 40 : 28,
+    fontSize: Platform.isTV ? 20 : 20,
+    lineHeight: Platform.isTV ? 26 : 28,
     fontWeight: '600' as const,
   },
   homeQuickTitle: {
-    fontSize: Platform.isTV ? 32 : 18,
-    lineHeight: Platform.isTV ? 40 : 24,
+    fontSize: Platform.isTV ? 20 : 18,
+    lineHeight: Platform.isTV ? 26 : 24,
     fontWeight: '600' as const,
   },
   homeGroupTitle: {
-    fontSize: Platform.isTV ? 32 : 24,
-    lineHeight: Platform.isTV ? 40 : 32,
+    fontSize: Platform.isTV ? 22 : 24,
+    lineHeight: Platform.isTV ? 28 : 32,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   railTitle: {
-    fontSize: Platform.isTV ? 28 : 24,
-    lineHeight: Platform.isTV ? 36 : 32,
+    fontSize: Platform.isTV ? 20 : 24,
+    lineHeight: Platform.isTV ? 26 : 32,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   cardTitle: {
-    fontSize: Platform.isTV ? 14 : 13,
-    lineHeight: Platform.isTV ? 20 : 18,
+    fontSize: Platform.isTV ? 13 : 13,
+    lineHeight: Platform.isTV ? 18 : 18,
     fontWeight: '600' as const,
   },
   cardSubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: Platform.isTV ? 11 : 12,
+    lineHeight: Platform.isTV ? 14 : 16,
     fontWeight: '400' as const,
   },
   labelCaps: {
@@ -126,4 +127,19 @@ export const radii = {
   xl: 24,
   pill: 999,
   quickAction: 14,
+};
+
+/** Shared TV D-pad focus chrome — brand lavender ring + soft glow. */
+export const tvFocus = {
+  borderWidth: 2,
+  borderColor: colors.brandTint,
+  wash: 'rgba(195,192,255,0.14)',
+  fill: 'rgba(195,192,255,0.18)',
+  titleColor: colors.brandTint,
+  glow: {
+    shadowColor: colors.focusGlow,
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 } as const,
+  },
 };

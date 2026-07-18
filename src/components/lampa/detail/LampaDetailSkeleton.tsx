@@ -38,5 +38,5 @@ const styles = StyleSheet.create({
   },
   stacked: { flexDirection: 'column' },
   main: { flex: 1 },
-  side: { width: Platform.isTV ? 340 : '100%' },
+  side: { width: Platform.isTV ? 280 : '100%' },
 });

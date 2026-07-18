@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xxl, gap: spacing.lg },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 36 : 24,
+    fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
   },
   card: {
@@ -148,8 +148,8 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
   avatar: {
-    width: Platform.isTV ? 88 : 64,
-    height: Platform.isTV ? 88 : 64,
+    width: 64,
+    height: 64,
     borderRadius: 999,
     backgroundColor: colors.bgLow,
   },

@@ -14,8 +14,8 @@ interface OnScreenKeyboardProps {
   onKey: (key: string) => void;
 }
 
-const KEY_SIZE = Platform.isTV ? 44 : 40;
-const KEY_WIDE = Platform.isTV ? 110 : 100;
+const KEY_SIZE = 40;
+const KEY_WIDE = Platform.isTV ? 96 : 100;
 
 export function OnScreenKeyboard({ onKey }: OnScreenKeyboardProps) {
   const [focusedKey, setFocusedKey] = useState<string | null>(null);

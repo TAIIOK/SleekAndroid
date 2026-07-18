@@ -4,12 +4,17 @@ import { AnimeCatalogRails } from '@/components/catalog/AnimeCatalogRails';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
 import { colors, spacing } from '@/constants/aniverse';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 
 export default function AnimeBrowseScreen() {
   const { config, ready } = useHomeCatalogConfig();
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      {...tvVerticalCatalogScrollProps}
+    >
       {Platform.isTV ? <SectionHeader title="Аниме" showAccent /> : null}
       {ready ? <AnimeCatalogRails config={config} /> : null}
     </ScrollView>

@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xxl, gap: spacing.md },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 36 : 24,
+    fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
     marginBottom: spacing.md,
   },

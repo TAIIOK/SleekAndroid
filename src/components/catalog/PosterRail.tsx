@@ -48,7 +48,7 @@ export function PosterRail({
       isFetchingNextPage={isFetchingNextPage}
       onLoadMore={onLoadMore}
       onSeeAll={onSeeAll}
-      renderItem={(item) => (
+      renderItem={(item, index) => (
         <CatalogPosterCard
           title={item.title}
           poster={item.poster}
@@ -56,6 +56,7 @@ export function PosterRail({
           rating={item.score}
           onPress={() => onItemPress?.(item)}
           variant="rail"
+          railStart={index === 0}
         />
       )}
     />

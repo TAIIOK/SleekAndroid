@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   main: { flex: 1, gap: spacing.sm },
-  side: { width: Platform.isTV ? 340 : '100%' },
+  side: { width: Platform.isTV ? 280 : '100%' },
   epRow: {
     flexDirection: 'row',
     gap: spacing.md,

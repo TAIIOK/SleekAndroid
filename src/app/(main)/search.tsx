@@ -235,10 +235,13 @@ function FilterChip({
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xxl, gap: spacing.lg },
+  content: {
+    padding: Platform.isTV ? spacing.lg : spacing.xxl,
+    gap: Platform.isTV ? spacing.md : spacing.lg,
+  },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 36 : 24,
+    fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
   },
   searchRow: {

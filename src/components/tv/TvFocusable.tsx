@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, radii } from '@/constants/aniverse';
+import { radii, tvFocus } from '@/constants/aniverse';
 
 interface TvFocusableProps {
   children: ReactNode;
@@ -12,7 +12,7 @@ interface TvFocusableProps {
   hasTVPreferredFocus?: boolean;
 }
 
-/** TV-friendly focus ring without scale (site tv-focus-ring parity). */
+/** TV-friendly brand focus ring (lavender + soft glow). */
 export function TvFocusable({
   children,
   onPress,
@@ -39,15 +39,12 @@ export function TvFocusable({
 const styles = StyleSheet.create({
   base: {
     borderRadius: radii.md,
-    borderWidth: 2,
+    borderWidth: tvFocus.borderWidth,
     borderColor: 'transparent',
   },
   focused: {
-    borderColor: colors.brandTint,
-    shadowColor: colors.focusGlow,
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    ...(Platform.isTV ? {} : { backgroundColor: 'rgba(195,192,255,0.08)' }),
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+    ...tvFocus.glow,
   },
 });
