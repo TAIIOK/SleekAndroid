@@ -38,3 +38,16 @@ export function mediaForSearchBucket(
   if (bucket === 'anime') return 'anime';
   return kind === 'tv' ? 'tv' : 'movie';
 }
+
+/** Drop duplicate catalog rows so rail/list keys stay unique. */
+export function uniqueById<T extends { id: string | number }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = String(item.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}

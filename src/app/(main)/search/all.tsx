@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -12,14 +12,16 @@ import {
 
 import { searchCatalog } from '@/api/catalog';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
-import { colors, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, spacing, tvFocus } from '@/constants/aniverse';
+import { usePosterGridLayout } from '@/hooks/usePosterGridLayout';
 import { lampaDetailPath } from '@/lib/lampaDetail';
 import { animePoster } from '@/lib/poster';
 import {
   lampaKindForMediaFilter,
   mediaForSearchBucket,
   searchTypeForMediaFilter,
-  type SearchMediaFilter,
+  uniqueById,
   type SearchSeeAllBucket,
 } from '@/lib/searchConfig';
 
@@ -32,6 +34,7 @@ export default function SearchAllScreen() {
     bucket?: string;
     kind?: string;
   }>();
+  const { columns, gap, cardWidth, horizontalPadding } = usePosterGridLayout(spacing.lg);
 
   const q = (params.q ?? '').trim();
   const bucket = (params.bucket as SearchSeeAllBucket | undefined) ?? 'anime';
@@ -57,7 +60,7 @@ export default function SearchAllScreen() {
   const items = useMemo(() => {
     if (!data) return [];
     if (bucket === 'anime') {
-      return (data.anime ?? []).map((item) => ({
+      return uniqueById(data.anime ?? []).map((item) => ({
         key: `anime-${item.id}`,
         title: item.title ?? 'Без названия',
         poster: animePoster(item),
@@ -66,24 +69,24 @@ export default function SearchAllScreen() {
       }));
     }
     const lampaKind = lampaKindForMediaFilter(media);
-    return (data.lampa ?? [])
-      .filter((item) => {
+    return uniqueById(
+      (data.lampa ?? []).filter((item) => {
         if (!lampaKind) return true;
         const row = item as unknown as Record<string, unknown>;
         const k = String(row.kind ?? row.mediaKind ?? 'movie');
         return k === lampaKind;
-      })
-      .map((item) => {
-        const row = item as unknown as Record<string, unknown>;
-        const k = String(row.kind ?? row.mediaKind ?? lampaKind ?? 'movie');
-        return {
-          key: `lampa-${item.id}`,
-          title: item.title ?? item.name ?? 'Без названия',
-          poster: item.poster ?? item.poster_path,
-          score: item.vote_average,
-          onPress: () => router.push(lampaDetailPath(k, { id: item.id }) as '/'),
-        };
-      });
+      }),
+    ).map((item) => {
+      const row = item as unknown as Record<string, unknown>;
+      const k = String(row.kind ?? row.mediaKind ?? lampaKind ?? 'movie');
+      return {
+        key: `lampa-${item.id}`,
+        title: item.title ?? item.name ?? 'Без названия',
+        poster: item.poster ?? item.poster_path,
+        score: item.vote_average,
+        onPress: () => router.push(lampaDetailPath(k, { id: item.id }) as '/'),
+      };
+    });
   }, [data, bucket, media, router]);
 
   const loadMore = useCallback(() => {
@@ -99,10 +102,15 @@ export default function SearchAllScreen() {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+        <TvFocusable
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          focusedStyle={styles.backBtnFocused}
+          hasTVPreferredFocus={Platform.isTV}
+        >
           <Text style={styles.back}>← Назад</Text>
-        </Pressable>
+        </TvFocusable>
         <Text style={styles.title}>{q ? `${title} · «${q}»` : title}</Text>
       </View>
 
@@ -112,21 +120,23 @@ export default function SearchAllScreen() {
         <FlatList
           data={items}
           keyExtractor={(item) => item.key}
-          numColumns={3}
-          contentContainerStyle={styles.grid}
-          columnWrapperStyle={styles.row}
+          numColumns={columns}
+          contentContainerStyle={[styles.grid, { paddingHorizontal: horizontalPadding, gap }]}
+          columnWrapperStyle={columns > 1 ? { gap } : undefined}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           ListFooterComponent={
             isFetching ? <ActivityIndicator color={colors.brand} style={styles.footer} /> : null
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <CatalogPosterCard
               variant="grid"
+              width={cardWidth}
               title={item.title}
               poster={item.poster}
               score={item.score}
               onPress={item.onPress}
+              railStart={index % columns === 0}
             />
           )}
         />
@@ -141,31 +151,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: {
-    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
+  backBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  backBtnFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
   back: {
     color: colors.brand,
-    fontSize: 14,
+    fontSize: Platform.isTV ? 16 : 14,
     fontWeight: '600',
   },
   title: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: Platform.isTV ? 22 : 22,
     fontWeight: '700',
   },
   loader: {
     marginTop: spacing.xxl,
   },
   grid: {
-    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
-    gap: spacing.md,
-  },
-  row: {
-    gap: spacing.md,
   },
   footer: {
     marginVertical: spacing.lg,

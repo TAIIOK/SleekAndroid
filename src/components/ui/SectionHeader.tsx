@@ -1,4 +1,4 @@
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, radii, spacing, tvFocus, typography } from '@/constants/aniverse';
@@ -89,9 +89,13 @@ export function SectionHeader({
     >
       {titleBlock}
       {onSeeAll ? (
-        <Pressable onPress={onSeeAll} style={styles.seeAll}>
+        <TvFocusable
+          onPress={onSeeAll}
+          style={styles.seeAll}
+          focusedStyle={styles.seeAllFocused}
+        >
           <Text style={styles.seeAllText}>{seeAllLabel}</Text>
-        </Pressable>
+        </TvFocusable>
       ) : null}
     </View>
   );
@@ -142,13 +146,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   seeAll: {
-    borderWidth: 1,
+    borderWidth: tvFocus.borderWidth,
     borderColor: colors.borderLight,
     backgroundColor: colors.glass,
     borderRadius: 999,
     paddingHorizontal: Platform.isTV ? 16 : 24,
     paddingVertical: Platform.isTV ? 8 : 10,
     marginBottom: 2,
+  },
+  seeAllFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+    transform: [{ scale: 1.06 }],
   },
   seeAllText: {
     color: colors.brand,

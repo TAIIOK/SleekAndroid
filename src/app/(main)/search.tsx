@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Platform,
@@ -23,9 +23,15 @@ import {
   SEARCH_POPULAR_QUERIES,
   lampaKindForMediaFilter,
   searchTypeForMediaFilter,
+  uniqueById,
   usesAnimeFilters,
   type SearchMediaFilter,
 } from '@/lib/searchConfig';
+import {
+  addSearchHistory,
+  clearSearchHistory,
+  getSearchHistory,
+} from '@/lib/searchHistory';
 
 type SearchLampaItem = RailItem & { kind?: string };
 
@@ -41,13 +47,18 @@ export default function SearchScreen() {
   const [lampaItems, setLampaItems] = useState<SearchLampaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showKeyboard, setShowKeyboard] = useState(Platform.isTV);
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
 
   const { data: genres = [] } = useQuery({
     queryKey: ['search-genres'],
     queryFn: fetchGenres,
     staleTime: 60 * 60 * 1000,
   });
+
+  useEffect(() => {
+    void getSearchHistory().then(setHistory);
+  }, []);
 
   /** Only when returning from results — never on filter focus (causes bounce). */
   const revealHeader = useCallback(() => {
@@ -58,6 +69,7 @@ export default function SearchScreen() {
   const runSearch = async (q: string) => {
     const trimmed = q.trim();
     if (trimmed.length < 2) return;
+    if (Platform.isTV) setShowKeyboard(false);
     setLoading(true);
     setError(null);
     try {
@@ -72,43 +84,53 @@ export default function SearchScreen() {
       });
       const lampaKind = lampaKindForMediaFilter(media);
       setAnimeItems(
-        (result.anime ?? []).map((item) => ({
-          id: item.id,
-          title: item.title ?? 'Без названия',
-          poster: animePoster(item),
-          score: item.score,
-        })),
+        uniqueById(
+          (result.anime ?? []).map((item) => ({
+            id: item.id,
+            title: item.title ?? 'Без названия',
+            poster: animePoster(item),
+            score: item.score,
+          })),
+        ),
       );
       setLampaItems(
-        (result.lampa ?? [])
-          .filter((item) => {
-            if (!lampaKind) return true;
-            const kind = String(
-              (item as unknown as Record<string, unknown>).kind ??
-                (item as unknown as Record<string, unknown>).mediaKind ??
-                'movie',
-            );
-            return kind === lampaKind;
-          })
-          .map((item) => ({
-            id: item.id,
-            title: item.title ?? item.name ?? 'Без названия',
-            poster: item.poster ?? item.poster_path,
-            score: item.vote_average,
-            kind: String(
-              (item as unknown as Record<string, unknown>).kind ??
-                (item as unknown as Record<string, unknown>).mediaKind ??
-                lampaKind ??
-                'movie',
-            ),
-          })),
+        uniqueById(
+          (result.lampa ?? [])
+            .filter((item) => {
+              if (!lampaKind) return true;
+              const kind = String(
+                (item as unknown as Record<string, unknown>).kind ??
+                  (item as unknown as Record<string, unknown>).mediaKind ??
+                  'movie',
+              );
+              return kind === lampaKind;
+            })
+            .map((item) => ({
+              id: item.id,
+              title: item.title ?? item.name ?? 'Без названия',
+              poster: item.poster ?? item.poster_path,
+              score: item.vote_average,
+              kind: String(
+                (item as unknown as Record<string, unknown>).kind ??
+                  (item as unknown as Record<string, unknown>).mediaKind ??
+                  lampaKind ??
+                  'movie',
+              ),
+            })),
+        ),
       );
+      const nextHistory = await addSearchHistory(trimmed);
+      setHistory(nextHistory);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка поиска');
     } finally {
       setLoading(false);
     }
   };
+
+  const clearHistory = useCallback(() => {
+    void clearSearchHistory().then(() => setHistory([]));
+  }, []);
 
   const handleKey = (key: string) => {
     if (key === 'BACK') setQuery((v) => v.slice(0, -1));
@@ -136,16 +158,30 @@ export default function SearchScreen() {
       <View style={styles.topBar}>
         <Text style={styles.title}>Поиск</Text>
         <View style={styles.searchRow}>
-          <TextInput
-            style={styles.input}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Название аниме, фильма или сериала"
-            placeholderTextColor={colors.textSecondary}
-            onSubmitEditing={() => void runSearch(query)}
-            showSoftInputOnFocus={!Platform.isTV}
-            onFocus={revealHeader}
-          />
+          {Platform.isTV ? (
+            <TvFocusable
+              onPress={() => {
+                revealHeader();
+                setShowKeyboard(true);
+              }}
+              onFocus={revealHeader}
+              style={styles.inputFocus}
+              focusedStyle={styles.inputFocused}
+            >
+              <Text style={query ? styles.inputValue : styles.inputPlaceholder} numberOfLines={1}>
+                {query || 'Название аниме, фильма или сериала'}
+              </Text>
+            </TvFocusable>
+          ) : (
+            <TextInput
+              style={styles.input}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Название аниме, фильма или сериала"
+              placeholderTextColor={colors.textSecondary}
+              onSubmitEditing={() => void runSearch(query)}
+            />
+          )}
           <TvFocusable
             onPress={() => void runSearch(query)}
             onFocus={revealHeader}
@@ -155,6 +191,8 @@ export default function SearchScreen() {
             <Text style={styles.searchButtonLabel}>Найти</Text>
           </TvFocusable>
         </View>
+
+        {Platform.isTV && showKeyboard ? <OnScreenKeyboard onKey={handleKey} /> : null}
       </View>
 
       <SearchFilters
@@ -167,14 +205,33 @@ export default function SearchScreen() {
         genres={genres}
       />
 
-      {Platform.isTV && (
-        <TvFocusable onPress={() => setShowKeyboard((v) => !v)} style={styles.toggleKeyboard}>
-          <Text style={styles.toggleKeyboardLabel}>
-            {showKeyboard ? 'Скрыть клавиатуру' : 'Показать клавиатуру'}
-          </Text>
-        </TvFocusable>
-      )}
-      {Platform.isTV && showKeyboard && <OnScreenKeyboard onKey={handleKey} />}
+      {history.length > 0 ? (
+        <View style={styles.popular}>
+          <View style={styles.historyHeader}>
+            <Text style={styles.popularTitle}>Недавние</Text>
+            <TvFocusable
+              onPress={clearHistory}
+              style={styles.clearHistory}
+              focusedStyle={styles.clearHistoryFocused}
+            >
+              <Text style={styles.clearHistoryLabel}>Очистить</Text>
+            </TvFocusable>
+          </View>
+          <View style={styles.popularRow}>
+            {history.map((item) => (
+              <FilterChip
+                key={item}
+                label={item}
+                active={false}
+                onPress={() => {
+                  setQuery(item);
+                  void runSearch(item);
+                }}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.popular}>
         <Text style={styles.popularTitle}>Популярные запросы</Text>
@@ -302,6 +359,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  inputFocus: {
+    flex: 1,
+    backgroundColor: colors.bgCard,
+    borderRadius: 12,
+    padding: spacing.md,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.border,
+  },
+  inputFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
+  inputValue: {
+    color: colors.text,
+    fontSize: 16,
+  },
+  inputPlaceholder: {
+    color: colors.textSecondary,
+    fontSize: 16,
+  },
   searchButton: {
     backgroundColor: colors.brandAccent,
     borderRadius: 12,
@@ -338,15 +415,33 @@ const styles = StyleSheet.create({
     fontSize: Platform.isTV ? 15 : 14,
     fontWeight: '600',
   },
-  toggleKeyboard: { alignSelf: 'flex-start', padding: spacing.sm },
-  toggleKeyboardLabel: { color: colors.brand, fontSize: 16 },
   popular: { gap: spacing.sm },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
   popularTitle: {
     color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  clearHistory: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  clearHistoryFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
+  clearHistoryLabel: {
+    color: colors.brand,
+    fontSize: Platform.isTV ? 14 : 13,
+    fontWeight: '600',
   },
   popularRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   error: { color: colors.danger },
