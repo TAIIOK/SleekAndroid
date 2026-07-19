@@ -45,11 +45,11 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: Platform.isTV ? 22 : 16,
     fontWeight: '700',
   },
   block: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: Platform.isTV ? spacing.md : spacing.sm + 4,
     paddingVertical: spacing.xs,
   },
   metaRow: {
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: 12,
+    paddingVertical: Platform.isTV ? 12 : 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },

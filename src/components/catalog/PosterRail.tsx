@@ -22,6 +22,10 @@ interface PosterRailProps {
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
+  /** Override default rail poster width (e.g. denser detail rails on phone). */
+  itemWidth?: number;
+  /** Nested in a padded parent — no extra horizontal gutter. */
+  flush?: boolean;
   /** First card is the screen content-entry (preferred focus after sidebar nav). */
   contentEntry?: boolean;
 }
@@ -37,6 +41,8 @@ export function PosterRail({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  itemWidth,
+  flush = false,
   contentEntry = false,
 }: PosterRailProps) {
   const { bindItem } = useTvRailFocusRestore(items.length);
@@ -54,6 +60,7 @@ export function PosterRail({
       isFetchingNextPage={isFetchingNextPage}
       onLoadMore={onLoadMore}
       onSeeAll={onSeeAll}
+      flush={flush}
       renderItem={(item, index) => {
         const railFocus = bindItem(index);
         return (
@@ -77,6 +84,7 @@ export function PosterRail({
             }}
             onBlur={railFocus.onBlur}
             variant="rail"
+            width={itemWidth}
             railStart={index === 0}
             contentEntry={contentEntry && index === 0}
           />

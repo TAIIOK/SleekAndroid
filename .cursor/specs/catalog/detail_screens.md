@@ -13,6 +13,11 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 - [x] TV/wide layout uses two-column main + ~280px sidebar; phone uses stacked scroll
 - [x] Focusable controls use `TvFocusable` / Pressable focus rings
 - [x] Loading skeleton and error state for both detail types
+- [x] Phone density: hero min-height ≤ 240px, title ≤ 22px; related posters use `layout.posterWidthDetail` (≤ 100px)
+- [x] Phone density: episode stills/cards, cast tiles, and section gaps stay compact (tighter than desktop/TV)
+- [x] Hero without poster/backdrop keeps a fixed min-height (no `flex: 1` ImageBackground) so episodes stay under the hero
+- [x] Anime episode captions use `N Эпизод` (not `Эп. N · Episode N`)
+- [x] TV anime detail is a single non-flex-growing column; no nested episode ScrollView overlaying «Похожее»
 
 ### Anime (`/anime/[id]`)
 
@@ -31,7 +36,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 
 ### Lampa (`/movies/[id]`, `/series/[id]`)
 
-- [x] Backdrop hero with title, meta pills, Play/Continue opening source sheet
+- [x] Backdrop hero with title, meta pills, Play/Continue opening source sheet (card density matches AnimeDetailHero)
 - [x] Status picker + favorite toggle + «В коллекцию»; serials can open sources (no download/reactions)
 - [x] Plot / overview section
 - [x] Serials: seasons + episode list; selecting episode opens sheet with S/E
@@ -49,7 +54,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 4. Movie continue opens source sheet and can play via WatchHub.
 5. Series seasons are visible; episode selection opens the source sheet prefilled.
 6. Lampa status/favorite and similar/recommendations work on D-pad.
-7. Phone layout remains usable in stacked order.
+7. Phone layout remains usable in stacked order with compact cards (more content above the fold than the previous large hero/episode cards).
 8. On TV anime detail, D-pad reaches Play, library chips, plot expand, episode rows, and load-more; Left from Play/first episode reaches the app sidebar.
 9. Authenticated users can open «В коллекцию», pick an existing collection or create one, and the title appears in that collection.
 

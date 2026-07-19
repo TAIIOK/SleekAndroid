@@ -66,9 +66,9 @@ export function AnimeDetailHero({
 
   const playHint =
     hasHistory && resumeEpisode && lastProgress > 0 && lastProgress < 1
-      ? `Эп. ${episodeNumber(resumeEpisode)} · ${Math.round(lastProgress * 100)}%`
+      ? `${episodeNumber(resumeEpisode)} Эпизод · ${Math.round(lastProgress * 100)}%`
       : hasHistory && resumeEpisode
-        ? `Эп. ${episodeNumber(resumeEpisode)}`
+        ? `${episodeNumber(resumeEpisode)} Эпизод`
         : undefined;
 
   const pills = [
@@ -80,134 +80,157 @@ export function AnimeDetailHero({
     ...genres,
   ].filter(Boolean) as string[];
 
+  const body = (
+    <>
+      <LinearGradient
+        colors={['rgba(19,18,27,0.2)', 'rgba(19,18,27,0.75)', '#13121b']}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['rgba(19,18,27,0.9)', 'rgba(19,18,27,0.35)', 'transparent']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.content}>
+        <Text style={styles.title} numberOfLines={2}>
+          {title}
+        </Text>
+        {alt ? (
+          <Text style={styles.alt} numberOfLines={1}>
+            {alt}
+          </Text>
+        ) : null}
+
+        {pills.length > 0 ? (
+          <View style={styles.pills}>
+            {pills.map((pill) => (
+              <View key={pill} style={styles.pill}>
+                <Text style={styles.pillText}>{pill}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.actions}>
+          <TvFocusable
+            onPress={() => {
+              if (canPlay) onPlay();
+            }}
+            hasTVPreferredFocus={Platform.isTV}
+            contentEntry={Platform.isTV}
+            railStart={Platform.isTV}
+            style={[styles.playBtn, !canPlay && styles.playDisabled]}
+          >
+            <Text style={styles.playLabel}>▶ {playLabel}</Text>
+            {playHint ? <Text style={styles.playHint}>{playHint}</Text> : null}
+          </TvFocusable>
+
+          <DetailLibraryActions
+            userStatus={userStatus}
+            isFavorite={isFavorite}
+            disabled={libraryDisabled}
+            collectionItem={
+              collectionItem ?? {
+                mediaType: 'anime',
+                mediaId: String(detail.id),
+                title: detail.title ?? undefined,
+                poster: animePoster(detail),
+              }
+            }
+            onStatusChange={onStatusChange}
+            onToggleFavorite={onToggleFavorite}
+          />
+        </View>
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.card}>
-      <ImageBackground source={backdrop ? { uri: backdrop } : undefined} style={styles.backdrop}>
-        <LinearGradient
-          colors={['rgba(19,18,27,0.2)', 'rgba(19,18,27,0.75)', '#13121b']}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={['rgba(19,18,27,0.9)', 'rgba(19,18,27,0.35)', 'transparent']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-        />
-
-        <View style={styles.content}>
-          <Text style={styles.title} numberOfLines={2}>
-            {title}
-          </Text>
-          {alt ? (
-            <Text style={styles.alt} numberOfLines={1}>
-              {alt}
-            </Text>
-          ) : null}
-
-          {pills.length > 0 ? (
-            <View style={styles.pills}>
-              {pills.map((pill) => (
-                <View key={pill} style={styles.pill}>
-                  <Text style={styles.pillText}>{pill}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          <View style={styles.actions}>
-            <TvFocusable
-              onPress={() => {
-                if (canPlay) onPlay();
-              }}
-              hasTVPreferredFocus={Platform.isTV}
-              contentEntry={Platform.isTV}
-              railStart={Platform.isTV}
-              style={[styles.playBtn, !canPlay && styles.playDisabled]}
-            >
-              <Text style={styles.playLabel}>▶ {playLabel}</Text>
-              {playHint ? <Text style={styles.playHint}>{playHint}</Text> : null}
-            </TvFocusable>
-
-            <DetailLibraryActions
-              userStatus={userStatus}
-              isFavorite={isFavorite}
-              disabled={libraryDisabled}
-              collectionItem={
-                collectionItem ?? {
-                  mediaType: 'anime',
-                  mediaId: String(detail.id),
-                  title: detail.title ?? undefined,
-                  poster: animePoster(detail),
-                }
-              }
-              onStatusChange={onStatusChange}
-              onToggleFavorite={onToggleFavorite}
-            />
-          </View>
-        </View>
-      </ImageBackground>
+      {backdrop ? (
+        <ImageBackground
+          source={{ uri: backdrop }}
+          style={styles.backdrop}
+          imageStyle={styles.backdropImage}
+        >
+          {body}
+        </ImageBackground>
+      ) : (
+        <View style={styles.backdrop}>{body}</View>
+      )}
     </View>
   );
 }
 
+const HERO_MIN = Platform.isTV ? 260 : 240;
+
 const styles = StyleSheet.create({
   card: {
-    borderRadius: Platform.isTV ? 16 : 24,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
-    minHeight: Platform.isTV ? 260 : 320,
+    alignSelf: 'stretch',
+    width: '100%',
+    // Fixed floor so a missing poster cannot collapse or flex-expand the page.
+    minHeight: HERO_MIN,
   },
   backdrop: {
-    flex: 1,
-    minHeight: Platform.isTV ? 260 : 320,
+    width: '100%',
+    minHeight: HERO_MIN,
     justifyContent: 'flex-end',
+    backgroundColor: colors.bgElevated,
+  },
+  backdropImage: {
+    resizeMode: 'cover',
   },
   content: {
-    padding: Platform.isTV ? spacing.lg : spacing.lg,
-    gap: spacing.sm,
+    padding: Platform.isTV ? spacing.lg : spacing.md,
+    gap: Platform.isTV ? spacing.sm : 6,
     maxWidth: Platform.isTV ? 720 : undefined,
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 28 : 28,
+    fontSize: Platform.isTV ? 28 : 22,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
   alt: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 15 : 14,
+    fontSize: Platform.isTV ? 15 : 13,
   },
   pills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: Platform.isTV ? spacing.sm : 6,
     marginTop: spacing.xs,
   },
   pill: {
     borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.isTV ? 5 : 6,
+    paddingHorizontal: Platform.isTV ? 12 : 10,
+    paddingVertical: Platform.isTV ? 5 : 4,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   pillText: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 12 : 12,
+    fontSize: Platform.isTV ? 12 : 11,
     fontWeight: '600',
   },
   actions: {
-    marginTop: spacing.sm,
-    gap: spacing.sm,
+    marginTop: Platform.isTV ? spacing.sm : 6,
+    gap: Platform.isTV ? spacing.sm : 6,
   },
   playBtn: {
     alignSelf: 'flex-start',
     backgroundColor: colors.brandAccent,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: Platform.isTV ? 12 : 14,
+    borderRadius: radii.md,
+    paddingHorizontal: Platform.isTV ? spacing.xl : spacing.lg,
+    paddingVertical: Platform.isTV ? 12 : 11,
     gap: 2,
   },
   playDisabled: {
@@ -215,11 +238,11 @@ const styles = StyleSheet.create({
   },
   playLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 17 : 16,
+    fontSize: Platform.isTV ? 17 : 15,
     fontWeight: '700',
   },
   playHint: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 12 : 13,
+    fontSize: 12,
   },
 });

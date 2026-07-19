@@ -12,6 +12,8 @@ interface SectionHeaderProps {
   onSeeAll?: () => void;
   variant?: SectionHeaderVariant;
   showAccent?: boolean;
+  /** Skip horizontal gutter — use inside already-padded screens (detail, sheets). */
+  flush?: boolean;
   /**
    * TV browse pages: title is the content focus entry (Left→sidebar, preferred focus).
    * No separate chip — focus ring sits on the page title itself.
@@ -47,6 +49,7 @@ export function SectionHeader({
   onSeeAll,
   variant = 'rail',
   showAccent,
+  flush = false,
   tvFocusEntry = false,
 }: SectionHeaderProps) {
   const accentVisible =
@@ -77,7 +80,13 @@ export function SectionHeader({
   );
 
   return (
-    <View style={[styles.wrap, { marginBottom: marginBottomForVariant(variant) }]}>
+    <View
+      style={[
+        styles.wrap,
+        flush && styles.wrapFlush,
+        { marginBottom: marginBottomForVariant(variant) },
+      ]}
+    >
       {titleBlock}
       {onSeeAll ? (
         <Pressable onPress={onSeeAll} style={styles.seeAll}>
@@ -96,8 +105,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Platform.isTV ? layout.gutterDesktop : layout.gutterMobile,
     gap: spacing.md,
   },
+  wrapFlush: {
+    paddingHorizontal: 0,
+  },
   titleBlock: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     gap: spacing.xs,
     backgroundColor: 'transparent',
   },

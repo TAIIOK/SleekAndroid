@@ -31,6 +31,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 - [x] Panel: timeline → transport → options; auto-hide 3s while playing; hint ~2.5s
 - [x] TV panel visual: bottom fade, circular transport, labeled option pills, timeline thumb (site-like HUD)
+- [x] TV panel density: compact HUD — times + timeline on one row; transport ≤ 52px play / 44px sides; tight pills/padding so more video stays visible
 - [x] Hidden panel: ←/→ seek (prefs seconds), ↑/↓ show panel, OK play/pause, Back exit
 - [x] Visible panel: D-pad focus; Back hides panel or closes overlay before exit
 - [x] Overlays: dubbing, quality, connection, delivery, episodes, subtitles (when tracks exist), settings, external player

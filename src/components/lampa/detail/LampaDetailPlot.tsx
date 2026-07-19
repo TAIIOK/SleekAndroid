@@ -42,14 +42,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: Platform.isTV ? 22 : 16,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
   body: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 16 : 14,
-    lineHeight: Platform.isTV ? 26 : 22,
+    fontSize: Platform.isTV ? 16 : 13,
+    lineHeight: Platform.isTV ? 26 : 20,
   },
   more: {
     alignSelf: 'flex-start',

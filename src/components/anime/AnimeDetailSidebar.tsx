@@ -4,7 +4,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 import type { AnimeDetail } from '@/api/catalog';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { GlassSurface } from '@/components/ui/GlassSurface';
-import { colors, spacing } from '@/constants/aniverse';
+import { colors, layout, spacing } from '@/constants/aniverse';
 import {
   animeScore,
   animeStudioName,
@@ -68,6 +68,8 @@ export function AnimeDetailSidebar({
           title="Похожее"
           items={similarItems.map(mapAnimeToRailItem)}
           loading={similarLoading}
+          itemWidth={layout.posterWidthDetail}
+          flush
           onItemPress={(item) => router.push(`/anime/${item.id}`)}
         />
       ) : null}
@@ -76,6 +78,8 @@ export function AnimeDetailSidebar({
         <PosterRail
           title="Рекомендации"
           items={recommendationItems.map(mapAnimeToRailItem)}
+          itemWidth={layout.posterWidthDetail}
+          flush
           onItemPress={(item) => router.push(`/anime/${item.id}`)}
         />
       ) : null}
@@ -85,18 +89,18 @@ export function AnimeDetailSidebar({
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: '100%',
-    gap: spacing.lg,
+    alignSelf: 'stretch',
+    gap: Platform.isTV ? spacing.md : spacing.md,
   },
   block: {
-    padding: spacing.md,
+    padding: Platform.isTV ? spacing.md : spacing.sm + 4,
     gap: spacing.sm,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.md,
-    paddingVertical: Platform.isTV ? 8 : 10,
+    paddingVertical: Platform.isTV ? 8 : 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },

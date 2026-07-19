@@ -183,8 +183,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: Platform.isTV ? 14 : 12,
+    paddingHorizontal: Platform.isTV ? spacing.lg : spacing.md,
+    paddingVertical: Platform.isTV ? 14 : 9,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
@@ -196,12 +196,12 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 16 : 14,
+    fontSize: Platform.isTV ? 16 : 13,
     fontWeight: '600',
   },
   iconBtn: {
-    width: Platform.isTV ? 52 : 44,
-    height: Platform.isTV ? 52 : 44,
+    width: Platform.isTV ? 52 : 38,
+    height: Platform.isTV ? 52 : 38,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',

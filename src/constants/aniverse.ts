@@ -48,6 +48,8 @@ export const layout = {
   gutterDesktop: Platform.isTV ? 20 : 48,
   posterAspect: 120 / 170,
   posterWidthRail: Platform.isTV ? 120 : 120,
+  /** Similar / recommendations rails on detail screens (phone denser than home). */
+  posterWidthDetail: Platform.isTV ? 120 : 100,
   posterWidthShowcase: Platform.isTV ? 120 : 140,
   maxContentWidth: 1440,
   continueCardWidth: Platform.isTV ? 190 : 260,
@@ -86,14 +88,14 @@ export const typography = {
     fontWeight: '600' as const,
   },
   homeGroupTitle: {
-    fontSize: Platform.isTV ? 18 : 24,
-    lineHeight: Platform.isTV ? 24 : 32,
+    fontSize: Platform.isTV ? 18 : 18,
+    lineHeight: Platform.isTV ? 24 : 24,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   railTitle: {
-    fontSize: Platform.isTV ? 18 : 24,
-    lineHeight: Platform.isTV ? 24 : 32,
+    fontSize: Platform.isTV ? 18 : 18,
+    lineHeight: Platform.isTV ? 24 : 24,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },

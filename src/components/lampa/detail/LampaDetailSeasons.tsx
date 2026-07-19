@@ -184,8 +184,8 @@ function EpisodeCard({
   );
 }
 
-const STILL_WIDTH = Platform.isTV ? 140 : 120;
-const STILL_HEIGHT = Platform.isTV ? 79 : 68;
+const STILL_WIDTH = Platform.isTV ? 140 : 96;
+const STILL_HEIGHT = Platform.isTV ? 79 : 54;
 
 const styles = StyleSheet.create({
   section: {
@@ -194,21 +194,21 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: Platform.isTV ? 22 : 16,
     fontWeight: '700',
   },
   seasonRailWrap: {
     width: '100%',
   },
   seasonRow: {
-    gap: spacing.sm,
+    gap: Platform.isTV ? spacing.sm : 6,
     paddingVertical: 2,
     alignItems: 'center',
   },
   seasonChip: {
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: Platform.isTV ? 14 : 12,
+    paddingVertical: Platform.isTV ? 8 : 6,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   },
   seasonChipLabel: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: Platform.isTV ? 13 : 12,
     fontWeight: '600',
   },
   seasonChipLabelActive: {
@@ -254,18 +254,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.sm,
+    padding: Platform.isTV ? spacing.sm : 6,
     overflow: 'hidden',
   },
   episodeRow: {
     flexDirection: 'row',
-    gap: spacing.sm + 2,
+    gap: Platform.isTV ? spacing.sm + 2 : spacing.sm,
     alignItems: 'center',
   },
   stillWrap: {
     width: STILL_WIDTH,
     height: STILL_HEIGHT,
-    borderRadius: 10,
+    borderRadius: Platform.isTV ? 10 : 8,
     overflow: 'hidden',
     backgroundColor: colors.bgElevated,
     position: 'relative',
@@ -312,14 +312,14 @@ const styles = StyleSheet.create({
   },
   epTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 14,
+    fontSize: Platform.isTV ? 15 : 13,
     fontWeight: '600',
-    lineHeight: Platform.isTV ? 20 : 18,
+    lineHeight: Platform.isTV ? 20 : 17,
   },
   epOverview: {
     color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: Platform.isTV ? 12 : 11,
+    lineHeight: Platform.isTV ? 16 : 15,
   },
   progressTrack: {
     position: 'absolute',

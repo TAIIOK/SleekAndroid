@@ -8,7 +8,7 @@ export function AnimeDetailSkeleton() {
 
   return (
     <View style={styles.root}>
-      <Skeleton height={tv ? 260 : 320} rounded={16} />
+      <Skeleton height={tv ? 260 : 240} rounded={16} />
       <View style={styles.stacked}>
         <View style={styles.main}>
           <Skeleton height={20} width={100} />
@@ -24,7 +24,7 @@ export function AnimeDetailSkeleton() {
           ) : (
             <View style={styles.epRow}>
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} width={160} height={120} rounded={16} />
+                <Skeleton key={i} width={136} height={100} rounded={12} />
               ))}
             </View>
           )}
@@ -42,20 +42,20 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    padding: spacing.lg,
-    gap: Platform.isTV ? spacing.md : spacing.xl,
+    padding: Platform.isTV ? spacing.lg : spacing.md,
+    gap: spacing.md,
   },
   stacked: {
     flexDirection: 'column',
-    gap: Platform.isTV ? spacing.md : spacing.xl,
+    gap: spacing.md,
     alignItems: 'stretch',
   },
   main: { flex: 1, gap: spacing.sm },
   side: { width: '100%' },
   epRow: {
     flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.lg,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   epCol: {
     gap: spacing.sm,

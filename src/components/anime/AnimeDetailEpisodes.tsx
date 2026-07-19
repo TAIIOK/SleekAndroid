@@ -13,8 +13,7 @@ import {
 import { resolveAnimePosterUrl } from '@/lib/config';
 import type { AnimeEpisode } from '@aniverse/types';
 
-const CARD_WIDTH = Platform.isTV ? 200 : 168;
-const TV_LIST_MAX_HEIGHT = 300;
+const CARD_WIDTH = Platform.isTV ? 200 : 136;
 
 interface AnimeDetailEpisodesProps {
   episodes: AnimeEpisode[];
@@ -97,7 +96,7 @@ export function AnimeDetailEpisodes({
         <View style={styles.cardBody}>
           <Text style={styles.epTitle} numberOfLines={2}>
             {customTitle
-              ? `${episodeLabel(episode)}. ${customTitle}`
+              ? `${episodeLabel(episode)} · ${customTitle}`
               : episodeLabel(episode)}
           </Text>
         </View>
@@ -121,19 +120,13 @@ export function AnimeDetailEpisodes({
     <View style={styles.section}>
       <Text style={styles.title}>Сезоны и серии</Text>
       {Platform.isTV ? (
+        // Plain column — nested ScrollView inside the page ScrollView was overlapping
+        // sibling rails ("Похожее") on Android TV when the hero had no poster.
         <View style={styles.listShell}>
-          <ScrollView
-            style={styles.listScroll}
-            contentContainerStyle={styles.listContent}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-          >
+          <View style={styles.listContent}>
             {cards}
             {loadMore}
-          </ScrollView>
-          {episodes.length > 3 ? (
-            <Text style={styles.scrollHint}>Вниз — следующие серии</Text>
-          ) : null}
+          </View>
         </View>
       ) : (
         <ScrollView
@@ -153,15 +146,15 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 20 : 18,
+    fontSize: Platform.isTV ? 20 : 16,
     fontWeight: '700',
   },
   meta: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: Platform.isTV ? 14 : 13,
   },
   rail: {
-    gap: spacing.md,
+    gap: Platform.isTV ? spacing.md : spacing.sm,
     paddingVertical: spacing.xs,
     alignItems: 'flex-start',
   },
@@ -171,23 +164,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: 'rgba(255,255,255,0.03)',
     overflow: 'hidden',
-  },
-  listScroll: {
-    maxHeight: TV_LIST_MAX_HEIGHT,
+    width: '100%',
   },
   listContent: {
     padding: spacing.sm,
     gap: 6,
   },
-  scrollHint: {
-    color: colors.textMuted,
-    fontSize: 12,
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
   card: {
     width: CARD_WIDTH,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
     borderColor: colors.border,
@@ -215,49 +200,49 @@ const styles = StyleSheet.create({
   },
   thumbWrapTv: {
     width: 120,
+    minHeight: 72,
     alignSelf: 'stretch',
     backgroundColor: colors.bgElevated,
     position: 'relative',
+    overflow: 'hidden',
   },
   thumb: {
-    ...StyleSheet.absoluteFill,
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
   },
   thumbFallback: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.bgElevated,
   },
   playOverlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   playBadge: {
-    width: Platform.isTV ? 32 : 36,
-    height: Platform.isTV ? 32 : 36,
-    borderRadius: Platform.isTV ? 16 : 18,
+    width: Platform.isTV ? 32 : 28,
+    height: Platform.isTV ? 32 : 28,
+    borderRadius: Platform.isTV ? 16 : 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   playBadgeText: {
     color: colors.text,
-    fontSize: Platform.isTV ? 12 : 12,
+    fontSize: Platform.isTV ? 12 : 11,
   },
   cardBody: {
     flex: 1,
-    paddingHorizontal: Platform.isTV ? spacing.md : 12,
-    paddingVertical: Platform.isTV ? spacing.sm : 12,
+    paddingHorizontal: Platform.isTV ? spacing.md : 10,
+    paddingVertical: Platform.isTV ? spacing.sm : 8,
     justifyContent: 'center',
-    minHeight: Platform.isTV ? undefined : 48,
+    minHeight: Platform.isTV ? undefined : 40,
   },
   epTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 13,
+    fontSize: Platform.isTV ? 15 : 12,
     fontWeight: '600',
-    lineHeight: Platform.isTV ? 20 : 17,
+    lineHeight: Platform.isTV ? 20 : 16,
   },
   progressTrack: {
     position: 'absolute',

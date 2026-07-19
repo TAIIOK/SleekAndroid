@@ -73,7 +73,13 @@ export function episodeNumber(ep: AnimeEpisode): number {
 export function isRedundantEpisodeTitle(title: string, number: number): boolean {
   const t = title.trim().toLowerCase();
   if (!t) return true;
-  return t === `эпизод ${number}` || t === `episode ${number}` || t === String(number);
+  if (t === String(number)) return true;
+  // "Episode 1", "Эпизод 1", "Ep. 1", "Эп. 1", "1 эпизод", etc.
+  const stripped = t
+    .replace(/^(эпизод|episode|ep\.?|эп\.?)\s*/i, '')
+    .replace(/\s*(эпизод|episode)$/i, '')
+    .trim();
+  return stripped === String(number);
 }
 
 /** API may return screenshot/poster even when shared AnimeEpisode type omits them. */
@@ -154,9 +160,8 @@ export function extractRelatedItems(
   return result;
 }
 
+/** Compact episode caption: "1 Эпизод" (never "Эп. 1 · Episode 1"). */
 export function episodeLabel(ep: AnimeEpisode): string {
   const ordinal = ep.ordinal ?? ep.id;
-  const title = ep.title?.trim();
-  if (title) return `Эп. ${ordinal} · ${title}`;
-  return `Эпизод ${ordinal}`;
+  return `${ordinal} Эпизод`;
 }

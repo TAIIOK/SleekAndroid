@@ -129,24 +129,27 @@ export function TvPlayerPanel({
         {(title || subtitle) && (
           <View style={styles.meta}>
             {title ? (
-              <Text style={styles.title} numberOfLines={1}>{title}</Text>
+              <Text style={styles.title} numberOfLines={1}>
+                {title}
+              </Text>
             ) : null}
             {subtitle ? (
-              <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
             ) : null}
           </View>
         )}
 
-        <View style={[styles.timeline, timelineFocused && styles.timelineFocused]}>
-          <View style={styles.track}>
-            <View style={[styles.progress, { width: progressWidth }]}>
-              <View style={styles.thumb} />
+        <View style={styles.timelineRow}>
+          <Text style={styles.time}>{formatPlaybackTime(currentTime)}</Text>
+          <View style={[styles.timeline, timelineFocused && styles.timelineFocused]}>
+            <View style={styles.track}>
+              <View style={[styles.progress, { width: progressWidth }]}>
+                <View style={styles.thumb} />
+              </View>
             </View>
           </View>
-        </View>
-
-        <View style={styles.times}>
-          <Text style={styles.time}>{formatPlaybackTime(currentTime)}</Text>
           <Text style={styles.time}>{formatPlaybackTime(duration)}</Text>
         </View>
 
@@ -195,7 +198,7 @@ export function TvPlayerPanel({
           ) : null}
           {hasConnection ? (
             <OptionPill
-              label="Подключение"
+              label="Сеть"
               value={selectedConnection ?? '—'}
               focused={isFocused('connection')}
             />
@@ -226,7 +229,7 @@ export function TvPlayerPanel({
             <OptionPill value="Внешний" focused={isFocused('external')} compact />
           ) : null}
           <OptionPill
-            label="Настройки"
+            label="Скорость"
             value={formatPlaybackRate(prefs.playbackRate)}
             focused={isFocused('settings')}
           />
@@ -235,6 +238,9 @@ export function TvPlayerPanel({
     </View>
   );
 }
+
+const BTN = 44;
+const BTN_PLAY = 52;
 
 const styles = StyleSheet.create({
   wrap: {
@@ -245,54 +251,60 @@ const styles = StyleSheet.create({
   },
   fade: {
     ...StyleSheet.absoluteFillObject,
-    top: -120,
+    top: -72,
   },
   body: {
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.xl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
-    borderRadius: radii.xl,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm + 2,
+    paddingBottom: spacing.sm + 2,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     backgroundColor: 'rgba(12,11,18,0.78)',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  meta: { gap: 4, marginBottom: 2 },
+  meta: { gap: 2 },
   title: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
   subtitle: {
     color: 'rgba(255,255,255,0.62)',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '400',
   },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   timeline: {
-    height: 10,
+    flex: 1,
+    height: 16,
     borderRadius: radii.pill,
     justifyContent: 'center',
-    paddingVertical: 2,
+    paddingVertical: 4,
   },
   timelineFocused: {
     borderRadius: radii.pill,
     borderWidth: 2,
     borderColor: colors.brand,
     paddingHorizontal: 2,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   track: {
-    height: 6,
+    height: 4,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(255,255,255,0.14)',
     overflow: 'visible',
     justifyContent: 'center',
   },
   progress: {
-    height: 6,
+    height: 4,
     borderRadius: radii.pill,
     backgroundColor: '#fff',
     maxWidth: '100%',
@@ -300,49 +312,44 @@ const styles = StyleSheet.create({
   },
   thumb: {
     position: 'absolute',
-    right: -7,
+    right: -5,
     top: '50%',
-    marginTop: -7,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    marginTop: -5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#fff',
-  },
-  times: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: -4,
   },
   time: {
     color: 'rgba(255,255,255,0.78)',
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
+    minWidth: 40,
+    textAlign: 'center',
   },
   transport: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 2,
-    marginBottom: 2,
   },
   transportSide: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: 6,
   },
   transportSideEnd: {
     justifyContent: 'flex-end',
   },
   transportSpacer: {
-    width: 56,
-    height: 56,
+    width: BTN,
+    height: BTN,
   },
   transportBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: BTN,
+    height: BTN,
+    borderRadius: BTN / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -350,9 +357,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   transportBtnPlay: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: BTN_PLAY,
+    height: BTN_PLAY,
+    borderRadius: BTN_PLAY / 2,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderColor: 'rgba(255,255,255,0.14)',
   },
@@ -362,13 +369,13 @@ const styles = StyleSheet.create({
   },
   transportBtnText: {
     color: 'rgba(255,255,255,0.92)',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
   transportBtnTextPlay: {
-    fontSize: 26,
-    marginLeft: 2,
+    fontSize: 20,
+    marginLeft: 1,
   },
   transportBtnTextFocused: {
     color: '#111',
@@ -376,22 +383,21 @@ const styles = StyleSheet.create({
   options: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 4,
+    gap: 8,
   },
   pill: {
-    minWidth: 118,
-    maxWidth: 200,
+    minWidth: 88,
+    maxWidth: 220,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.06)',
-    gap: 2,
+    gap: 1,
   },
   pillCompact: {
-    minWidth: 96,
+    minWidth: 80,
     justifyContent: 'center',
   },
   pillFocused: {
@@ -402,7 +408,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.48)',
     fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   pillLabelFocused: {

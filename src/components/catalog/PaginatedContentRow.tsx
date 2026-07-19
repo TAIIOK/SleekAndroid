@@ -27,6 +27,8 @@ interface PaginatedContentRowProps<T> {
   onLoadMore?: () => void;
   onSeeAll?: () => void;
   hideTitle?: boolean;
+  /** Nested in a padded parent — no extra horizontal gutter on title/rail. */
+  flush?: boolean;
   layout?: 'rail' | 'grid' | 'showcase';
 }
 
@@ -57,8 +59,13 @@ export function PaginatedContentRow<T>({
   onLoadMore,
   onSeeAll,
   hideTitle,
+  flush = false,
 }: PaginatedContentRowProps<T>) {
-  const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
+  const horizontalPad = flush
+    ? 0
+    : Platform.isTV
+      ? layout.gutterDesktop
+      : layout.gutterMobile;
   const skeletonCount = Platform.isTV ? 4 : 6;
 
   if (!isLoading && (isError || items.length === 0)) {
@@ -74,6 +81,7 @@ export function PaginatedContentRow<T>({
           onSeeAll={onSeeAll}
           variant={onSeeAll ? 'rail-featured' : 'rail'}
           showAccent={Platform.isTV || Boolean(onSeeAll)}
+          flush={flush}
         />
       ) : null}
 

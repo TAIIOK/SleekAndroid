@@ -178,8 +178,16 @@ export default function AnimeDetailScreen() {
     );
   }
 
-  const mainColumn = (
-    <View style={styles.main}>
+  const onPlayEpisode = (episode: AnimeEpisode) => {
+    const progress = savedState.progressByEpisodeId[episode.id];
+    playEpisode(
+      episode,
+      progress && progress > 0.01 && progress < 0.98 ? progress : undefined,
+    );
+  };
+
+  const plotAndEpisodes = (
+    <>
       <AnimeDetailPlot detail={detail} />
       <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
       <AnimeDetailEpisodes
@@ -189,15 +197,9 @@ export default function AnimeDetailScreen() {
         hasMore={hasMore}
         onLoadMore={loadMore}
         progressByEpisodeId={savedState.progressByEpisodeId}
-        onPlay={(episode) => {
-          const progress = savedState.progressByEpisodeId[episode.id];
-          playEpisode(
-            episode,
-            progress && progress > 0.01 && progress < 0.98 ? progress : undefined,
-          );
-        }}
+        onPlay={onPlayEpisode}
       />
-    </View>
+    </>
   );
 
   const sidebar = (
@@ -208,6 +210,20 @@ export default function AnimeDetailScreen() {
       recommendationItems={recommendationItems}
       similarLoading={relatedLoading}
     />
+  );
+
+  // Always a single column on TV. Wide phone/tablet may use two columns, but never
+  // put `flex:1` / `width:'100%'` siblings in a row inside ScrollView — that overlays.
+  const body = useWideLayout ? (
+    <View style={styles.wideGrid}>
+      <View style={styles.wideMain}>{plotAndEpisodes}</View>
+      <View style={styles.wideSide}>{sidebar}</View>
+    </View>
+  ) : (
+    <View style={styles.stack}>
+      {plotAndEpisodes}
+      {sidebar}
+    </View>
   );
 
   return (
@@ -235,11 +251,7 @@ export default function AnimeDetailScreen() {
         onStatusChange={onStatusChange}
         onToggleFavorite={onToggleFavorite}
       />
-
-      <View style={[styles.grid, !useWideLayout && styles.stacked]}>
-        {mainColumn}
-        {sidebar}
-      </View>
+      {body}
     </ScrollView>
   );
 }
@@ -247,22 +259,36 @@ export default function AnimeDetailScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
-    padding: Platform.isTV ? spacing.lg : spacing.lg,
-    gap: Platform.isTV ? spacing.md : spacing.xl,
-    paddingBottom: Platform.isTV ? spacing.xl : spacing.xxl * 2,
+    // flexGrow:0 — never stretch ScrollView children to the viewport (pushes body down).
+    flexGrow: 0,
+    padding: Platform.isTV ? spacing.lg : spacing.md,
+    gap: spacing.md,
+    paddingBottom: Platform.isTV ? spacing.xl : spacing.xxl,
   },
-  grid: {
+  stack: {
+    width: '100%',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: spacing.md,
+  },
+  wideGrid: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: Platform.isTV ? spacing.md : spacing.xl,
+    gap: spacing.lg,
   },
-  stacked: {
-    flexDirection: 'column',
-  },
-  main: {
-    flex: 1,
+  wideMain: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
     minWidth: 0,
-    gap: Platform.isTV ? spacing.md : spacing.xl,
+    gap: spacing.md,
+  },
+  wideSide: {
+    width: 280,
+    flexGrow: 0,
+    flexShrink: 0,
+    gap: spacing.md,
   },
   loader: {
     flex: 1,

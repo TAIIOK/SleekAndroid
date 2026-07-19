@@ -8,7 +8,7 @@ export function LampaDetailSkeleton() {
 
   return (
     <View style={styles.root}>
-      <Skeleton height={wide ? 420 : 320} rounded={24} />
+      <Skeleton height={wide ? 260 : 240} rounded={16} />
       <View style={[styles.grid, !wide && styles.stacked]}>
         <View style={styles.main}>
           <Skeleton height={20} width={80} />
@@ -28,12 +28,12 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    padding: Platform.isTV ? spacing.xxl : spacing.lg,
-    gap: spacing.xl,
+    padding: Platform.isTV ? spacing.xxl : spacing.md,
+    gap: Platform.isTV ? spacing.xl : spacing.md,
   },
   grid: {
     flexDirection: 'row',
-    gap: spacing.xl,
+    gap: Platform.isTV ? spacing.xl : spacing.md,
     alignItems: 'flex-start',
   },
   stacked: { flexDirection: 'column' },

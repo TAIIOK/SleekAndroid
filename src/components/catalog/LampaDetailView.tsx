@@ -25,7 +25,7 @@ import { LampaDetailSeasons } from '@/components/lampa/detail/LampaDetailSeasons
 import { LampaDetailSidebar } from '@/components/lampa/detail/LampaDetailSidebar';
 import { LampaDetailSkeleton } from '@/components/lampa/detail/LampaDetailSkeleton';
 import { LampaSourceSheet } from '@/components/lampa/LampaSourceSheet';
-import { colors, spacing } from '@/constants/aniverse';
+import { colors, layout, spacing } from '@/constants/aniverse';
 import {
   lampaDetailPath,
   lampaTitle,
@@ -200,6 +200,8 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           title="Связанные"
           items={franchise.map(mapLampaToRailItem)}
           loading={franchisePending}
+          itemWidth={layout.posterWidthDetail}
+          flush
           onItemPress={(item) => openLampaItem(item.id, 'movie')}
         />
       ) : null}
@@ -208,6 +210,8 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           title="Похожие"
           items={similar.map(mapLampaToRailItem)}
           loading={similarPending}
+          itemWidth={layout.posterWidthDetail}
+          flush
           onItemPress={(item) => openLampaItem(item.id)}
         />
       )}
@@ -216,6 +220,8 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           title="Рекомендации"
           items={recommendations.map(mapLampaToRailItem)}
           loading={recommendationsPending}
+          itemWidth={layout.posterWidthDetail}
+          flush
           onItemPress={(item) => openLampaItem(item.id)}
         />
       )}
@@ -288,15 +294,16 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
-    padding: Platform.isTV ? spacing.xxl : spacing.lg,
-    gap: spacing.xl,
-    paddingBottom: spacing.xxl * 2,
+    flexGrow: 0,
+    padding: Platform.isTV ? spacing.lg : spacing.md,
+    gap: spacing.md,
+    paddingBottom: Platform.isTV ? spacing.xl : spacing.xxl,
   },
   stack: {
     width: '100%',
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: spacing.xl,
+    gap: spacing.md,
   },
   loader: {
     flex: 1,
