@@ -14,3 +14,4 @@
 | [Video Player](.cursor/specs/player/video_player.md) | player | Implemented |
 | [TV Density](.cursor/specs/shell/tv_density.md) | shell | Implemented |
 | [TV Focus Navigation](.cursor/specs/shell/tv_focus_navigation.md) | shell | Implemented |
+| [OTA Updates (EAS Update)](.cursor/specs/infra/ota_updates.md) | infra | Partial (ship OTA-enabled APK to users) |

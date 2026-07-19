@@ -58,6 +58,41 @@ API URL задаётся в `app.json` → `expo.extra`:
 
 Android-сборка ожидает JDK 17 (`openjdk@17`); JDK 25 ломает CMake у native-модулей. `scripts/with-expo-path.js` сам подставляет Homebrew `openjdk@17`, если он установлен.
 
+## OTA-обновления (без новой APK)
+
+JS, стили и ассеты можно пушить через [EAS Update](https://docs.expo.dev/eas-update/introduction/) — пользователям не нужна новая APK. Смена native-модулей / SDK / permissions по-прежнему требует пересборки APK.
+
+### Один раз: привязать EAS-проект
+
+```bash
+npx eas-cli@latest login
+npm run eas:configure   # запишет real projectId и updates.url в app.json
+npm run prebuild:tv
+npm run android:release # раздать эту APK один раз
+```
+
+`app.json` уже содержит `extra.eas.projectId` и `updates.url` для проекта Sleek. Если переносите на другой Expo-аккаунт — снова запустите `npm run eas:configure`.
+
+### Публикация обновления
+
+```bash
+# production (sideload / production_android)
+npm run update:production -- --message "Fix search focus"
+
+# preview-сборки
+npm run update:preview -- --message "QA: new home rail"
+```
+
+Канал для локальных release-сборок задан в `app.json` → `updates.requestHeaders["expo-channel-name"]` = `production`.
+
+### Как проверить
+
+1. Установить release APK, собранную после `eas:configure`.
+2. Опубликовать update на канал `production`.
+3. Перезапустить приложение — появится диалог «Доступно обновление» → «Перезапустить», либо update применится на следующем cold start.
+
+В dev (`expo start`) OTA отключен.
+
 ## Сборка release APK (sideload)
 
 ```bash
