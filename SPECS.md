@@ -2,6 +2,7 @@
 
 | Spec | Domain | Status |
 |------|--------|--------|
+| [Continue Watching](.cursor/specs/catalog/continue_watching.md) | catalog | Implemented |
 | [Detail Screens](.cursor/specs/catalog/detail_screens.md) | catalog | Implemented |
 | [Home Quick Actions](.cursor/specs/catalog/home_quick_actions.md) | catalog | Implemented |
 | [Library TV](.cursor/specs/catalog/library_tv.md) | catalog | Implemented |

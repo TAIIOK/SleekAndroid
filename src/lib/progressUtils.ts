@@ -220,8 +220,14 @@ export function buildLampaPlaybackState(
     return false;
   }) as Record<string, unknown> | undefined;
 
-  const lampaId = String(objectId ?? match?.lampaObjectId ?? '').trim();
-  const episodeProgressByKey = lampaProgressByKey(progressRows, lampaId || undefined);
+  const candidateIds = [objectId, numericId, match?.lampaObjectId]
+    .map((value) => (value == null ? '' : String(value).trim()))
+    .filter(Boolean);
+  const scopedRows = candidateIds.length
+    ? progressRows.filter((row) => candidateIds.includes(row.lampaId))
+    : progressRows;
+  // Rows may be keyed by objectId or numeric route/tmdb id — merge without a single-id filter.
+  const episodeProgressByKey = lampaProgressByKey(scopedRows);
   const progressValues = Object.values(episodeProgressByKey);
   const maxProgress = progressValues.length ? Math.max(...progressValues) : 0;
 

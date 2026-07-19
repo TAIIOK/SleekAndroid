@@ -1,9 +1,10 @@
-import { resolvePosterUrl } from '@/lib/config';
-import { lampaDetailPath, lampaTitle } from '@/lib/lampaDetail';
+import { resolveLampaPosterUrl, resolvePosterUrl } from '@/lib/config';
+import { lampaDetailPath, lampaDetailRouteId, lampaTitle } from '@/lib/lampaDetail';
 import {
   animeProgressByEpisodeId,
+  groupAnimeProgressByAnimeId,
   groupLampaProgressById,
-  lampaProgressByKey,
+  normalizeProgress,
 } from '@/lib/progressUtils';
 import { extractPosterPath } from '@/lib/poster';
 import type { SavedAnimeItem } from '@/types/progress';
@@ -20,6 +21,18 @@ export interface ContinueWatchingItem {
   kind: 'anime' | 'movie' | 'tv';
   animeId?: number;
   episodeId?: number;
+  /** Used for sorting only; stripped before UI if needed. */
+  updatedAtMs?: number;
+}
+
+interface LampaMeta {
+  title?: string;
+  poster?: string;
+  kind?: 'movie' | 'tv';
+  routeId?: string;
+  season?: number;
+  episode?: number;
+  status?: string;
 }
 
 function resolveAnimeListTitle(anime?: Record<string, unknown>): string | undefined {
@@ -29,6 +42,245 @@ function resolveAnimeListTitle(anime?: Record<string, unknown>): string | undefi
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+function parseDateMs(value?: string): number {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function pickLatestProgressRow<T extends { updatedAt?: string; progress: number }>(rows: T[]): T {
+  return rows.reduce((best, row) => {
+    const bestTime = parseDateMs(best.updatedAt);
+    const rowTime = parseDateMs(row.updatedAt);
+    if (rowTime !== bestTime) return rowTime > bestTime ? row : best;
+    return row.progress >= best.progress ? row : best;
+  });
+}
+
+function isInProgress(progress: number, completed?: boolean): boolean {
+  const value = normalizeProgress(progress);
+  if (completed || value >= 0.98) return false;
+  return value > 0.01;
+}
+
+function indexSavedLampa(savedLampa: unknown[]): Map<string, Record<string, unknown>> {
+  const map = new Map<string, Record<string, unknown>>();
+  for (const raw of savedLampa) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    const nested = row.lampa as Record<string, unknown> | undefined;
+    const keys = [
+      nested?.objectId,
+      row.lampaObjectId,
+      nested?.id,
+      nested?.tmdbId,
+      nested?.rawId,
+      row.id,
+    ];
+    for (const key of keys) {
+      if (key == null) continue;
+      const text = String(key).trim();
+      if (text) map.set(text, row);
+    }
+  }
+  return map;
+}
+
+function progressRowsForSavedLampa(
+  row: Record<string, unknown>,
+  byId: Map<string, UserLampaProgress[]>,
+): UserLampaProgress[] {
+  const nested = row.lampa as Record<string, unknown> | undefined;
+  const keys = [
+    nested?.objectId,
+    row.lampaObjectId,
+    nested?.id,
+    nested?.tmdbId,
+    nested?.rawId,
+    row.id,
+  ];
+  for (const key of keys) {
+    if (key == null) continue;
+    const rows = byId.get(String(key).trim());
+    if (rows?.length) return rows;
+  }
+  return [];
+}
+
+function lampaMetaFromSaved(row?: Record<string, unknown>): LampaMeta {
+  if (!row) return {};
+  const nested = row.lampa as Record<string, unknown> | undefined;
+  const kindRaw = String(nested?.kind ?? row.kind ?? row.mediaKind ?? '');
+  const kind = kindRaw === 'tv' || kindRaw === 'home' ? 'tv' : kindRaw === 'movie' ? 'movie' : undefined;
+  const routeItem = nested ?? {
+    id: row.id,
+    tmdbId: row.tmdbId,
+    objectId: row.lampaObjectId,
+  };
+  const routeId = lampaDetailRouteId(routeItem as Parameters<typeof lampaDetailRouteId>[0]);
+  const posterRaw = String(
+    nested?.poster ??
+      nested?.posterPath ??
+      nested?.poster_path ??
+      row.poster ??
+      row.posterPath ??
+      row.poster_path ??
+      '',
+  );
+  return {
+    title: nested ? lampaTitle(nested) : String(row.title ?? row.name ?? '').trim() || undefined,
+    poster: resolveLampaPosterUrl(posterRaw) ?? resolvePosterUrl(posterRaw),
+    kind,
+    routeId: routeId || undefined,
+    season: Number(row.lastSeason ?? row.lastSeasson ?? row.season) || undefined,
+    episode: Number(row.lastEpisode ?? row.lastWatchingEpisode ?? row.episode) || undefined,
+    status: typeof row.status === 'string' ? row.status : undefined,
+  };
+}
+
+/** Pull title/poster/kind/route hints from activity history feed rows. */
+export function buildLampaMetaFromHistoryFeed(feedRows: unknown[]): Map<string, LampaMeta> {
+  const map = new Map<string, LampaMeta>();
+
+  for (const raw of feedRows) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    const snapshot =
+      row.snapshot && typeof row.snapshot === 'object'
+        ? (row.snapshot as Record<string, unknown>)
+        : typeof row.snapshot === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.snapshot) as unknown;
+                return parsed && typeof parsed === 'object'
+                  ? (parsed as Record<string, unknown>)
+                  : {};
+              } catch {
+                return {};
+              }
+            })()
+          : {};
+
+    const kindRaw = String(
+      snapshot.kind ?? snapshot.mediaKind ?? row.kind ?? row.mediaKind ?? '',
+    ).toLowerCase();
+    const kind =
+      kindRaw === 'tv' || kindRaw === 'series' || kindRaw === 'home'
+        ? 'tv'
+        : kindRaw === 'movie' || kindRaw === 'films'
+          ? 'movie'
+          : undefined;
+
+    const objectIds = [
+      row.objectId,
+      row.lampaObjectId,
+      row.lampaId,
+      snapshot.objectId,
+      snapshot.lampaId,
+      row.entityId,
+      row.entity_id,
+    ]
+      .map((value) => (value == null ? '' : String(value).trim()))
+      .filter(Boolean);
+
+    const routeId = lampaDetailRouteId({
+      id: (snapshot.id ?? row.id ?? snapshot.tmdbId ?? row.tmdbId) as string | number | undefined,
+      tmdbId: (snapshot.tmdbId ?? row.tmdbId) as string | number | undefined,
+      rawId: snapshot.rawId as string | number | undefined,
+      objectId: objectIds[0],
+    });
+
+    const title = String(
+      snapshot.title ?? snapshot.name ?? row.title ?? row.name ?? '',
+    ).trim();
+    const posterRaw = String(
+      snapshot.poster ??
+        snapshot.posterPath ??
+        snapshot.poster_path ??
+        row.poster ??
+        row.posterPath ??
+        '',
+    );
+    const poster = resolveLampaPosterUrl(posterRaw) ?? resolvePosterUrl(posterRaw);
+    const meta: LampaMeta = {
+      title: title || undefined,
+      poster: poster || undefined,
+      kind,
+      routeId: routeId || undefined,
+    };
+
+    for (const id of objectIds) {
+      const prev = map.get(id) ?? {};
+      map.set(id, {
+        title: prev.title ?? meta.title,
+        poster: prev.poster ?? meta.poster,
+        kind: prev.kind ?? meta.kind,
+        routeId: prev.routeId ?? meta.routeId,
+      });
+    }
+    if (routeId) {
+      const prev = map.get(routeId) ?? {};
+      map.set(routeId, {
+        title: prev.title ?? meta.title,
+        poster: prev.poster ?? meta.poster,
+        kind: prev.kind ?? meta.kind,
+        routeId: prev.routeId ?? meta.routeId,
+      });
+    }
+  }
+
+  return map;
+}
+
+function inferLampaKind(
+  rows: UserLampaProgress[],
+  meta: LampaMeta,
+): 'movie' | 'tv' {
+  if (meta.kind) return meta.kind;
+  const serial = rows.some((row) => row.seasonOrdinal > 0 || row.episodeOrdinal > 0);
+  return serial ? 'tv' : 'movie';
+}
+
+function resolveLampaHref(kind: 'movie' | 'tv', lampaId: string, meta: LampaMeta): string | null {
+  const numeric =
+    meta.routeId ||
+    (/^\d+$/.test(lampaId.trim()) ? lampaId.trim() : '');
+  if (!numeric) return null;
+  return lampaDetailPath(kind, { id: numeric, tmdbId: Number(numeric) });
+}
+
+function pickAnimeContinueFromProgress(
+  animeId: number,
+  progressRows: UserAnimeProgress[],
+  saved?: SavedAnimeItem,
+): ContinueWatchingItem | null {
+  const inProgress = progressRows.filter((row) => isInProgress(row.progress, row.completed));
+  if (!inProgress.length) {
+    if (saved?.status !== 'watching') return null;
+    return pickAnimeContinue(saved, progressRows);
+  }
+
+  const latest = pickLatestProgressRow(inProgress);
+  const progress = normalizeProgress(latest.progress);
+  const detail = saved?.anime;
+  const title = resolveAnimeListTitle(detail) ?? saved?.title ?? `Аниме ${animeId}`;
+  const poster = detail ? extractPosterPath(detail.poster) : saved?.poster;
+
+  return {
+    id: `anime-${animeId}`,
+    title,
+    poster: poster ? resolvePosterUrl(poster) : undefined,
+    subtitle: 'Продолжить',
+    progress: Math.min(1, Math.max(0.02, progress)),
+    href: `/watch/anime/${animeId}/${latest.episodeId}`,
+    startProgress: progress,
+    kind: 'anime',
+    animeId,
+    episodeId: latest.episodeId,
+    updatedAtMs: parseDateMs(latest.updatedAt),
+  };
 }
 
 function pickAnimeContinue(
@@ -74,6 +326,68 @@ function pickAnimeContinue(
   };
 }
 
+function pickLampaContinueFromProgress(
+  lampaId: string,
+  progressRows: UserLampaProgress[],
+  savedMeta: LampaMeta,
+  historyMeta: LampaMeta,
+): ContinueWatchingItem | null {
+  const meta: LampaMeta = {
+    title: savedMeta.title ?? historyMeta.title,
+    poster: savedMeta.poster ?? historyMeta.poster,
+    kind: savedMeta.kind ?? historyMeta.kind,
+    routeId: savedMeta.routeId ?? historyMeta.routeId,
+    season: savedMeta.season ?? historyMeta.season,
+    episode: savedMeta.episode ?? historyMeta.episode,
+    status: savedMeta.status,
+  };
+
+  const inProgress = progressRows.filter((row) => isInProgress(row.progress, row.completed));
+  if (!inProgress.length) {
+    if (meta.status !== 'watching') return null;
+    const kind = inferLampaKind(progressRows, meta);
+    const href = resolveLampaHref(kind, lampaId, meta);
+    if (!href) return null;
+    return {
+      id: `lampa-${kind}-${meta.routeId ?? lampaId}`,
+      title: meta.title ?? 'Без названия',
+      poster: meta.poster,
+      subtitle:
+        meta.season != null && meta.episode != null
+          ? `Сезон ${meta.season} · Эпизод ${meta.episode}`
+          : 'Продолжить',
+      progress: 0.02,
+      href,
+      kind,
+    };
+  }
+
+  const latest = pickLatestProgressRow(inProgress);
+  const progress = normalizeProgress(latest.progress);
+  const kind = inferLampaKind(progressRows, meta);
+  const href = resolveLampaHref(kind, lampaId, meta);
+  if (!href) return null;
+
+  const season =
+    latest.seasonOrdinal > 0 ? latest.seasonOrdinal : meta.season;
+  const episode =
+    latest.episodeOrdinal > 0 ? latest.episodeOrdinal : meta.episode;
+
+  return {
+    id: `lampa-${kind}-${meta.routeId ?? lampaId}`,
+    title: meta.title ?? 'Без названия',
+    poster: meta.poster,
+    subtitle:
+      kind === 'tv' && season != null && episode != null
+        ? `Сезон ${season} · Эпизод ${episode}`
+        : 'Продолжить',
+    progress: Math.min(1, Math.max(0.02, progress)),
+    href,
+    kind,
+    updatedAtMs: parseDateMs(latest.updatedAt),
+  };
+}
+
 export function applyEpisodeOrdinalsToContinueItems(
   items: ContinueWatchingItem[],
   ordinalByEpisodeId: Map<number, number>,
@@ -86,81 +400,83 @@ export function applyEpisodeOrdinalsToContinueItems(
   });
 }
 
-function pickLampaContinue(
-  item: Record<string, unknown>,
-  progressRows: UserLampaProgress[],
-): ContinueWatchingItem | null {
-  const nested = item.lampa as Record<string, unknown> | undefined;
-  const kind = String(nested?.kind ?? item.kind ?? item.mediaKind ?? 'movie');
-  const routeItem = nested ?? item;
-  const routeId = lampaDetailPath(kind, routeItem);
-  if (!routeId || routeId.endsWith('/')) return null;
-
-  const lampaId = String(
-    nested?.objectId ?? item.lampaObjectId ?? nested?.id ?? item.id ?? '',
-  ).trim();
-  const progressMap = lampaProgressByKey(progressRows, lampaId || undefined);
-  const progress = Object.values(progressMap).length
-    ? Math.max(...Object.values(progressMap))
-    : 0;
-
-  if (progress <= 0.01 && item.status !== 'watching') return null;
-
-  const title = nested ? lampaTitle(nested) : String(item.title ?? item.name ?? 'Без названия');
-  const season = item.season ?? item.lastSeason ?? item.lastSeasson;
-  const episode = item.episode ?? item.lastEpisode ?? item.lastWatchingEpisode;
-  const subtitle =
-    season != null && episode != null
-      ? `Сезон ${season} · Эпизод ${episode}`
-      : 'Продолжить';
-
-  const posterRaw = String(
-    nested?.poster ??
-      nested?.posterPath ??
-      nested?.poster_path ??
-      item.poster ??
-      item.posterPath ??
-      item.poster_path ??
-      '',
-  );
-
-  return {
-    id: `lampa-${kind}-${routeItem.id ?? routeItem.objectId ?? routeItem.tmdbId}`,
-    title,
-    poster: resolvePosterUrl(posterRaw),
-    subtitle,
-    progress: Math.min(1, Math.max(0.02, progress)),
-    href: routeId,
-    kind: kind === 'tv' ? 'tv' : 'movie',
-  };
-}
-
 export function buildContinueWatchingItems(
   savedAnime: SavedAnimeItem[],
   savedLampa: unknown[],
   animeProgress: UserAnimeProgress[] = [],
   lampaProgress: UserLampaProgress[] = [],
+  historyFeed: unknown[] = [],
 ): ContinueWatchingItem[] {
   const items: ContinueWatchingItem[] = [];
-  const lampaProgressByObjectId = groupLampaProgressById(lampaProgress);
+  const seenAnime = new Set<number>();
+  const seenLampa = new Set<string>();
+
+  const savedAnimeById = new Map<number, SavedAnimeItem>();
+  for (const saved of savedAnime) {
+    const animeId = saved.animeId ?? saved.id;
+    if (animeId != null) savedAnimeById.set(animeId, saved);
+  }
+
+  const savedLampaById = indexSavedLampa(savedLampa);
+  const historyLampaMeta = buildLampaMetaFromHistoryFeed(historyFeed);
+  const lampaProgressById = groupLampaProgressById(lampaProgress);
+
+  for (const [animeId, rows] of groupAnimeProgressByAnimeId(animeProgress)) {
+    const entry = pickAnimeContinueFromProgress(animeId, rows, savedAnimeById.get(animeId));
+    if (!entry) continue;
+    items.push(entry);
+    seenAnime.add(animeId);
+  }
+
+  for (const [lampaId, rows] of lampaProgressById) {
+    const saved = savedLampaById.get(lampaId);
+    const entry = pickLampaContinueFromProgress(
+      lampaId,
+      rows,
+      lampaMetaFromSaved(saved),
+      historyLampaMeta.get(lampaId) ?? {},
+    );
+    if (!entry) continue;
+    items.push(entry);
+    seenLampa.add(lampaId);
+    if (entry.href) {
+      const match = entry.href.match(/\/(movies|series)\/(\d+)/);
+      if (match) seenLampa.add(match[2]);
+    }
+  }
 
   for (const sa of savedAnime) {
-    const entry = pickAnimeContinue(sa, animeProgress);
-    if (entry) items.push(entry);
+    const animeId = sa.animeId ?? sa.id;
+    if (animeId == null || seenAnime.has(animeId)) continue;
+    const entry = pickAnimeContinue(sa, []);
+    if (!entry) continue;
+    items.push(entry);
+    seenAnime.add(animeId);
   }
 
   for (const raw of savedLampa) {
     if (!raw || typeof raw !== 'object') continue;
     const row = raw as Record<string, unknown>;
     const nested = row.lampa as Record<string, unknown> | undefined;
-    const lampaId = String(
+    const primaryId = String(
       nested?.objectId ?? row.lampaObjectId ?? nested?.id ?? row.id ?? '',
     ).trim();
-    const rows = lampaId ? (lampaProgressByObjectId.get(lampaId) ?? []) : lampaProgress;
-    const entry = pickLampaContinue(row, rows);
-    if (entry) items.push(entry);
+    if (!primaryId || seenLampa.has(primaryId)) continue;
+    if (nested?.id != null && seenLampa.has(String(nested.id))) continue;
+
+    const rows = progressRowsForSavedLampa(row, lampaProgressById);
+    const entry = pickLampaContinueFromProgress(
+      primaryId,
+      rows,
+      lampaMetaFromSaved(row),
+      historyLampaMeta.get(primaryId) ?? {},
+    );
+    if (!entry) continue;
+    items.push(entry);
+    seenLampa.add(primaryId);
   }
 
+  items.sort((a, b) => (b.updatedAtMs ?? 0) - (a.updatedAtMs ?? 0));
   return items.slice(0, 16);
 }
 

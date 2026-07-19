@@ -73,9 +73,28 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   }, [detail]);
 
   const { data: lampaProgress = [] } = useQuery({
-    queryKey: ['lampa-progress', lampaObjectId || undefined],
-    queryFn: () => fetchLampaProgress(lampaObjectId),
-    enabled: !!lampaObjectId && isAuthenticated,
+    queryKey: ['lampa-progress', lampaObjectId || routeId || undefined],
+    queryFn: async () => {
+      const ids = [lampaObjectId, routeId].filter(
+        (value, index, all): value is string =>
+          !!value?.trim() && all.indexOf(value) === index,
+      );
+      if (!ids.length) return [];
+      if (ids.length === 1) return fetchLampaProgress(ids[0]);
+      const chunks = await Promise.all(ids.map((id) => fetchLampaProgress(id)));
+      const merged = new Map<string, (typeof chunks)[number][number]>();
+      for (const rows of chunks) {
+        for (const row of rows) {
+          const key = `${row.lampaId}:${row.seasonOrdinal}:${row.episodeOrdinal}`;
+          const prev = merged.get(key);
+          if (!prev || (row.updatedAt ?? '') >= (prev.updatedAt ?? '')) {
+            merged.set(key, row);
+          }
+        }
+      }
+      return [...merged.values()];
+    },
+    enabled: (!!lampaObjectId || !!routeId) && isAuthenticated,
     staleTime: 30_000,
   });
 

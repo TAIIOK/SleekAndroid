@@ -182,7 +182,9 @@ export function LampaSourceSheet({
         : Object.values(episodeProgressByKey)[0];
       setLampaWatchPayload({
         lampaLinks: links,
-        lampaId: lampaObjectId ?? routeId,
+        // Prefer numeric route id so continue-watching can open /movies|/series/:id
+        // without waiting for library/history enrichment.
+        lampaId: /^\d+$/.test(routeId) ? routeId : (lampaObjectId ?? routeId),
         lampaKind: kind,
         lampaTitle: title,
         season,

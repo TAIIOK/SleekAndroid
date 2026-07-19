@@ -12,42 +12,85 @@ function clampProgress(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-function isAnimeProgressRow(value: unknown): value is UserAnimeProgress {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    'episodeId' in value &&
-    typeof (value as UserAnimeProgress).episodeId === 'number'
-  );
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 }
 
-function isLampaProgressRow(value: unknown): value is UserLampaProgress {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    'lampaId' in value &&
-    typeof (value as UserLampaProgress).lampaId === 'string'
+function asNonEmptyString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return undefined;
+}
+
+function mapAnimeProgressRow(value: unknown): UserAnimeProgress | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const episodeId = asFiniteNumber(row.episodeId ?? row.episode_id);
+  const progress = asFiniteNumber(row.progress);
+  if (episodeId == null || progress == null) return null;
+  const animeId = asFiniteNumber(row.animeId ?? row.anime_id);
+  const episodeOrdinal = asFiniteNumber(row.episodeOrdinal ?? row.episode_ordinal);
+  return {
+    userId: asNonEmptyString(row.userId ?? row.user_id),
+    episodeId,
+    animeId,
+    episodeOrdinal,
+    progress: clampProgress(progress),
+    completed: Boolean(row.completed),
+    updatedAt: asNonEmptyString(row.updatedAt ?? row.updated_at),
+  };
+}
+
+function mapLampaProgressRow(value: unknown): UserLampaProgress | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const lampaId = asNonEmptyString(
+    row.lampaId ?? row.lampa_id ?? row.lampaObjectId ?? row.objectId ?? row.object_id,
   );
+  const progress = asFiniteNumber(row.progress);
+  if (!lampaId || progress == null) return null;
+  const seasonOrdinal = asFiniteNumber(row.seasonOrdinal ?? row.season_ordinal) ?? 0;
+  const episodeOrdinal = asFiniteNumber(row.episodeOrdinal ?? row.episode_ordinal) ?? 0;
+  return {
+    userId: asNonEmptyString(row.userId ?? row.user_id),
+    lampaId,
+    seasonOrdinal,
+    episodeOrdinal,
+    progress: clampProgress(progress),
+    completed: Boolean(row.completed),
+    updatedAt: asNonEmptyString(row.updatedAt ?? row.updated_at),
+  };
 }
 
 function normalizeAnimeProgressList(payload: unknown): UserAnimeProgress[] {
   const data = unwrapData<unknown>(payload);
-  if (Array.isArray(data)) return data.filter(isAnimeProgressRow);
+  if (Array.isArray(data)) {
+    return data.map(mapAnimeProgressRow).filter((row): row is UserAnimeProgress => row != null);
+  }
   if (!data || typeof data !== 'object') return [];
   const obj = data as Record<string, unknown>;
   if (Array.isArray(obj.items)) return normalizeAnimeProgressList(obj.items);
-  if (isAnimeProgressRow(obj)) return [obj];
-  return [];
+  if (Array.isArray(obj.data)) return normalizeAnimeProgressList(obj.data);
+  const single = mapAnimeProgressRow(obj);
+  return single ? [single] : [];
 }
 
 function normalizeLampaProgressList(payload: unknown): UserLampaProgress[] {
   const data = unwrapData<unknown>(payload);
-  if (Array.isArray(data)) return data.filter(isLampaProgressRow);
+  if (Array.isArray(data)) {
+    return data.map(mapLampaProgressRow).filter((row): row is UserLampaProgress => row != null);
+  }
   if (!data || typeof data !== 'object') return [];
   const obj = data as Record<string, unknown>;
   if (Array.isArray(obj.items)) return normalizeLampaProgressList(obj.items);
-  if (isLampaProgressRow(obj)) return [obj];
-  return [];
+  if (Array.isArray(obj.data)) return normalizeLampaProgressList(obj.data);
+  const single = mapLampaProgressRow(obj);
+  return single ? [single] : [];
 }
 
 export async function fetchAnimeProgress(

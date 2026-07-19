@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { Platform } from 'react-native';
 import { useQueries, useQuery } from '@tanstack/react-query';
 
+import { fetchEpisodeById } from '@/api/catalog';
 import { fetchSavedAnimeLibrary, fetchSavedLampaLibrary } from '@/api/library';
 import { fetchAnimeProgress, fetchLampaProgress } from '@/api/progress';
-import { fetchEpisodeById } from '@/api/catalog';
+import { fetchActivityHistory } from '@/api/user';
 import {
   applyEpisodeOrdinalsToContinueItems,
   buildContinueWatchingItems,
@@ -41,15 +42,23 @@ export function useContinueWatching() {
     enabled: isAuthenticated,
   });
 
+  const { data: historyFeed = [] } = useQuery({
+    queryKey: ['history-feed'],
+    queryFn: fetchActivityHistory,
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+  });
+
   const continueBase = useMemo(() => {
     const items = buildContinueWatchingItems(
       savedAnime,
       savedLampa,
       animeProgress,
       lampaProgress,
+      historyFeed,
     );
     return items.slice(0, CONTINUE_WATCHING_LIMIT);
-  }, [savedAnime, savedLampa, animeProgress, lampaProgress]);
+  }, [savedAnime, savedLampa, animeProgress, lampaProgress, historyFeed]);
 
   const continueEpisodeIds = useMemo(
     () =>
