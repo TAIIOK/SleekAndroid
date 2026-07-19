@@ -9,7 +9,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#13121b",
+        "backgroundColor": "#EEEAF8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -70,7 +70,7 @@
       "typedRoutes": false,
       "reactCompiler": true
     },
-    "name": "AniVerse",
+    "name": "Sleek",
     "slug": "aniverse-app"
   }
 }

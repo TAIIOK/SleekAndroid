@@ -101,7 +101,7 @@ export async function launchExternalPlayer(
     return { ok: false, message: 'Нет URL видео' };
   }
 
-  const title = options.title?.trim() || 'AniVerse';
+  const title = options.title?.trim() || 'Sleek';
   const positionMs = Math.max(0, Math.floor((options.positionSeconds ?? 0) * 1000));
   const packageName =
     options.packageName === undefined
