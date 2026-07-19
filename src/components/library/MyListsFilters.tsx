@@ -15,17 +15,22 @@ interface MyListsFiltersProps {
 export function MyListsFilters({ status, onStatusChange }: MyListsFiltersProps) {
   return (
     <View style={styles.row}>
-      {MY_LISTS_STATUS_OPTIONS.map((option) => (
-        <TvFocusable
-          key={option.id}
-          onPress={() => onStatusChange(option.id)}
-          style={[styles.chip, status === option.id && styles.chipActive]}
-        >
-          <Text style={[styles.chipLabel, status === option.id && styles.chipLabelActive]}>
-            {option.label}
-          </Text>
-        </TvFocusable>
-      ))}
+      {MY_LISTS_STATUS_OPTIONS.map((option, index) => {
+        const active = status === option.id;
+        return (
+          <TvFocusable
+            key={option.id}
+            onPress={() => onStatusChange(option.id)}
+            style={[styles.chip, active && styles.chipActive]}
+            focusedStyle={active ? styles.chipFocusedActive : styles.chipFocused}
+            railStart={index === 0}
+          >
+            <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+              {option.label}
+            </Text>
+          </TvFocusable>
+        );
+      })}
     </View>
   );
 }
@@ -50,8 +55,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: colors.brand,
+    backgroundColor: 'rgba(195,192,255,0.18)',
     borderColor: colors.brand,
+  },
+  chipFocused: {
+    borderColor: '#ffffff',
+    backgroundColor: tvFocus.fill,
+  },
+  chipFocusedActive: {
+    borderColor: '#ffffff',
+    backgroundColor: 'rgba(195,192,255,0.32)',
   },
   chipLabel: {
     color: colors.textSecondary,
@@ -59,6 +72,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chipLabelActive: {
-    color: colors.brandOn,
+    color: colors.brandTint,
   },
 });

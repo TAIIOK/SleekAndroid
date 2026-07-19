@@ -21,7 +21,8 @@ import {
   type CatalogFilter,
   type LampaSection,
 } from '@/api/catalog';
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import {
   addAnimeCustomSection,
   animeFilterDisplayName,
@@ -140,9 +141,15 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>Настройки главной</Text>
-            <Pressable onPress={onClose} hitSlop={12}>
-              <Ionicons name="close" size={24} color={colors.textSecondary} />
-            </Pressable>
+            {Platform.isTV ? (
+              <TvFocusable onPress={onClose} style={styles.closeTv} hasTVPreferredFocus>
+                <Text style={styles.closeTvLabel}>Закрыть</Text>
+              </TvFocusable>
+            ) : (
+              <Pressable onPress={onClose} hitSlop={12}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </Pressable>
+            )}
           </View>
 
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -268,9 +275,22 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
           </ScrollView>
 
           <View style={styles.footer}>
-            <Pressable style={styles.saveBtn} onPress={() => onSave({ ...effectiveDraft, configured: true })}>
-              <Text style={styles.saveText}>Сохранить</Text>
-            </Pressable>
+            {Platform.isTV ? (
+              <TvFocusable
+                style={styles.saveBtn}
+                focusedStyle={styles.saveBtnFocused}
+                onPress={() => onSave({ ...effectiveDraft, configured: true })}
+              >
+                <Text style={styles.saveText}>Сохранить</Text>
+              </TvFocusable>
+            ) : (
+              <Pressable
+                style={styles.saveBtn}
+                onPress={() => onSave({ ...effectiveDraft, configured: true })}
+              >
+                <Text style={styles.saveText}>Сохранить</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -296,6 +316,23 @@ function ToggleRow({
   value: boolean;
   onValueChange: (enabled: boolean) => void;
 }) {
+  if (Platform.isTV) {
+    return (
+      <TvFocusable
+        onPress={() => onValueChange(!value)}
+        style={[styles.toggleRow, styles.toggleRowTv, value && styles.toggleRowTvOn]}
+        focusedStyle={styles.toggleRowTvFocused}
+      >
+        <Text style={styles.toggleLabel} numberOfLines={2}>
+          {label}
+        </Text>
+        <Text style={[styles.toggleState, value && styles.toggleStateOn]}>
+          {value ? 'Вкл' : 'Выкл'}
+        </Text>
+      </TvFocusable>
+    );
+  }
+
   return (
     <View style={styles.toggleRow}>
       <Text style={styles.toggleLabel} numberOfLines={2}>
@@ -580,6 +617,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  closeTv: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.border,
+  },
+  closeTvLabel: {
+    color: colors.brand,
+    fontSize: 15,
+    fontWeight: '600',
+  },
   scroll: {
     flexGrow: 0,
   },
@@ -611,6 +660,31 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
   },
+  toggleRowTv: {
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  toggleRowTvOn: {
+    borderColor: colors.brand,
+    backgroundColor: 'rgba(167,139,250,0.12)',
+  },
+  toggleRowTvFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
+  toggleState: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 44,
+    textAlign: 'right',
+  },
+  toggleStateOn: {
+    color: colors.brand,
+  },
   expandBtn: {
     paddingVertical: spacing.sm,
   },
@@ -629,6 +703,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     paddingVertical: spacing.md,
     alignItems: 'center',
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.brand,
+  },
+  saveBtnFocused: {
+    borderColor: '#ffffff',
   },
   saveText: {
     color: colors.brandOn,

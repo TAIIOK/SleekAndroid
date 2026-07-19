@@ -11,7 +11,8 @@ export const tvVerticalCatalogScrollProps = Platform.isTV
   ? ({
       snapToAlignment: 'item' as const,
       snapToItemPadding: spacing.md,
-      scrollAnimationEnabled: true,
+      // Instant snap — animated focus scrolling jerks the page when landing from the sidebar.
+      scrollAnimationEnabled: false,
     } as const)
   : ({} as const);
 

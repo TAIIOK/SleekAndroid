@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { forwardRef, useState } from 'react';
+import { forwardRef, useCallback, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, layout, radii, tvFocus, typography } from '@/constants/aniverse';
@@ -40,6 +40,7 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
 ) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
+  const nodeRef = useRef<View | null>(null);
   const cardWidth = width ?? (variant === 'grid' ? undefined : layout.posterWidthRail);
   const imageUrl =
     typeof poster === 'string' &&
@@ -53,11 +54,23 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
   const exitUp = Platform.isTV && contentEntry;
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
+  const setRefs = useCallback(
+    (node: View | null) => {
+      nodeRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+
   return (
     <Pressable
-      ref={ref}
+      ref={setRefs}
       onFocus={() => {
         setFocused(true);
+        if (Platform.isTV && nodeRef.current) {
+          shellFocus?.registerContentAnchor(nodeRef.current);
+        }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);
         onFocus?.();

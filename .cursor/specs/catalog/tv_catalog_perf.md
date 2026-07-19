@@ -6,7 +6,7 @@ Release builds on Android TV / Fire TV must keep home and catalog screens light:
 
 ## Requirements
 
-1. [x] Home does not fetch Quick Actions *counts* on TV (`library-*`, `history`, `collections` gated with `enabled: !Platform.isTV`); the Quick Actions UI still renders with static subtitles.
+1. [x] Home does not fetch Quick Actions *counts* on TV (`library-*`, `history`, `collections` gated with `enabled: !Platform.isTV`); Quick Actions UI is hidden on TV (see `tv_home_top_nav.md`).
 2. [x] Catalog rails fetch at most 12 items per page on TV (`CATALOG_RAIL_PAGE_SIZE`) and load more near the right edge via `onLoadMore`.
 3. [x] Lampa rail posters resolve at TMDB `w185`; anime rails prefer `thumbnail` / `preview` over full `source`.
 4. [x] `PosterCard` / continue posters use `expo-image` `cachePolicy="memory-disk"` and `recyclingKey`.

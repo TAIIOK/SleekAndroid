@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -23,6 +23,10 @@ import { useLampaWatchHub, type SourcesSearchProgress } from '@/hooks/useLampaWa
 import { formatRuDate } from '@/lib/catalogLocalization';
 import { resolveLampaPosterUrl } from '@/lib/config';
 import { lampaProgressKey, resolveLampaTmdbId } from '@/lib/lampaDetail';
+import {
+  loadLampaLastSelection,
+  saveLampaLastSelection,
+} from '@/lib/lampaLastSelection';
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import { getDownloadService } from '@/services/download';
 import { isHlsSourceUrl } from '@/services/download/types';
@@ -31,8 +35,34 @@ import {
   watchHubSourceLabel,
   type WatchHubEpisodeItem,
   type WatchHubSeasonEpisodes,
+  type WatchHubSourceResult,
   type WatchHubTranslator,
 } from '@/services/watchHub';
+
+function matchStoredSource(
+  sources: WatchHubSourceResult[],
+  sourceId: string,
+): WatchHubSourceResult | undefined {
+  const needle = sourceId.trim().toLowerCase();
+  if (!needle) return undefined;
+  return (
+    sources.find((s) => watchHubSourceLabel(s).toLowerCase() === needle) ??
+    sources.find((s) => s.source_id?.trim().toLowerCase() === needle) ??
+    sources.find((s) => s.title?.trim().toLowerCase() === needle)
+  );
+}
+
+function matchStoredTranslator(
+  translators: WatchHubTranslator[],
+  dubId: string,
+): WatchHubTranslator | undefined {
+  const needle = dubId.trim().toLowerCase();
+  if (!needle) return translators[0];
+  return (
+    translators.find((t) => (t.name ?? '').trim().toLowerCase() === needle) ??
+    translators[0]
+  );
+}
 
 type PickerField = 'source' | 'translator' | 'season';
 
@@ -87,6 +117,32 @@ export function LampaSourceSheet({
   const [stepError, setStepError] = useState<string | null>(null);
   const [activePicker, setActivePicker] = useState<PickerField | null>(null);
   const [autoPlayDone, setAutoPlayDone] = useState(false);
+  const [restoreDone, setRestoreDone] = useState(false);
+  const preferredSeasonRef = useRef<number | undefined>(initialSeason);
+
+  useEffect(() => {
+    preferredSeasonRef.current = initialSeason;
+  }, [initialSeason]);
+
+  const persistSelection = useCallback(
+    (sourceId: string, translatorName: string, seasonNumber: number) => {
+      const source = watchHub.sources.find((s) => s.source_id === sourceId);
+      const sourceLabel = source ? watchHubSourceLabel(source) : sourceId;
+      void saveLampaLastSelection(routeId, {
+        sourceId: sourceLabel,
+        seasonNumber,
+        dubId: translatorName,
+      });
+      if (lampaObjectId && lampaObjectId !== routeId) {
+        void saveLampaLastSelection(lampaObjectId, {
+          sourceId: sourceLabel,
+          seasonNumber,
+          dubId: translatorName,
+        });
+      }
+    },
+    [watchHub.sources, routeId, lampaObjectId],
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -98,6 +154,7 @@ export function LampaSourceSheet({
       setStepError(null);
       setActivePicker(null);
       setAutoPlayDone(false);
+      setRestoreDone(false);
       setLoadingTranslators(false);
       setLoadingEpisodes(false);
       setPlaying(false);
@@ -106,57 +163,127 @@ export function LampaSourceSheet({
     void watchHub.loadSources();
   }, [visible, watchHub.loadSources]);
 
-  const pickSource = async (sourceId: string) => {
-    setSelectedSource(sourceId);
-    setSelectedTranslator(null);
-    setTranslators([]);
-    setSeasons([]);
-    setSelectedSeasonNumber(null);
-    setStepError(null);
-    setActivePicker(null);
-    setLoadingTranslators(true);
-    try {
-      const list = await watchHub.loadTranslators(sourceId);
-      setTranslators(list);
-      if (list.length === 1) {
-        await pickTranslator(sourceId, list[0]);
+  const pickTranslator = useCallback(
+    async (
+      sourceId: string,
+      tr: WatchHubTranslator,
+      preferredSeason?: number,
+    ) => {
+      const name = tr.name ?? `Озвучка ${tr.id}`;
+      setSelectedTranslator({ id: tr.id, name });
+      setActivePicker(null);
+      setStepError(null);
+
+      if (!isSerial) {
+        persistSelection(sourceId, name, 1);
+        return;
       }
-    } catch (e) {
-      setStepError(e instanceof Error ? e.message : 'Ошибка загрузки озвучек');
-      setTranslators([]);
-    } finally {
-      setLoadingTranslators(false);
-    }
-  };
 
-  const pickTranslator = async (sourceId: string, tr: WatchHubTranslator) => {
-    const name = tr.name ?? `Озвучка ${tr.id}`;
-    setSelectedTranslator({ id: tr.id, name });
-    setActivePicker(null);
-    setStepError(null);
-
-    if (!isSerial) return;
-
-    setLoadingEpisodes(true);
-    setSeasons([]);
-    setSelectedSeasonNumber(null);
-    try {
-      const loaded = await watchHub.loadEpisodes(sourceId, tr.id);
-      setSeasons(loaded);
-      const preferred =
-        loaded.find((s) => s.seasonNumber === initialSeason) ?? loaded[0];
-      setSelectedSeasonNumber(preferred?.seasonNumber ?? null);
-    } catch (e) {
-      setStepError(e instanceof Error ? e.message : 'Ошибка загрузки эпизодов');
+      setLoadingEpisodes(true);
       setSeasons([]);
-    } finally {
-      setLoadingEpisodes(false);
-    }
-  };
+      setSelectedSeasonNumber(null);
+      try {
+        const loaded = await watchHub.loadEpisodes(sourceId, tr.id);
+        setSeasons(loaded);
+        const seasonHint = preferredSeason ?? preferredSeasonRef.current;
+        const preferred =
+          (seasonHint != null
+            ? loaded.find((s) => s.seasonNumber === seasonHint)
+            : undefined) ?? loaded[0];
+        const seasonNumber = preferred?.seasonNumber ?? null;
+        setSelectedSeasonNumber(seasonNumber);
+        if (seasonNumber != null) {
+          persistSelection(sourceId, name, seasonNumber);
+        }
+      } catch (e) {
+        setStepError(e instanceof Error ? e.message : 'Ошибка загрузки эпизодов');
+        setSeasons([]);
+      } finally {
+        setLoadingEpisodes(false);
+      }
+    },
+    [isSerial, persistSelection, watchHub.loadEpisodes],
+  );
+
+  const pickSource = useCallback(
+    async (sourceId: string, preferredDubName?: string, preferredSeason?: number) => {
+      setSelectedSource(sourceId);
+      setSelectedTranslator(null);
+      setTranslators([]);
+      setSeasons([]);
+      setSelectedSeasonNumber(null);
+      setStepError(null);
+      setActivePicker(null);
+      setLoadingTranslators(true);
+      try {
+        const list = await watchHub.loadTranslators(sourceId);
+        setTranslators(list);
+        const preferred =
+          preferredDubName != null
+            ? matchStoredTranslator(list, preferredDubName)
+            : list.length === 1
+              ? list[0]
+              : undefined;
+        if (preferred) {
+          await pickTranslator(sourceId, preferred, preferredSeason);
+        }
+      } catch (e) {
+        setStepError(e instanceof Error ? e.message : 'Ошибка загрузки озвучек');
+        setTranslators([]);
+      } finally {
+        setLoadingTranslators(false);
+      }
+    },
+    [pickTranslator, watchHub.loadTranslators],
+  );
+
+  // Restore last source/dub when sources become available (iOS parity).
+  useEffect(() => {
+    if (!visible || restoreDone || selectedSource) return;
+    if (!watchHub.sources.length) return;
+
+    let cancelled = false;
+    void (async () => {
+      const selection =
+        (await loadLampaLastSelection(routeId)) ??
+        (lampaObjectId ? await loadLampaLastSelection(lampaObjectId) : null);
+      if (cancelled) return;
+      if (!selection) {
+        setRestoreDone(true);
+        return;
+      }
+      const source = matchStoredSource(watchHub.sources, selection.sourceId);
+      if (!source) {
+        // Preferred source may appear later while WatchHub is still searching.
+        if (watchHub.sourcesSearch.phase === 'searching') return;
+        setRestoreDone(true);
+        return;
+      }
+      setRestoreDone(true);
+      preferredSeasonRef.current = selection.seasonNumber;
+      await pickSource(source.source_id, selection.dubId, selection.seasonNumber);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    visible,
+    restoreDone,
+    selectedSource,
+    watchHub.sources,
+    watchHub.sourcesSearch.phase,
+    routeId,
+    lampaObjectId,
+    pickSource,
+  ]);
 
   const pickSeason = (seasonNumber: number) => {
     setSelectedSeasonNumber(seasonNumber);
     setActivePicker(null);
+    if (selectedSource && selectedTranslator) {
+      persistSelection(selectedSource, selectedTranslator.name, seasonNumber);
+    }
   };
 
   const playSelection = async (season?: number, episode?: number) => {
@@ -174,6 +301,11 @@ export function LampaSourceSheet({
         setStepError('Не удалось получить ссылку на видео');
         return;
       }
+      persistSelection(
+        selectedSource,
+        selectedTranslator.name,
+        season ?? selectedSeasonNumber ?? 1,
+      );
       const title = detail.title ?? detail.name ?? 'Воспроизведение';
       const progressKey =
         season != null && episode != null ? lampaProgressKey(season, episode) : undefined;
@@ -271,17 +403,24 @@ export function LampaSourceSheet({
     return map;
   }, [tmdbSeason]);
 
-  // Auto-play preferred episode once seasons are ready (continue / detail episode tap).
+  // Auto-play once last/preferred selection is ready (continue / detail episode tap).
   useEffect(() => {
-    if (!visible || !isSerial || autoPlayDone || !autoPlayPreferredEpisode) return;
-    if (!selectedSource || !selectedTranslator || loadingEpisodes) return;
-    if (initialSeason == null || initialEpisode == null) return;
-    const match = seasons
-      .flatMap((season) => season.episodes)
-      .find((ep) => ep.season === initialSeason && ep.episode === initialEpisode);
-    if (!match) return;
+    if (!visible || autoPlayDone || !autoPlayPreferredEpisode) return;
+    if (!selectedSource || !selectedTranslator || loadingTranslators || loadingEpisodes) {
+      return;
+    }
+    if (isSerial) {
+      if (initialSeason == null || initialEpisode == null) return;
+      const match = seasons
+        .flatMap((season) => season.episodes)
+        .find((ep) => ep.season === initialSeason && ep.episode === initialEpisode);
+      if (!match) return;
+      setAutoPlayDone(true);
+      void playSelection(match.season, match.episode);
+      return;
+    }
     setAutoPlayDone(true);
-    void playSelection(match.season, match.episode);
+    void playSelection();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot after data load
   }, [
     visible,
@@ -290,6 +429,7 @@ export function LampaSourceSheet({
     autoPlayPreferredEpisode,
     selectedSource,
     selectedTranslator,
+    loadingTranslators,
     loadingEpisodes,
     seasons,
     initialSeason,

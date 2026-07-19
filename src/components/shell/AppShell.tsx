@@ -224,25 +224,56 @@ function TvAppShellFrame({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const shellFocus = useTvShellFocus();
+  const menuOpen = shellFocus?.menuOpen ?? false;
   const profileActive = isActivePath(currentPath, '/profile') || isActivePath(currentPath, '/accounts');
   const activeNavIndex = TV_NAV_ITEMS.findIndex((item) => isActivePath(currentPath, item.path));
   // On profile/accounts the chip is the sidebar return target; otherwise the active nav row.
   const sidebarAnchorIndex = profileActive ? -1 : activeNavIndex >= 0 ? activeNavIndex : 0;
 
+  /**
+   * After a sidebar route change: close the overlay and park nav focus so Android
+   * relocates into content via hasTVPreferredFocus. No requestTVFocus on posters
+   * (that snaps the catalog ScrollView). Unpark once content owns focus, or timeout.
+   */
+  const [parkSidebarFocus, setParkSidebarFocus] = useState(false);
+  const contentTag = shellFocus?.contentNativeTag;
+
   useEffect(() => {
     shellFocus?.resetExitFlags();
-    // Only on navigation — shellFocus identity changes when the sidebar tag resolves.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- path-only reset
+    setParkSidebarFocus(true);
+    // Only on navigation — shellFocus identity changes when tags resolve.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path-only handoff
   }, [currentPath]);
+
+  useEffect(() => {
+    if (!parkSidebarFocus) return;
+    if (contentTag != null) {
+      setParkSidebarFocus(false);
+      return;
+    }
+    const unparkTimer = setTimeout(() => {
+      setParkSidebarFocus(false);
+    }, 800);
+    return () => {
+      clearTimeout(unparkTimer);
+    };
+  }, [parkSidebarFocus, contentTag]);
 
   return (
     <View style={[styles.tvRoot, { paddingTop: insets.top }]}>
-      <TvFocusGuide style={styles.tvSideNav} autoFocus trapFocusLeft>
+      {/*
+        Sidebar before content (focus tree). Keep on-screen with opacity only when
+        closed — translateX off-screen breaks nextFocusLeft / requestTVFocus.
+      */}
+      <TvFocusGuide
+        style={[styles.tvSideNav, !menuOpen && styles.tvSideNavHidden]}
+        trapFocusLeft
+      >
         <View style={styles.tvBrandRow}>
           <SleekLogo size={36} />
           <View style={styles.tvBrandText}>
             <SleekWordmark size="sm" />
-            <Text style={styles.tvBrandSubtitle}>← Меню с контента</Text>
+            {menuOpen ? <Text style={styles.tvBrandSubtitle}>→ К контенту</Text> : null}
           </View>
         </View>
         <ScrollView style={styles.tvNavScroll} contentContainerStyle={styles.tvNavList}>
@@ -253,7 +284,13 @@ function TvAppShellFrame({
               path={item.path}
               active={isActivePath(currentPath, item.path)}
               isSidebarAnchor={index === sidebarAnchorIndex}
-              onPress={() => router.push(item.path as '/')}
+              menuOpen={menuOpen}
+              parkFocus={parkSidebarFocus}
+              contentNativeTag={contentTag}
+              onPress={() => {
+                shellFocus?.closeMenu();
+                router.push(item.path as '/');
+              }}
             />
           ))}
         </ScrollView>
@@ -261,12 +298,23 @@ function TvAppShellFrame({
           nickname={userNickname}
           active={profileActive}
           isSidebarAnchor={profileActive}
-          onPress={() => router.push('/profile')}
+          menuOpen={menuOpen}
+          parkFocus={parkSidebarFocus}
+          contentNativeTag={contentTag}
+          onPress={() => {
+            shellFocus?.closeMenu();
+            router.push('/profile');
+          }}
         />
       </TvFocusGuide>
+
       <TvFocusGuide style={styles.tvContent} autoFocus>
         {children}
       </TvFocusGuide>
+
+      {menuOpen ? (
+        <View style={styles.tvMenuScrim} pointerEvents="none" />
+      ) : null}
     </View>
   );
 }
@@ -277,16 +325,26 @@ function NavItem({
   active,
   onPress,
   isSidebarAnchor,
+  menuOpen,
+  parkFocus = false,
+  contentNativeTag,
 }: {
   label: string;
   path: string;
   active: boolean;
   onPress: () => void;
   isSidebarAnchor?: boolean;
+  menuOpen: boolean;
+  /** True briefly after route change — forces focus out of the sidebar. */
+  parkFocus?: boolean;
+  contentNativeTag?: number;
 }) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
   const pressableRef = useRef<ViewType | null>(null);
+  // Closed menu: only the active anchor stays focusable for Left→sidebar.
+  // Parked: nothing focusable so Android moves focus into content.
+  const focusable = !parkFocus && (menuOpen || Boolean(isSidebarAnchor));
 
   const publishAnchor = () => {
     if (isSidebarAnchor && pressableRef.current) {
@@ -301,9 +359,17 @@ function NavItem({
         if (node) publishAnchor();
       }}
       onLayout={publishAnchor}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      focusable={focusable}
+      onFocus={() => {
+        setFocused(true);
+        shellFocus?.setSidebarFocused(true);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        shellFocus?.setSidebarFocused(false);
+      }}
       onPress={onPress}
+      {...(contentNativeTag != null ? { nextFocusRight: contentNativeTag } : {})}
       style={[
         styles.sideItem,
         active && styles.sideItemActive,
@@ -335,15 +401,22 @@ function ProfileChip({
   active,
   onPress,
   isSidebarAnchor,
+  menuOpen,
+  parkFocus = false,
+  contentNativeTag,
 }: {
   nickname?: string | null;
   active: boolean;
   onPress: () => void;
   isSidebarAnchor?: boolean;
+  menuOpen: boolean;
+  parkFocus?: boolean;
+  contentNativeTag?: number;
 }) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
   const pressableRef = useRef<ViewType | null>(null);
+  const focusable = !parkFocus && (menuOpen || Boolean(isSidebarAnchor));
 
   const publishAnchor = () => {
     if (isSidebarAnchor && pressableRef.current) {
@@ -358,9 +431,17 @@ function ProfileChip({
         if (node) publishAnchor();
       }}
       onLayout={publishAnchor}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      focusable={focusable}
+      onFocus={() => {
+        setFocused(true);
+        shellFocus?.setSidebarFocused(true);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        shellFocus?.setSidebarFocused(false);
+      }}
       onPress={onPress}
+      {...(contentNativeTag != null ? { nextFocusRight: contentNativeTag } : {})}
       style={[
         styles.tvProfile,
         active && styles.tvProfileActive,
@@ -456,14 +537,27 @@ function IconButton({
 const styles = StyleSheet.create({
   tvRoot: {
     flex: 1,
-    flexDirection: 'row',
     backgroundColor: colors.bg,
   },
   tvSideNav: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     width: layout.tvSideNavWidth,
-    backgroundColor: 'rgba(31,31,40,0.95)',
+    zIndex: 20,
+    backgroundColor: 'rgba(31,31,40,0.98)',
     borderRightWidth: 1,
     borderRightColor: colors.border,
+  },
+  tvSideNavHidden: {
+    // Stay in the focus tree (no translateX) so nextFocusLeft / requestTVFocus work.
+    opacity: 0,
+  },
+  tvMenuScrim: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 15,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   tvBrandRow: {
     flexDirection: 'row',

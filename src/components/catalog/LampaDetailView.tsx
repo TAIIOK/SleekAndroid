@@ -278,7 +278,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
         lampaObjectId={lampaObjectId || undefined}
         initialSeason={isSerial ? pickerSeason : undefined}
         initialEpisode={isSerial ? pickerEpisode : undefined}
-        autoPlayPreferredEpisode={isSerial && autoPlayPreferred}
+        autoPlayPreferredEpisode={autoPlayPreferred}
         episodeProgressByKey={savedState?.episodeProgressByKey}
       />
     </>

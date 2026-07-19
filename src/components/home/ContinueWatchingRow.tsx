@@ -1,7 +1,15 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { forwardRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { forwardRef, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
@@ -10,6 +18,7 @@ import {
   formatProgressTime,
   type ContinueWatchingItem,
 } from '@/lib/continueWatching';
+import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
 
@@ -22,6 +31,7 @@ interface ContinueWatchingRowProps {
 export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   const router = useRouter();
   const { bindItem } = useTvRailFocusRestore(items.length);
+  const [resumingId, setResumingId] = useState<string | null>(null);
   const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
   const rowCount = Platform.isTV ? 1 : items.length <= 4 ? 1 : 2;
   const columns =
@@ -32,6 +42,13 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
       : [];
 
   if (!items.length) return null;
+
+  const onPressItem = (item: ContinueWatchingItem) => {
+    void openItem(router, item, {
+      isResuming: resumingId === item.id,
+      setResumingId,
+    });
+  };
 
   return (
     <View style={styles.section} {...tvRailSectionSnapProps}>
@@ -54,7 +71,8 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
                       key={item.id}
                       ref={railFocus.ref}
                       item={item}
-                      onPress={() => openItem(router, item)}
+                      busy={resumingId === item.id}
+                      onPress={() => onPressItem(item)}
                       onFocus={railFocus.onFocus}
                       onBlur={railFocus.onBlur}
                       isContentEntry={columnIndex === 0 && rowIndex === 0}
@@ -73,7 +91,8 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
                 key={item.id}
                 ref={railFocus.ref}
                 item={item}
-                onPress={() => openItem(router, item)}
+                busy={resumingId === item.id}
+                onPress={() => onPressItem(item)}
                 onFocus={railFocus.onFocus}
                 onBlur={railFocus.onBlur}
                 isContentEntry={index === 0}
@@ -88,10 +107,16 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   );
 }
 
-function openItem(
+async function openItem(
   router: ReturnType<typeof useRouter>,
   item: ContinueWatchingItem,
+  opts: {
+    isResuming: boolean;
+    setResumingId: (id: string | null) => void;
+  },
 ) {
+  if (opts.isResuming) return;
+
   if (item.kind === 'anime' && item.animeId && item.episodeId) {
     router.push({
       pathname: '/watch/anime/[animeId]/[episodeId]',
@@ -106,6 +131,32 @@ function openItem(
     });
     return;
   }
+
+  if (item.kind === 'movie' || item.kind === 'tv') {
+    const routeId =
+      item.routeId ||
+      item.href.match(/\/(?:movies|series)\/(\d+)/)?.[1] ||
+      '';
+    if (routeId) {
+      opts.setResumingId(item.id);
+      try {
+        const resumed = await resumeLampaFromLastSelection({
+          kind: item.kind,
+          routeId,
+          season: item.season,
+          episode: item.episode,
+          startProgress: item.startProgress ?? item.progress,
+        });
+        if (resumed) {
+          router.push('/watch/lampa');
+          return;
+        }
+      } finally {
+        opts.setResumingId(null);
+      }
+    }
+  }
+
   router.push(item.href as never);
 }
 
@@ -119,22 +170,33 @@ const ContinueCard = forwardRef<
     isContentEntry?: boolean;
     railStart?: boolean;
     spaced?: boolean;
+    busy?: boolean;
   }
 >(function ContinueCard(
-  { item, onPress, onFocus, onBlur, isContentEntry, railStart, spaced },
+  { item, onPress, onFocus, onBlur, isContentEntry, railStart, spaced, busy },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
+  const nodeRef = useRef<View | null>(null);
   const exitLeft = Platform.isTV && Boolean(railStart || isContentEntry);
   const exitUp = Platform.isTV && Boolean(isContentEntry);
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
+  const setRefs = (node: View | null) => {
+    nodeRef.current = node;
+    if (typeof ref === 'function') ref(node);
+    else if (ref) ref.current = node;
+  };
+
   return (
     <Pressable
-      ref={ref}
+      ref={setRefs}
       onFocus={() => {
         setFocused(true);
+        if (Platform.isTV && nodeRef.current) {
+          shellFocus?.registerContentAnchor(nodeRef.current);
+        }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);
         onFocus?.();
@@ -146,6 +208,7 @@ const ContinueCard = forwardRef<
         onBlur?.();
       }}
       onPress={onPress}
+      disabled={busy}
       style={[
         styles.card,
         spaced && styles.cardSpaced,
@@ -176,6 +239,12 @@ const ContinueCard = forwardRef<
           </View>
           {focused ? (
             <View style={[StyleSheet.absoluteFill, styles.focusWash]} pointerEvents="none" />
+          ) : null}
+          {busy ? (
+            <View style={[StyleSheet.absoluteFill, styles.busyOverlay]} pointerEvents="none">
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.busyText}>Загрузка…</Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -238,6 +307,17 @@ const styles = StyleSheet.create({
   },
   focusWash: {
     backgroundColor: tvFocus.wash,
+  },
+  busyOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    gap: 8,
+  },
+  busyText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   poster: {
     width: '100%',

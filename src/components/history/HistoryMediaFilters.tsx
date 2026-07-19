@@ -20,15 +20,20 @@ export function HistoryMediaFilters({
 }) {
   return (
     <View style={styles.row}>
-      {OPTIONS.map((option) => (
-        <TvFocusable
-          key={option.id}
-          onPress={() => onChange(option.id)}
-          style={[styles.chip, value === option.id && styles.chipActive]}
-        >
-          <Text style={styles.chipLabel}>{option.label}</Text>
-        </TvFocusable>
-      ))}
+      {OPTIONS.map((option, index) => {
+        const active = value === option.id;
+        return (
+          <TvFocusable
+            key={option.id}
+            onPress={() => onChange(option.id)}
+            style={[styles.chip, active && styles.chipActive]}
+            focusedStyle={active ? styles.chipFocusedActive : styles.chipFocused}
+            railStart={index === 0}
+          >
+            <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{option.label}</Text>
+          </TvFocusable>
+        );
+      })}
     </View>
   );
 }
@@ -51,11 +56,22 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: colors.brand,
-    backgroundColor: 'rgba(195,192,255,0.12)',
+    backgroundColor: 'rgba(195,192,255,0.18)',
+  },
+  chipFocused: {
+    borderColor: '#ffffff',
+    backgroundColor: tvFocus.fill,
+  },
+  chipFocusedActive: {
+    borderColor: '#ffffff',
+    backgroundColor: 'rgba(195,192,255,0.32)',
   },
   chipLabel: {
-    color: colors.text,
+    color: colors.textSecondary,
     fontSize: Platform.isTV ? 16 : 14,
     fontWeight: '600',
+  },
+  chipLabelActive: {
+    color: colors.brandTint,
   },
 });

@@ -22,6 +22,8 @@ interface PosterRailProps {
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
+  /** First card is the screen content-entry (preferred focus after sidebar nav). */
+  contentEntry?: boolean;
 }
 
 export function PosterRail({
@@ -35,6 +37,7 @@ export function PosterRail({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  contentEntry = false,
 }: PosterRailProps) {
   const { bindItem } = useTvRailFocusRestore(items.length);
 
@@ -75,6 +78,7 @@ export function PosterRail({
             onBlur={railFocus.onBlur}
             variant="rail"
             railStart={index === 0}
+            contentEntry={contentEntry && index === 0}
           />
         );
       }}

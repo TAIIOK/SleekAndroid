@@ -38,18 +38,19 @@ export const spacing = {
 };
 
 export const layout = {
+  /** Overlay drawer width when the TV side menu is open (not reserved in content layout). */
   tvSideNavWidth: 220,
   mobileTopBarHeight: 56,
   mobileTabHeight: 84,
   mobileTabMaxWidth: 512,
   gutterMobile: 16,
   /** Used as the TV content gutter (`Platform.isTV ? gutterDesktop : gutterMobile`). */
-  gutterDesktop: Platform.isTV ? 28 : 48,
+  gutterDesktop: Platform.isTV ? 20 : 48,
   posterAspect: 120 / 170,
-  posterWidthRail: Platform.isTV ? 140 : 120,
-  posterWidthShowcase: Platform.isTV ? 140 : 140,
+  posterWidthRail: Platform.isTV ? 120 : 120,
+  posterWidthShowcase: Platform.isTV ? 120 : 140,
   maxContentWidth: 1440,
-  continueCardWidth: Platform.isTV ? 220 : 260,
+  continueCardWidth: Platform.isTV ? 190 : 260,
   quickActionCardWidth: Platform.isTV ? 200 : 168,
   quickActionCardHeight: Platform.isTV ? 96 : 88,
 };
@@ -75,35 +76,35 @@ export const typography = {
     fontWeight: '600' as const,
   },
   homeContinueTitle: {
-    fontSize: Platform.isTV ? 20 : 20,
-    lineHeight: Platform.isTV ? 26 : 28,
+    fontSize: Platform.isTV ? 18 : 20,
+    lineHeight: Platform.isTV ? 24 : 28,
     fontWeight: '600' as const,
   },
   homeQuickTitle: {
-    fontSize: Platform.isTV ? 20 : 18,
-    lineHeight: Platform.isTV ? 26 : 24,
+    fontSize: Platform.isTV ? 18 : 18,
+    lineHeight: Platform.isTV ? 24 : 24,
     fontWeight: '600' as const,
   },
   homeGroupTitle: {
-    fontSize: Platform.isTV ? 22 : 24,
-    lineHeight: Platform.isTV ? 28 : 32,
+    fontSize: Platform.isTV ? 18 : 24,
+    lineHeight: Platform.isTV ? 24 : 32,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   railTitle: {
-    fontSize: Platform.isTV ? 20 : 24,
-    lineHeight: Platform.isTV ? 26 : 32,
+    fontSize: Platform.isTV ? 18 : 24,
+    lineHeight: Platform.isTV ? 24 : 32,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   cardTitle: {
-    fontSize: Platform.isTV ? 13 : 13,
-    lineHeight: Platform.isTV ? 18 : 18,
+    fontSize: Platform.isTV ? 12 : 13,
+    lineHeight: Platform.isTV ? 16 : 18,
     fontWeight: '600' as const,
   },
   cardSubtitle: {
-    fontSize: Platform.isTV ? 11 : 12,
-    lineHeight: Platform.isTV ? 14 : 16,
+    fontSize: Platform.isTV ? 10 : 12,
+    lineHeight: Platform.isTV ? 13 : 16,
     fontWeight: '400' as const,
   },
   labelCaps: {

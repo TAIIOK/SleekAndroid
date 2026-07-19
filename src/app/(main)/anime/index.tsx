@@ -48,8 +48,8 @@ export default function AnimeBrowseScreen() {
       contentContainerStyle={styles.content}
       {...tvVerticalCatalogScrollProps}
     >
-      {Platform.isTV ? <SectionHeader title="Аниме" showAccent /> : null}
-      <LazyCatalogRail>
+      {Platform.isTV ? <SectionHeader title="Аниме" showAccent tvFocusEntry /> : null}
+      <LazyCatalogRail eager={Platform.isTV}>
         <PosterRail
           title={`Сезон · ${seasonal.name}`}
           items={seasonalItems}

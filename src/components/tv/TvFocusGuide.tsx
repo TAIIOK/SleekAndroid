@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 import {
   View,
   type StyleProp,
@@ -18,20 +18,28 @@ type TvFocusGuideProps = ViewProps & {
   destinations?: unknown[];
 };
 
-type FocusGuideComponent = (props: TvFocusGuideProps) => ReactNode;
+type FocusGuideComponent = React.ComponentType<TvFocusGuideProps>;
 
 /** `TVFocusGuideView` from react-native-tvos, with View fallback when unavailable. */
 const NativeFocusGuide = (ReactNative as { TVFocusGuideView?: FocusGuideComponent })
   .TVFocusGuideView;
 
-export function TvFocusGuide({ children, style, ...props }: TvFocusGuideProps) {
+/** TV focus region; forwards ref so callers can `requestTVFocus()` after navigation. */
+export const TvFocusGuide = forwardRef<View, TvFocusGuideProps>(function TvFocusGuide(
+  { children, style, ...props },
+  ref,
+) {
   if (NativeFocusGuide) {
     return (
-      <NativeFocusGuide style={style} {...props}>
+      <NativeFocusGuide ref={ref} style={style} {...props}>
         {children}
       </NativeFocusGuide>
     );
   }
 
-  return <View style={style}>{children}</View>;
-}
+  return (
+    <View ref={ref} style={style} {...props}>
+      {children}
+    </View>
+  );
+});

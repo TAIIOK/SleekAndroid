@@ -21,6 +21,10 @@ export interface ContinueWatchingItem {
   kind: 'anime' | 'movie' | 'tv';
   animeId?: number;
   episodeId?: number;
+  /** Numeric TMDB/route id for Lampa resume. */
+  routeId?: string;
+  season?: number;
+  episode?: number;
   /** Used for sorting only; stripped before UI if needed. */
   updatedAtMs?: number;
 }
@@ -348,6 +352,8 @@ function pickLampaContinueFromProgress(
     const kind = inferLampaKind(progressRows, meta);
     const href = resolveLampaHref(kind, lampaId, meta);
     if (!href) return null;
+    const routeId =
+      meta.routeId || (/^\d+$/.test(lampaId.trim()) ? lampaId.trim() : undefined);
     return {
       id: `lampa-${kind}-${meta.routeId ?? lampaId}`,
       title: meta.title ?? 'Без названия',
@@ -359,6 +365,9 @@ function pickLampaContinueFromProgress(
       progress: 0.02,
       href,
       kind,
+      routeId,
+      season: meta.season,
+      episode: meta.episode,
     };
   }
 
@@ -372,6 +381,8 @@ function pickLampaContinueFromProgress(
     latest.seasonOrdinal > 0 ? latest.seasonOrdinal : meta.season;
   const episode =
     latest.episodeOrdinal > 0 ? latest.episodeOrdinal : meta.episode;
+  const routeId =
+    meta.routeId || (/^\d+$/.test(lampaId.trim()) ? lampaId.trim() : undefined);
 
   return {
     id: `lampa-${kind}-${meta.routeId ?? lampaId}`,
@@ -383,7 +394,11 @@ function pickLampaContinueFromProgress(
         : 'Продолжить',
     progress: Math.min(1, Math.max(0.02, progress)),
     href,
+    startProgress: progress,
     kind,
+    routeId,
+    season: season ?? undefined,
+    episode: episode ?? undefined,
     updatedAtMs: parseDateMs(latest.updatedAt),
   };
 }

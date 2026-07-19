@@ -1,6 +1,7 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, layout, spacing, typography } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, layout, radii, spacing, tvFocus, typography } from '@/constants/aniverse';
 
 export type SectionHeaderVariant = 'continue' | 'quick' | 'group' | 'rail' | 'rail-featured';
 
@@ -11,6 +12,11 @@ interface SectionHeaderProps {
   onSeeAll?: () => void;
   variant?: SectionHeaderVariant;
   showAccent?: boolean;
+  /**
+   * TV browse pages: title is the content focus entry (Left→sidebar, preferred focus).
+   * No separate chip — focus ring sits on the page title itself.
+   */
+  tvFocusEntry?: boolean;
 }
 
 function titleStyleForVariant(variant: SectionHeaderVariant) {
@@ -41,17 +47,38 @@ export function SectionHeader({
   onSeeAll,
   variant = 'rail',
   showAccent,
+  tvFocusEntry = false,
 }: SectionHeaderProps) {
   const accentVisible =
     showAccent ?? (Platform.isTV || variant === 'rail-featured' || Boolean(onSeeAll));
 
+  const titleText = (
+    <Text style={[styles.title, titleStyleForVariant(variant)]}>{title}</Text>
+  );
+
+  const titleBlock = (
+    <View style={styles.titleBlock}>
+      {tvFocusEntry && Platform.isTV ? (
+        <TvFocusable
+          hasTVPreferredFocus
+          contentEntry
+          railStart
+          style={styles.titleFocus}
+          focusedStyle={styles.titleFocused}
+        >
+          {titleText}
+        </TvFocusable>
+      ) : (
+        titleText
+      )}
+      {accentVisible ? <View style={styles.accent} /> : null}
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+
   return (
     <View style={[styles.wrap, { marginBottom: marginBottomForVariant(variant) }]}>
-      <View style={styles.titleBlock}>
-        <Text style={[styles.title, titleStyleForVariant(variant)]}>{title}</Text>
-        {accentVisible ? <View style={styles.accent} /> : null}
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      </View>
+      {titleBlock}
       {onSeeAll ? (
         <Pressable onPress={onSeeAll} style={styles.seeAll}>
           <Text style={styles.seeAllText}>{seeAllLabel}</Text>
@@ -73,6 +100,17 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.xs,
     backgroundColor: 'transparent',
+  },
+  // Hug the title text — not the full header row.
+  titleFocus: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  titleFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
   },
   title: {
     color: colors.text,

@@ -10,6 +10,7 @@
 | [Search Screen](.cursor/specs/catalog/search_screen.md) | catalog | Implemented |
 | [Schedule Screen](.cursor/specs/catalog/schedule_screen.md) | catalog | Implemented |
 | [TV Catalog Performance](.cursor/specs/catalog/tv_catalog_perf.md) | catalog | Implemented |
+| [TV Home Top Navigation](.cursor/specs/catalog/tv_home_top_nav.md) | catalog | Implemented |
 | [Video Player](.cursor/specs/player/video_player.md) | player | Implemented |
 | [TV Density](.cursor/specs/shell/tv_density.md) | shell | Implemented |
 | [TV Focus Navigation](.cursor/specs/shell/tv_focus_navigation.md) | shell | Implemented |
