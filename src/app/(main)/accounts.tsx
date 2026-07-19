@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { getSavedAccounts, removeSavedAccount } from '@/lib/savedAccounts';
-import { colors, spacing } from '@/constants/aniverse';
+import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function AccountsScreen() {
@@ -51,17 +52,19 @@ export default function AccountsScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Аккаунты</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {accounts.map((account) => (
+      {accounts.map((account, index) => (
         <AccountRow
           key={account.id}
           label={account.nickname ?? account.email ?? account.id}
           isCurrent={String(user?.id) === account.id}
+          preferredFocus={Platform.isTV && index === 0}
           onPress={() => void onSwitch(account.id)}
           onRemove={() => onRemove(account.id, account.nickname ?? account.email ?? account.id)}
         />
       ))}
       <AccountRow
         label="Добавить аккаунт"
+        preferredFocus={Platform.isTV && accounts.length === 0}
         onPress={() => router.push({ pathname: '/login', params: { addAccount: '1' } })}
       />
     </ScrollView>
@@ -73,30 +76,32 @@ function AccountRow({
   onPress,
   onRemove,
   isCurrent,
+  preferredFocus,
 }: {
   label: string;
   onPress: () => void;
   onRemove?: () => void;
   isCurrent?: boolean;
+  preferredFocus?: boolean;
 }) {
-  const [focused, setFocused] = useState(false);
   return (
-    <View style={[styles.row, focused && styles.rowFocused]}>
-      <Pressable
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+    <View style={styles.row}>
+      <TvFocusable
+        hasTVPreferredFocus={preferredFocus}
+        contentEntry={preferredFocus}
         onPress={onPress}
         style={styles.rowMain}
+        focusedStyle={styles.rowFocused}
       >
         <Text style={styles.rowLabel}>
           {label}
           {isCurrent ? ' · текущий' : ''}
         </Text>
-      </Pressable>
+      </TvFocusable>
       {onRemove ? (
-        <Pressable onPress={onRemove} style={styles.removeBtn} hitSlop={8}>
+        <TvFocusable onPress={onRemove} style={styles.removeBtn} focusedStyle={styles.removeFocused}>
           <Text style={styles.removeLabel}>Удалить</Text>
-        </Pressable>
+        </TvFocusable>
       ) : null}
     </View>
   );
@@ -109,39 +114,45 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
-    marginBottom: spacing.md,
   },
+  error: { color: colors.danger },
   row: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowFocused: {
-    borderColor: colors.brandAccent,
-    transform: [{ scale: 1.02 }],
+    alignItems: 'stretch',
+    gap: spacing.sm,
   },
   rowMain: {
     flex: 1,
+    backgroundColor: colors.bgCard,
+    borderRadius: 12,
     padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rowFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
   },
   rowLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 22 : 16,
+    fontSize: Platform.isTV ? 20 : 16,
     fontWeight: '600',
   },
   removeBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: 12,
+    backgroundColor: 'rgba(63,29,29,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.25)',
+  },
+  removeFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: 'rgba(127,29,29,0.55)',
   },
   removeLabel: {
     color: colors.danger,
-    fontSize: 13,
     fontWeight: '600',
-  },
-  error: {
-    color: colors.danger,
+    fontSize: Platform.isTV ? 16 : 14,
   },
 });

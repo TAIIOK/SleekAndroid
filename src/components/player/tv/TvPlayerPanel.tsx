@@ -26,10 +26,12 @@ interface TvPlayerPanelProps {
   hasQuality: boolean;
   hasConnection: boolean;
   hasDelivery: boolean;
+  hasSubtitles?: boolean;
   selectedDubbing?: string;
   selectedQuality?: string;
   selectedConnection?: string;
   selectedDelivery?: string;
+  selectedSubtitle?: string;
 }
 
 function TransportButton({
@@ -102,10 +104,12 @@ export function TvPlayerPanel({
   hasQuality,
   hasConnection,
   hasDelivery,
+  hasSubtitles,
   selectedDubbing,
   selectedQuality,
   selectedConnection,
   selectedDelivery,
+  selectedSubtitle,
 }: TvPlayerPanelProps) {
   if (!visible) return null;
 
@@ -206,11 +210,21 @@ export function TvPlayerPanel({
           {enabledButtons.has('episodes') ? (
             <OptionPill value="Эпизоды" focused={isFocused('episodes')} compact />
           ) : null}
+          {hasSubtitles ? (
+            <OptionPill
+              label="CC"
+              value={selectedSubtitle ?? 'Выкл'}
+              focused={isFocused('subtitles')}
+            />
+          ) : null}
           <OptionPill
             label="Кадр"
             value={videoFitLabel(prefs.videoFit)}
             focused={isFocused('fit')}
           />
+          {enabledButtons.has('external') ? (
+            <OptionPill value="Внешний" focused={isFocused('external')} compact />
+          ) : null}
           <OptionPill
             label="Настройки"
             value={formatPlaybackRate(prefs.playbackRate)}

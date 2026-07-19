@@ -11,6 +11,7 @@ TV search screen: query field, on-screen keyboard, media filters, popular querie
 3. [x] The «Найти» action shows a clear TV focus ring distinct from the idle accent fill.
 4. [x] Filter chips and keyboard keys keep a visible focused state.
 5. [x] Media filter chips live in a plain row (not a horizontal ScrollView) so Left/Right moves one chip at a time on TV.
+6. [x] Anime filters include genre and year chips; values are sent as `genre` / `year` on `/api/catalog/search`.
 
 ## Acceptance Criteria
 

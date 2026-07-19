@@ -11,7 +11,9 @@ import {
   type TvPlayerPanelFocus,
 } from '@/components/player/tv/tvPlayerTypes';
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
+import type { ExternalPlayerTarget } from '@/lib/externalPlayer';
 import { cyclePlaybackRate, cycleVideoFit, type PlayerPreferences } from '@/lib/playerPreferences';
+import type { SubtitleTrackInfo } from '@/lib/subtitleTracks';
 
 /** Min interval between overlay ↑/↓ steps — held D-pad can fire faster than focus can follow. */
 const OVERLAY_NAV_MIN_MS = 150;
@@ -24,11 +26,16 @@ interface UseTvPlayerRemoteOptions {
   connectionOptions?: PlayerMenuOption[];
   deliveryOptions?: PlayerMenuOption[];
   episodeNav?: PlayerEpisodeNav;
+  subtitleTracks?: SubtitleTrackInfo[];
+  activeSubtitle?: SubtitleTrackInfo | null;
+  externalPlayers?: ExternalPlayerTarget[];
   hasDubbing: boolean;
   hasQuality: boolean;
   hasConnection: boolean;
   hasDelivery: boolean;
   hasEpisodes: boolean;
+  hasSubtitles: boolean;
+  hasExternal: boolean;
   hasPrevEpisode: boolean;
   hasNextEpisode: boolean;
   onBack: () => void;
@@ -39,6 +46,8 @@ interface UseTvPlayerRemoteOptions {
   onNextEpisode?: () => void;
   onSelectMenuOption: (option: PlayerMenuOption) => void;
   onSelectEpisode: (episodeId: number) => void;
+  onSelectSubtitle: (track: SubtitleTrackInfo | null) => void;
+  onSelectExternalPlayer?: (target: ExternalPlayerTarget) => void;
   onPrefsChange: (patch: Partial<PlayerPreferences>) => void;
 }
 
@@ -84,7 +93,9 @@ function buildEnabledButtons(options: UseTvPlayerRemoteOptions): Set<TvPlayerBut
   if (options.hasConnection) enabled.add('connection');
   if (options.hasDelivery) enabled.add('delivery');
   if (options.hasEpisodes) enabled.add('episodes');
+  if (options.hasSubtitles) enabled.add('subtitles');
   enabled.add('fit');
+  if (options.hasExternal) enabled.add('external');
   enabled.add('settings');
   return enabled;
 }
@@ -95,6 +106,8 @@ function overlayItemCount(overlay: TvPlayerOverlay, options: UseTvPlayerRemoteOp
   if (overlay === 'connection') return options.connectionOptions?.length ?? 0;
   if (overlay === 'delivery') return options.deliveryOptions?.length ?? 0;
   if (overlay === 'episodes') return options.episodeNav?.items.length ?? 0;
+  if (overlay === 'subtitles') return (options.subtitleTracks?.length ?? 0) + 1;
+  if (overlay === 'external') return options.externalPlayers?.length ?? 0;
   if (overlay === 'settings') return 5;
   return 0;
 }
@@ -119,6 +132,22 @@ function overlayInitialIndex(overlay: TvPlayerOverlay, options: UseTvPlayerRemot
   if (overlay === 'episodes' && options.episodeNav?.items.length) {
     const idx = options.episodeNav.items.findIndex(
       (item) => item.id === options.episodeNav?.currentEpisodeId,
+    );
+    return idx >= 0 ? idx : 0;
+  }
+  if (overlay === 'subtitles') {
+    if (!options.activeSubtitle) return 0;
+    const idx = options.subtitleTracks?.findIndex(
+      (track) =>
+        track.language === options.activeSubtitle?.language &&
+        track.label === options.activeSubtitle?.label,
+    );
+    return idx != null && idx >= 0 ? idx + 1 : 0;
+  }
+  if (overlay === 'external' && options.externalPlayers?.length) {
+    const pkg = options.prefs.lastExternalPlayerPackage ?? '';
+    const idx = options.externalPlayers.findIndex((p) =>
+      pkg ? p.packageName === pkg : p.id === 'system',
     );
     return idx >= 0 ? idx : 0;
   }
@@ -225,6 +254,27 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
       }
       return;
     }
+    if (overlay === 'subtitles') {
+      if (overlayFocusIndex === 0) {
+        opts.onSelectSubtitle(null);
+        closeOverlay();
+        return;
+      }
+      const track = opts.subtitleTracks?.[overlayFocusIndex - 1];
+      if (track) {
+        opts.onSelectSubtitle(track);
+        closeOverlay();
+      }
+      return;
+    }
+    if (overlay === 'external') {
+      const target = opts.externalPlayers?.[overlayFocusIndex];
+      if (target) {
+        opts.onSelectExternalPlayer?.(target);
+        closeOverlay();
+      }
+      return;
+    }
     if (overlay === 'settings') {
       const actions = ['rate', 'fit', 'autonext', 'skip_open', 'skip_end'] as const;
       const action = actions[overlayFocusIndex];
@@ -277,8 +327,14 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
         case 'episodes':
           openOverlay('episodes');
           break;
+        case 'subtitles':
+          openOverlay('subtitles');
+          break;
         case 'fit':
           opts.onPrefsChange({ videoFit: cycleVideoFit(opts.prefs.videoFit) });
+          break;
+        case 'external':
+          openOverlay('external');
           break;
         case 'settings':
           openOverlay('settings');

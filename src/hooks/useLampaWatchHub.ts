@@ -23,6 +23,40 @@ interface UseLampaWatchHubOptions {
   routeId?: string;
 }
 
+export type SourcesSearchPhase = 'idle' | 'searching' | 'done' | 'error';
+
+export interface SourcesSearchProgress {
+  phase: SourcesSearchPhase;
+  /** Sources ready to pick right now. */
+  readyCount: number;
+  /** All source rows reported by WatchHub (ready + still resolving). */
+  reportedCount: number;
+  taskStatus?: string;
+}
+
+const IDLE_SEARCH: SourcesSearchProgress = {
+  phase: 'idle',
+  readyCount: 0,
+  reportedCount: 0,
+};
+
+function progressFromTask(
+  response: { status?: string; results?: unknown[]; ready_sources?: string[] },
+  readyCount: number,
+): SourcesSearchProgress {
+  const status = response.status?.trim().toLowerCase() ?? '';
+  const searching = status === 'running' || status === 'pending' || status === '';
+  const reportedCount = Array.isArray(response.results)
+    ? response.results.length
+    : Math.max(readyCount, response.ready_sources?.length ?? 0);
+  return {
+    phase: searching ? 'searching' : 'done',
+    readyCount,
+    reportedCount: Math.max(reportedCount, readyCount),
+    taskStatus: response.status,
+  };
+}
+
 function releaseYear(detail: LampaDetail): string {
   const d = detail as unknown as Record<string, unknown>;
   const raw = d.releaseDate ?? d.release_date ?? d.first_air_date;
@@ -43,6 +77,7 @@ function watchHubLookupId(routeId: string, detail: LampaDetail): string {
 export function useLampaWatchHub({ detail, isSerial, routeId = '' }: UseLampaWatchHubOptions) {
   const [sources, setSources] = useState<WatchHubSourceResult[]>([]);
   const [loadingSources, setLoadingSources] = useState(false);
+  const [sourcesSearch, setSourcesSearch] = useState<SourcesSearchProgress>(IDLE_SEARCH);
   const [error, setError] = useState<string | null>(null);
   const taskIdRef = useRef<string | null>(null);
   const inflightRef = useRef<Promise<WatchHubSourceResult[]> | null>(null);
@@ -51,6 +86,7 @@ export function useLampaWatchHub({ detail, isSerial, routeId = '' }: UseLampaWat
     const lookupId = watchHubLookupId(routeId, detail);
     if (!lookupId.trim()) {
       setError('Не удалось определить ID контента');
+      setSourcesSearch({ phase: 'error', readyCount: 0, reportedCount: 0 });
       return [];
     }
     if (inflightRef.current) return inflightRef.current;
@@ -58,6 +94,11 @@ export function useLampaWatchHub({ detail, isSerial, routeId = '' }: UseLampaWat
     const run = async (): Promise<WatchHubSourceResult[]> => {
       setLoadingSources(true);
       setError(null);
+      setSourcesSearch((prev) => ({
+        phase: 'searching',
+        readyCount: prev.readyCount,
+        reportedCount: prev.reportedCount,
+      }));
       try {
         const title = lampaItemTitle(detail);
         const d = detail as unknown as Record<string, unknown>;
@@ -102,14 +143,25 @@ export function useLampaWatchHub({ detail, isSerial, routeId = '' }: UseLampaWat
           taskIdRef.current = response.id;
           const ready = filterReadyWatchHubSources(response.results, response.ready_sources);
           if (ready.length) setSources(ready);
+          setSourcesSearch(progressFromTask(response, ready.length));
         });
 
         taskIdRef.current = task.id;
         const ready = filterReadyWatchHubSources(task.results, task.ready_sources);
         setSources(ready);
+        setSourcesSearch({
+          ...progressFromTask(task, ready.length),
+          phase: 'done',
+        });
         return ready;
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка WatchHub');
+        setSourcesSearch((prev) => ({
+          phase: 'error',
+          readyCount: prev.readyCount,
+          reportedCount: prev.reportedCount,
+          taskStatus: 'failed',
+        }));
         return [];
       } finally {
         setLoadingSources(false);
@@ -167,6 +219,7 @@ export function useLampaWatchHub({ detail, isSerial, routeId = '' }: UseLampaWat
   return {
     sources,
     loadingSources,
+    sourcesSearch,
     error,
     setError,
     loadSources,

@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchAchievements, fetchFullProfile, fetchLeaderboard, fetchUserStats } from '@/api/user';
 import { ProfileAchievements } from '@/components/profile/ProfileAchievements';
@@ -10,8 +10,9 @@ import { ProfileQuickLinks } from '@/components/profile/ProfileQuickLinks';
 import { ProfileSettings } from '@/components/profile/ProfileSettings';
 import { LogoutConfirm } from '@/components/profile/LogoutConfirm';
 import { ProfileStatsGrid } from '@/components/profile/ProfileStatsGrid';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { getSavedAccounts } from '@/lib/savedAccounts';
-import { colors, spacing } from '@/constants/aniverse';
+import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { resolvePosterUrl } from '@/lib/config';
 import { useAuth } from '@/providers/AuthProvider';
 import type { LeaderboardPeriod, LeaderboardType } from '@/types/profile';
@@ -113,9 +114,15 @@ export default function ProfileScreen() {
           </>
         ) : null}
 
-        <Pressable style={styles.button} onPress={() => router.push('/accounts')}>
+        <TvFocusable
+          hasTVPreferredFocus={Platform.isTV}
+          contentEntry={Platform.isTV}
+          onPress={() => router.push('/accounts')}
+          style={styles.button}
+          focusedStyle={styles.buttonFocused}
+        >
           <Text style={styles.buttonLabel}>Сменить аккаунт ({savedAccounts.length})</Text>
-        </Pressable>
+        </TvFocusable>
 
         <ProfileSettings onLogout={() => setConfirmLogout(true)} />
       </ScrollView>
@@ -181,6 +188,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgElevated,
     borderRadius: 12,
     padding: spacing.lg,
+  },
+  buttonFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
   },
   buttonLabel: {
     color: colors.text,

@@ -120,6 +120,37 @@ function ensureReactNativeTvos() {
 
 ensureReactNativeTvos();
 
+/**
+ * Hoisted packages that Gradle/Metro resolve via workspace node_modules.
+ */
+function ensureLocalHoistedPackage(name) {
+  const localPath = path.join(workspaceModules, name);
+  const rootPath = path.join(rootModules, name);
+  if (!fs.existsSync(rootPath)) return;
+
+  try {
+    if (fs.existsSync(localPath) || fs.lstatSync(localPath).isSymbolicLink()) {
+      const stat = fs.lstatSync(localPath);
+      if (stat.isSymbolicLink()) {
+        const resolved = path.resolve(workspaceModules, fs.readlinkSync(localPath));
+        if (resolved === rootPath) return;
+        fs.unlinkSync(localPath);
+      } else if (stat.isDirectory()) {
+        return;
+      }
+    }
+  } catch {
+    /* create below */
+  }
+
+  fs.mkdirSync(workspaceModules, { recursive: true });
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.symlinkSync(rootPath, localPath, type);
+  console.log(`[aniverse-tv] Linked local ${name} → monorepo ${name}`);
+}
+
+ensureLocalHoistedPackage('react-native-video');
+
 if (linked.length) {
   console.log(`[aniverse-tv] Linked ${linked.length} package(s) to monorepo root: ${linked.join(', ')}`);
 } else {

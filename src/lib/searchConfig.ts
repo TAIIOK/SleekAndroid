@@ -23,6 +23,12 @@ export function lampaKindForMediaFilter(filter: SearchMediaFilter): string | und
   return undefined;
 }
 
+export function usesAnimeFilters(filter: SearchMediaFilter): boolean {
+  return filter === 'all' || filter === 'anime';
+}
+
+export const SEARCH_YEAR_OPTIONS = Array.from({ length: 37 }, (_, i) => String(2026 - i));
+
 export type SearchSeeAllBucket = 'anime' | 'lampa';
 
 export function mediaForSearchBucket(

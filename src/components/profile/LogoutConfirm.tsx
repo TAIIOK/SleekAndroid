@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 
 interface LogoutConfirmProps {
   visible: boolean;
@@ -18,12 +18,23 @@ export function LogoutConfirm({ visible, loading, onConfirm, onCancel }: LogoutC
           <Text style={styles.title}>Выйти из аккаунта?</Text>
           <Text style={styles.body}>Сессия на этом устройстве будет завершена.</Text>
           <View style={styles.actions}>
-            <Pressable style={styles.cancel} onPress={onCancel} disabled={loading}>
+            <TvFocusable
+              hasTVPreferredFocus={Platform.isTV}
+              style={styles.cancel}
+              focusedStyle={styles.cancelFocused}
+              onPress={onCancel}
+              disabled={loading}
+            >
               <Text style={styles.cancelLabel}>Отмена</Text>
-            </Pressable>
-            <Pressable style={styles.confirm} onPress={onConfirm} disabled={loading}>
+            </TvFocusable>
+            <TvFocusable
+              style={styles.confirm}
+              focusedStyle={styles.confirmFocused}
+              onPress={onConfirm}
+              disabled={loading}
+            >
               <Text style={styles.confirmLabel}>{loading ? 'Выход…' : 'Выйти'}</Text>
-            </Pressable>
+            </TvFocusable>
           </View>
         </View>
       </View>
@@ -71,9 +82,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgLow,
     alignItems: 'center',
   },
+  cancelFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
   cancelLabel: {
     color: colors.text,
     fontWeight: '600',
+    fontSize: Platform.isTV ? 18 : 15,
   },
   confirm: {
     flex: 1,
@@ -82,8 +98,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#7f1d1d',
     alignItems: 'center',
   },
+  confirmFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: '#991b1b',
+  },
   confirmLabel: {
     color: '#fecaca',
     fontWeight: '700',
+    fontSize: Platform.isTV ? 18 : 15,
   },
 });

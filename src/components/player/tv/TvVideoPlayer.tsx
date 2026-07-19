@@ -1,24 +1,32 @@
-import { VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Video from 'react-native-video';
 
 import type { VideoPlayerProps } from '@/components/player/types';
 import { TvPlayerOverlays } from '@/components/player/tv/TvPlayerOverlays';
 import { TvPlayerPanel } from '@/components/player/tv/TvPlayerPanel';
 import { TV_PLAYER_HINT_HIDE_MS } from '@/components/player/tv/tvPlayerTypes';
 import { colors, spacing } from '@/constants/aniverse';
-import { useNativeVideoEngine } from '@/hooks/useNativeVideoEngine';
+import { useRNVideoEngine } from '@/hooks/useRNVideoEngine';
 import { useTvPlayerRemote } from '@/hooks/useTvPlayerRemote';
+import {
+  launchExternalPlayer,
+  listInstalledExternalPlayers,
+  type ExternalPlayerTarget,
+} from '@/lib/externalPlayer';
 import { cyclePlaybackRate, cycleVideoFit } from '@/lib/playerPreferences';
+import { subtitleTrackLabel } from '@/lib/subtitleTracks';
 
 export function TvVideoPlayer({
   src,
+  headers,
   title,
   subtitle,
   startTime,
@@ -36,8 +44,9 @@ export function TvVideoPlayer({
 }: VideoPlayerProps) {
   const handleBack = onBack ?? (() => undefined);
 
-  const engine = useNativeVideoEngine({
+  const engine = useRNVideoEngine({
     src,
+    headers,
     startTime,
     startProgressFraction,
     skipSegments,
@@ -46,11 +55,37 @@ export function TvVideoPlayer({
     onAutoPlayNext,
   });
 
+  const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
+  const [externalError, setExternalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    void listInstalledExternalPlayers().then(setExternalPlayers);
+  }, []);
+
   const hasDubbing = Boolean(dubbingOptions && dubbingOptions.length > 1);
   const hasQuality = Boolean(qualityOptions && qualityOptions.length > 1);
   const hasConnection = Boolean(connectionOptions && connectionOptions.length > 1);
   const hasDelivery = Boolean(deliveryOptions && deliveryOptions.length > 1);
   const hasEpisodes = Boolean(episodeNav && episodeNav.items.length > 1);
+  const hasSubtitles = engine.subtitleTracks.length > 0;
+  const hasExternal = Platform.OS === 'android' && externalPlayers.length > 0;
+
+  const handleSelectExternal = useCallback(
+    async (target: ExternalPlayerTarget) => {
+      setExternalError(null);
+      engine.pause();
+      onProgress?.(engine.currentTime, engine.duration);
+      const result = await launchExternalPlayer({
+        url: src,
+        title: title ?? subtitle,
+        positionSeconds: engine.currentTime,
+        packageName: target.id === 'system' ? null : target.packageName,
+      });
+      if (!result.ok) setExternalError(result.message);
+    },
+    [engine, onProgress, src, subtitle, title],
+  );
 
   const remote = useTvPlayerRemote({
     playing: engine.playing,
@@ -60,11 +95,16 @@ export function TvVideoPlayer({
     connectionOptions,
     deliveryOptions,
     episodeNav,
+    subtitleTracks: engine.subtitleTracks,
+    activeSubtitle: engine.activeSubtitle,
+    externalPlayers,
     hasDubbing,
     hasQuality,
     hasConnection,
     hasDelivery,
     hasEpisodes,
+    hasSubtitles,
+    hasExternal,
     hasPrevEpisode: Boolean(episodeNav?.hasPrevious),
     hasNextEpisode: Boolean(episodeNav?.hasNext),
     onBack: handleBack,
@@ -75,6 +115,10 @@ export function TvVideoPlayer({
     onNextEpisode: episodeNav?.onNext,
     onSelectMenuOption: (option) => option.onSelect(),
     onSelectEpisode: (id) => episodeNav?.onSelect?.(id),
+    onSelectSubtitle: engine.setSubtitleTrack,
+    onSelectExternalPlayer: (target) => {
+      void handleSelectExternal(target);
+    },
     onPrefsChange: engine.updatePrefs,
   });
 
@@ -100,6 +144,9 @@ export function TvVideoPlayer({
   const selectedQuality = qualityOptions?.find((o) => o.selected)?.label;
   const selectedConnection = connectionOptions?.find((o) => o.selected)?.label;
   const selectedDelivery = deliveryOptions?.find((o) => o.selected)?.label;
+  const selectedSubtitle = engine.activeSubtitle
+    ? subtitleTrackLabel(engine.activeSubtitle)
+    : undefined;
   const showPausedBadge = !engine.playing && !remote.panelVisible && !remote.overlay;
 
   const [hintVisible, setHintVisible] = useState(true);
@@ -120,12 +167,30 @@ export function TvVideoPlayer({
 
   return (
     <View style={styles.root}>
-      <VideoView
-        style={styles.video}
-        player={engine.player}
-        contentFit={engine.contentFit}
-        nativeControls={false}
-      />
+      {engine.source ? (
+        <Video
+          key={`${src}-${engine.reloadKey}`}
+          ref={engine.videoRef}
+          style={styles.video}
+          source={engine.source}
+          paused={engine.paused}
+          rate={engine.rate}
+          volume={engine.volume}
+          resizeMode={engine.resizeMode}
+          selectedTextTrack={engine.selectedTextTrack}
+          bufferConfig={engine.bufferConfig}
+          controls={false}
+          playInBackground={false}
+          ignoreSilentSwitch="ignore"
+          onLoad={engine.onLoad}
+          onProgress={engine.onProgress}
+          onEnd={engine.onEnd}
+          onError={engine.onError}
+          onBuffer={engine.onBuffer}
+          onReadyForDisplay={engine.onReadyForDisplay}
+          onTextTracks={engine.onTextTracks}
+        />
+      ) : null}
 
       {/* Android TV only delivers HW keys when a focusable view is focused. */}
       <Pressable
@@ -149,12 +214,22 @@ export function TvVideoPlayer({
         </View>
       ) : null}
 
-      {engine.playbackError ? (
+      {engine.playbackError || externalError ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{engine.playbackError}</Text>
-          <Pressable focusable={false} onPress={engine.retryPlayback} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Повторить</Text>
-          </Pressable>
+          <Text style={styles.errorText}>{engine.playbackError ?? externalError}</Text>
+          {engine.playbackError ? (
+            <Pressable focusable={false} onPress={engine.retryPlayback} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Повторить</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              focusable={false}
+              onPress={() => setExternalError(null)}
+              style={styles.retryBtn}
+            >
+              <Text style={styles.retryText}>Закрыть</Text>
+            </Pressable>
+          )}
           <Pressable focusable={false} onPress={handleBack} style={styles.backBtn}>
             <Text style={styles.retryText}>Назад</Text>
           </Pressable>
@@ -196,10 +271,12 @@ export function TvVideoPlayer({
         hasQuality={hasQuality}
         hasConnection={hasConnection}
         hasDelivery={hasDelivery}
+        hasSubtitles={hasSubtitles}
         selectedDubbing={selectedDubbing}
         selectedQuality={selectedQuality}
         selectedConnection={selectedConnection}
         selectedDelivery={selectedDelivery}
+        selectedSubtitle={selectedSubtitle}
       />
 
       <TvPlayerOverlays
@@ -210,10 +287,17 @@ export function TvVideoPlayer({
         connectionOptions={connectionOptions}
         deliveryOptions={deliveryOptions}
         episodeNav={episodeNav}
+        subtitleTracks={engine.subtitleTracks}
+        activeSubtitle={engine.activeSubtitle}
+        externalPlayers={externalPlayers}
         prefs={engine.prefs}
         onClose={remote.closeOverlay}
         onSelectMenuOption={(option) => option.onSelect()}
         onSelectEpisode={(id) => episodeNav?.onSelect?.(id)}
+        onSelectSubtitle={engine.setSubtitleTrack}
+        onSelectExternalPlayer={(target) => {
+          void handleSelectExternal(target);
+        }}
         onSettingsAction={handleSettingsAction}
       />
     </View>

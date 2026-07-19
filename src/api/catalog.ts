@@ -300,6 +300,52 @@ export async function fetchAnimeRelated(animeId: number): Promise<AnimeRelated[]
   }
 }
 
+export interface AnimeCharacter {
+  id?: number;
+  name?: string;
+  image?: string;
+  role?: string;
+}
+
+export async function fetchAnimeCharacters(animeId: number): Promise<AnimeCharacter[]> {
+  try {
+    const json = await request<unknown>(`/api/animes/get/characters/${animeId}?id=${animeId}`);
+    if (Array.isArray(json)) return json as AnimeCharacter[];
+    const data =
+      json && typeof json === 'object' && 'data' in json
+        ? (json as { data: unknown }).data
+        : json;
+    return Array.isArray(data) ? (data as AnimeCharacter[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface AnimeScheduleEntry {
+  id?: number;
+  anime_id?: number;
+  next_date?: number;
+  anime?: AnimeListItem;
+}
+
+export async function fetchSchedule(week = 0, limit = 50): Promise<AnimeScheduleEntry[]> {
+  try {
+    const qs = new URLSearchParams({
+      week: String(week),
+      limit: String(limit),
+    });
+    const json = await request<unknown>(`/api/base/schedule?${qs}`);
+    if (Array.isArray(json)) return json as AnimeScheduleEntry[];
+    const data =
+      json && typeof json === 'object' && 'data' in json
+        ? (json as { data: unknown }).data
+        : json;
+    return Array.isArray(data) ? (data as AnimeScheduleEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchGenres(): Promise<{ id: number; name: string }[]> {
   try {
     const json = await requestData<{ id: number; name: string }[] | { genres?: { id: number; name: string }[] }>(
@@ -395,6 +441,9 @@ export interface CatalogSearchParams {
   type?: string;
   limit?: number;
   page?: number;
+  year?: string;
+  genre?: string;
+  lampaKind?: string;
 }
 
 export interface CatalogSearchData {
@@ -407,6 +456,9 @@ export async function searchCatalog(params: CatalogSearchParams): Promise<Catalo
   if (params.type) qs.set('type', params.type);
   if (params.limit) qs.set('limit', String(params.limit));
   if (params.page) qs.set('page', String(params.page));
+  if (params.year) qs.set('year', params.year);
+  if (params.genre) qs.set('genre', params.genre);
+  if (params.lampaKind) qs.set('lampaKind', params.lampaKind);
   const json = await request<{ data?: CatalogSearchData } | CatalogSearchData>(
     `/api/catalog/search?${qs}`,
   );

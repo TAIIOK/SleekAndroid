@@ -19,7 +19,7 @@ import {
 } from '@/api/lampaExtras';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
-import { useLampaWatchHub } from '@/hooks/useLampaWatchHub';
+import { useLampaWatchHub, type SourcesSearchProgress } from '@/hooks/useLampaWatchHub';
 import { formatRuDate } from '@/lib/catalogLocalization';
 import { resolveLampaPosterUrl } from '@/lib/config';
 import { lampaProgressKey, resolveLampaTmdbId } from '@/lib/lampaDetail';
@@ -335,6 +335,7 @@ export function LampaSourceSheet({
               selectedTranslatorId={selectedTranslator?.id ?? null}
               seasons={seasons}
               selectedSeasonNumber={selectedSeasonNumber}
+              sourcesSearching={watchHub.sourcesSearch.phase === 'searching'}
               onPickSource={(id) => void pickSource(id)}
               onPickTranslator={(id) => {
                 if (!selectedSource) return;
@@ -350,9 +351,7 @@ export function LampaSourceSheet({
               contentContainerStyle={styles.scrollContent}
               nestedScrollEnabled
             >
-              {watchHub.loadingSources && !watchHub.sources.length ? (
-                <Text style={styles.hint}>Поиск источников…</Text>
-              ) : null}
+              <SourcesSearchBanner progress={watchHub.sourcesSearch} />
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               {watchHub.sources.length > 0 ? (
@@ -572,6 +571,47 @@ function SelectorRow({
   );
 }
 
+function SourcesSearchBanner({ progress }: { progress: SourcesSearchProgress }) {
+  if (progress.phase === 'idle') return null;
+
+  if (progress.phase === 'searching') {
+    const found = progress.readyCount;
+    return (
+      <View style={styles.searchBanner}>
+        <ActivityIndicator color={colors.brand} size="small" />
+        <View style={styles.searchBannerText}>
+          <Text style={styles.searchBannerTitle}>
+            {found > 0
+              ? `Поиск источников… Найдено ${found}`
+              : 'Поиск источников…'}
+          </Text>
+          <Text style={styles.searchBannerHint}>
+            {found > 0
+              ? 'Ещё могут появиться — список обновляется'
+              : 'Опрашиваем зеркала, это может занять до минуты'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (progress.phase === 'done') {
+    if (progress.readyCount <= 0) {
+      return <Text style={styles.hint}>Источники не найдены</Text>;
+    }
+    return (
+      <Text style={styles.searchDone}>
+        Найдено источников: {progress.readyCount}
+        {progress.reportedCount > progress.readyCount
+          ? ` (готовы ${progress.readyCount} из ${progress.reportedCount})`
+          : ''}
+      </Text>
+    );
+  }
+
+  return null;
+}
+
 function PickerOptions({
   field,
   sources,
@@ -580,6 +620,7 @@ function PickerOptions({
   selectedTranslatorId,
   seasons,
   selectedSeasonNumber,
+  sourcesSearching,
   onPickSource,
   onPickTranslator,
   onPickSeason,
@@ -592,6 +633,7 @@ function PickerOptions({
   selectedTranslatorId: number | null;
   seasons: WatchHubSeasonEpisodes[];
   selectedSeasonNumber: number | null;
+  sourcesSearching?: boolean;
   onPickSource: (id: string) => void;
   onPickTranslator: (id: number) => void;
   onPickSeason: (seasonNumber: number) => void;
@@ -630,8 +672,18 @@ function PickerOptions({
           <Text style={styles.headerBtnLabel}>←</Text>
         </TvFocusable>
       </View>
+      {field === 'source' && sourcesSearching ? (
+        <View style={styles.searchBannerCompact}>
+          <ActivityIndicator color={colors.brand} size="small" />
+          <Text style={styles.searchBannerHint}>Ищем ещё источники…</Text>
+        </View>
+      ) : null}
       {!options.length ? (
-        <Text style={styles.hint}>Нет доступных вариантов</Text>
+        <Text style={styles.hint}>
+          {field === 'source' && sourcesSearching
+            ? 'Пока пусто — поиск продолжается'
+            : 'Нет доступных вариантов'}
+        </Text>
       ) : field === 'translator' ? (
         <View style={styles.pillGrid}>
           {options.map((opt) => (
@@ -754,6 +806,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     paddingVertical: spacing.md,
+  },
+  searchBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  searchBannerText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  searchBannerTitle: {
+    color: colors.text,
+    fontSize: Platform.isTV ? 17 : 15,
+    fontWeight: '600',
+  },
+  searchBannerHint: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  searchBannerCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  searchDone: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    paddingVertical: spacing.xs,
   },
   error: {
     color: colors.danger,

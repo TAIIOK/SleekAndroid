@@ -11,11 +11,13 @@ import {
 import type { PlayerEpisodeNav, PlayerMenuOption } from '@/components/player/types';
 import type { TvPlayerOverlay } from '@/components/player/tv/tvPlayerTypes';
 import { colors, spacing } from '@/constants/aniverse';
+import type { ExternalPlayerTarget } from '@/lib/externalPlayer';
 import {
   formatPlaybackRate,
   videoFitLabel,
   type PlayerPreferences,
 } from '@/lib/playerPreferences';
+import { subtitleTrackLabel, type SubtitleTrackInfo } from '@/lib/subtitleTracks';
 
 interface TvPlayerOverlaysProps {
   overlay: TvPlayerOverlay;
@@ -25,10 +27,15 @@ interface TvPlayerOverlaysProps {
   connectionOptions?: PlayerMenuOption[];
   deliveryOptions?: PlayerMenuOption[];
   episodeNav?: PlayerEpisodeNav;
+  subtitleTracks?: SubtitleTrackInfo[];
+  activeSubtitle?: SubtitleTrackInfo | null;
+  externalPlayers?: ExternalPlayerTarget[];
   prefs: PlayerPreferences;
   onClose: () => void;
   onSelectMenuOption: (option: PlayerMenuOption) => void;
   onSelectEpisode: (episodeId: number) => void;
+  onSelectSubtitle: (track: SubtitleTrackInfo | null) => void;
+  onSelectExternalPlayer?: (target: ExternalPlayerTarget) => void;
   onSettingsAction: (action: 'rate' | 'fit' | 'autonext' | 'skip_open' | 'skip_end') => void;
 }
 
@@ -172,10 +179,15 @@ export function TvPlayerOverlays({
   connectionOptions,
   deliveryOptions,
   episodeNav,
+  subtitleTracks = [],
+  activeSubtitle,
+  externalPlayers = [],
   prefs,
   onClose,
   onSelectMenuOption,
   onSelectEpisode,
+  onSelectSubtitle,
+  onSelectExternalPlayer,
   onSettingsAction,
 }: TvPlayerOverlaysProps) {
   if (!overlay) return null;
@@ -235,6 +247,51 @@ export function TvPlayerOverlays({
           label: item.label,
           selected: item.id === episodeNav.currentEpisodeId,
           onPress: () => onSelectEpisode(item.id),
+        }))}
+      />
+    );
+  }
+
+  if (overlay === 'subtitles' && subtitleTracks.length) {
+    return (
+      <OverlayShell
+        title="Субтитры"
+        onClose={onClose}
+        focusIndex={overlayFocusIndex}
+        items={[
+          {
+            key: 'off',
+            label: 'Выкл',
+            selected: !activeSubtitle,
+            onPress: () => onSelectSubtitle(null),
+          },
+          ...subtitleTracks.map((track, index) => ({
+            key: track.id ?? `${track.language}-${index}`,
+            label: subtitleTrackLabel(track),
+            selected:
+              !!activeSubtitle &&
+              activeSubtitle.language === track.language &&
+              activeSubtitle.label === track.label,
+            onPress: () => onSelectSubtitle(track),
+          })),
+        ]}
+      />
+    );
+  }
+
+  if (overlay === 'external' && externalPlayers.length) {
+    return (
+      <OverlayShell
+        title="Внешний плеер"
+        onClose={onClose}
+        focusIndex={overlayFocusIndex}
+        items={externalPlayers.map((target) => ({
+          key: target.id,
+          label: target.label,
+          selected:
+            (target.packageName ?? '') === (prefs.lastExternalPlayerPackage ?? '') ||
+            (target.id === 'system' && !prefs.lastExternalPlayerPackage),
+          onPress: () => onSelectExternalPlayer?.(target),
         }))}
       />
     );

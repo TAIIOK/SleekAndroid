@@ -10,11 +10,14 @@ import {
   updateLibraryLampaStatus,
 } from '@/api/library';
 import {
+  fetchLampaCast,
   fetchLampaRecommendations,
+  fetchLampaRelated,
   fetchLampaSimilar,
 } from '@/api/lampaExtras';
 import { fetchLampaProgress } from '@/api/progress';
 import { PosterRail } from '@/components/catalog/PosterRail';
+import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
 import { LampaDetailGenres } from '@/components/lampa/detail/LampaDetailGenres';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
 import { LampaDetailPlot } from '@/components/lampa/detail/LampaDetailPlot';
@@ -98,6 +101,18 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     enabled: tmdbId != null,
   });
 
+  const { data: franchise = [], isPending: franchisePending } = useQuery({
+    queryKey: ['lampa-related', tmdbId ?? 0],
+    queryFn: () => fetchLampaRelated(tmdbId!),
+    enabled: tmdbId != null && !isSerial,
+  });
+
+  const { data: cast = [], isPending: castPending } = useQuery({
+    queryKey: ['lampa-cast', kind, tmdbId ?? 0],
+    queryFn: () => fetchLampaCast(kind, tmdbId!),
+    enabled: tmdbId != null,
+  });
+
   const invalidateLibrary = () => {
     void queryClient.invalidateQueries({ queryKey: ['library-lampa'] });
     void queryClient.invalidateQueries({ queryKey: ['library-favorites'] });
@@ -152,19 +167,29 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
 
   const seasons = parseLampaSeasons(detail.seasons);
 
+  const openLampaItem = (itemId: string | number, itemKind: 'movie' | 'tv' = kind) => {
+    const path = lampaDetailPath(itemKind, { id: itemId });
+    if (!path.includes('/undefined') && !path.endsWith('/')) {
+      router.push(path as '/movies/[id]');
+    }
+  };
+
   const relatedRails = (
     <>
+      {!isSerial && (franchise.length > 0 || franchisePending) ? (
+        <PosterRail
+          title="Связанные"
+          items={franchise.map(mapLampaToRailItem)}
+          loading={franchisePending}
+          onItemPress={(item) => openLampaItem(item.id, 'movie')}
+        />
+      ) : null}
       {(similar.length > 0 || similarPending) && (
         <PosterRail
           title="Похожие"
           items={similar.map(mapLampaToRailItem)}
           loading={similarPending}
-          onItemPress={(item) => {
-            const path = lampaDetailPath(kind, { id: item.id });
-            if (!path.includes('/undefined') && !path.endsWith('/')) {
-              router.push(path as '/movies/[id]');
-            }
-          }}
+          onItemPress={(item) => openLampaItem(item.id)}
         />
       )}
       {(recommendations.length > 0 || recommendationsPending) && (
@@ -172,12 +197,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           title="Рекомендации"
           items={recommendations.map(mapLampaToRailItem)}
           loading={recommendationsPending}
-          onItemPress={(item) => {
-            const path = lampaDetailPath(kind, { id: item.id });
-            if (!path.includes('/undefined') && !path.endsWith('/')) {
-              router.push(path as '/movies/[id]');
-            }
-          }}
+          onItemPress={(item) => openLampaItem(item.id)}
         />
       )}
     </>
@@ -213,6 +233,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           <LampaDetailPlot detail={detail} />
           <LampaDetailGenres detail={detail} />
           <LampaDetailSidebar detail={detail} isSerial={isSerial} />
+          <LampaDetailCast cast={cast} loading={castPending} />
         </View>
 
         {isSerial && seasons.length > 0 ? (

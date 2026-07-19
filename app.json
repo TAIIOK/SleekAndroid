@@ -50,13 +50,21 @@
         {
           "android": {
             "minSdkVersion": 24,
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 35,
+            "manifestQueries": {
+              "package": [
+                "com.brouken.player",
+                "org.videolan.vlc",
+                "is.xyz.mpv"
+              ]
+            }
           }
         }
       ],
       "expo-web-browser",
-      "expo-video"
+      "react-native-video",
+      "./plugins/withLargeHeap.js"
     ],
     "experiments": {
       "typedRoutes": false,

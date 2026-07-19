@@ -4,7 +4,7 @@ Native TV detail screens parity with web desktop/TV layout (`site/`).
 
 ## Description
 
-Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero + main/sidebar composition, play/continue, library status + favorite, add-to-collection, episodes/seasons, and related rails. Exclude reactions, download CTAs on detail, and characters.
+Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero + main/sidebar composition, play/continue, library status + favorite, add-to-collection, episodes/seasons, characters, franchise/cast rails, and related rails. Exclude reactions and download CTAs on detail.
 
 ## Requirements
 
@@ -22,6 +22,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 - [x] Episodes list with progress + load more
 - [x] Sidebar meta (status, year, studio, age, rating, episode count)
 - [x] Related rails: Похожие + Рекомендации
+- [x] Characters horizontal rail (name, image, role)
 - [x] Dubbing/quality selection still feeds watch navigation
 - [x] TV: stacked full-width layout (not cramped 2-column); larger hero/plot/meta type
 - [x] TV: Play stays focusable (not `disabled` while loading); preferred focus + Left/Up → sidebar
@@ -36,6 +37,8 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 - [x] Serials: seasons + episode list; selecting episode opens sheet with S/E
 - [x] Sidebar info rows (type, premiere, runtime, status, seasons, genres)
 - [x] Similar + Recommendations rails via WatchHub TMDB
+- [x] Movies: franchise «Связанные» rail via TMDB collection
+- [x] Cast rail via TMDB credits
 - [x] Progress/resume via `buildLampaPlaybackState`
 
 ## Acceptance Criteria

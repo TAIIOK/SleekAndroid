@@ -10,13 +10,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { fetchAnimeDetail, fetchAnimeRelated } from '@/api/catalog';
+import { fetchAnimeCharacters, fetchAnimeDetail, fetchAnimeRelated } from '@/api/catalog';
 import {
   fetchSavedAnimeLibrary,
   toggleAnimeFavorite,
   updateLibraryAnimeStatus,
 } from '@/api/library';
 import { fetchAnimeProgress } from '@/api/progress';
+import { AnimeDetailCharacters } from '@/components/anime/AnimeDetailCharacters';
 import { AnimeDetailEpisodes } from '@/components/anime/AnimeDetailEpisodes';
 import { AnimeDetailHero } from '@/components/anime/AnimeDetailHero';
 import { AnimeDetailPlot } from '@/components/anime/AnimeDetailPlot';
@@ -90,6 +91,12 @@ export default function AnimeDetailScreen() {
   const { data: related = [], isLoading: relatedLoading } = useQuery({
     queryKey: ['anime-related', animeId],
     queryFn: () => fetchAnimeRelated(animeId),
+    enabled: Number.isFinite(animeId),
+  });
+
+  const { data: characters = [], isLoading: charactersLoading } = useQuery({
+    queryKey: ['anime-characters', animeId],
+    queryFn: () => fetchAnimeCharacters(animeId),
     enabled: Number.isFinite(animeId),
   });
 
@@ -174,6 +181,7 @@ export default function AnimeDetailScreen() {
   const mainColumn = (
     <View style={styles.main}>
       <AnimeDetailPlot detail={detail} />
+      <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
       <AnimeDetailEpisodes
         episodes={allEpisodes}
         isLoading={episodesLoading}

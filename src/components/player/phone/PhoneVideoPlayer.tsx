@@ -1,10 +1,10 @@
-import { VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,10 +12,16 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Video from 'react-native-video';
 
 import type { PlayerMenuOption, VideoPlayerProps } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
-import { useNativeVideoEngine } from '@/hooks/useNativeVideoEngine';
+import { useRNVideoEngine } from '@/hooks/useRNVideoEngine';
+import {
+  launchExternalPlayer,
+  listInstalledExternalPlayers,
+  type ExternalPlayerTarget,
+} from '@/lib/externalPlayer';
 import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
 import {
   cyclePlaybackRate,
@@ -23,13 +29,24 @@ import {
   formatPlaybackRate,
   videoFitLabel,
 } from '@/lib/playerPreferences';
+import { subtitleTrackLabel } from '@/lib/subtitleTracks';
 
-type PhoneSheet = 'dubbing' | 'quality' | 'connection' | 'delivery' | 'episodes' | 'settings' | null;
+type PhoneSheet =
+  | 'dubbing'
+  | 'quality'
+  | 'connection'
+  | 'delivery'
+  | 'episodes'
+  | 'subtitles'
+  | 'settings'
+  | 'external'
+  | null;
 
 const CONTROLS_HIDE_MS = 3200;
 
 export function PhoneVideoPlayer({
   src,
+  headers,
   title,
   subtitle,
   startTime,
@@ -46,8 +63,9 @@ export function PhoneVideoPlayer({
   deliveryOptions,
 }: VideoPlayerProps) {
   const insets = useSafeAreaInsets();
-  const engine = useNativeVideoEngine({
+  const engine = useRNVideoEngine({
     src,
+    headers,
     startTime,
     startProgressFraction,
     skipSegments,
@@ -58,8 +76,15 @@ export function PhoneVideoPlayer({
 
   const [controlsVisible, setControlsVisible] = useState(true);
   const [sheet, setSheet] = useState<PhoneSheet>(null);
+  const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
+  const [externalError, setExternalError] = useState<string | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const volumeRef = useRef(engine.volume);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    void listInstalledExternalPlayers().then(setExternalPlayers);
+  }, []);
 
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -178,18 +203,54 @@ export function PhoneVideoPlayer({
             ? 'Тип потока'
             : sheet === 'episodes'
               ? 'Эпизоды'
-              : sheet === 'settings'
-                ? 'Настройки'
-                : '';
+              : sheet === 'subtitles'
+                ? 'Субтитры'
+                : sheet === 'settings'
+                  ? 'Настройки'
+                  : sheet === 'external'
+                    ? 'Внешний плеер'
+                    : '';
+
+  const openExternal = async (target: ExternalPlayerTarget) => {
+    setExternalError(null);
+    engine.pause();
+    onProgress?.(engine.currentTime, engine.duration);
+    const result = await launchExternalPlayer({
+      url: src,
+      title: title ?? subtitle,
+      positionSeconds: engine.currentTime,
+      packageName: target.id === 'system' ? null : target.packageName,
+    });
+    setSheet(null);
+    if (!result.ok) setExternalError(result.message);
+  };
 
   return (
     <View style={styles.root} {...panResponder.panHandlers}>
-      <VideoView
-        style={styles.video}
-        player={engine.player}
-        contentFit={engine.contentFit}
-        nativeControls={false}
-      />
+      {engine.source ? (
+        <Video
+          key={`${src}-${engine.reloadKey}`}
+          ref={engine.videoRef}
+          style={styles.video}
+          source={engine.source}
+          paused={engine.paused}
+          rate={engine.rate}
+          volume={engine.volume}
+          resizeMode={engine.resizeMode}
+          selectedTextTrack={engine.selectedTextTrack}
+          bufferConfig={engine.bufferConfig}
+          controls={false}
+          playInBackground={false}
+          ignoreSilentSwitch="ignore"
+          onLoad={engine.onLoad}
+          onProgress={engine.onProgress}
+          onEnd={engine.onEnd}
+          onError={engine.onError}
+          onBuffer={engine.onBuffer}
+          onReadyForDisplay={engine.onReadyForDisplay}
+          onTextTracks={engine.onTextTracks}
+        />
+      ) : null}
 
       {engine.isLoading && !engine.playbackError ? (
         <View style={styles.center}>
@@ -197,12 +258,18 @@ export function PhoneVideoPlayer({
         </View>
       ) : null}
 
-      {engine.playbackError ? (
+      {engine.playbackError || externalError ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{engine.playbackError}</Text>
-          <Pressable onPress={engine.retryPlayback} style={styles.menuChip}>
-            <Text style={styles.chipText}>Повторить</Text>
-          </Pressable>
+          <Text style={styles.errorText}>{engine.playbackError ?? externalError}</Text>
+          {engine.playbackError ? (
+            <Pressable onPress={engine.retryPlayback} style={styles.menuChip}>
+              <Text style={styles.chipText}>Повторить</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => setExternalError(null)} style={styles.menuChip}>
+              <Text style={styles.chipText}>Закрыть</Text>
+            </Pressable>
+          )}
         </View>
       ) : null}
 
@@ -304,6 +371,16 @@ export function PhoneVideoPlayer({
                   <Text style={styles.chipText}>Эпизоды</Text>
                 </Pressable>
               ) : null}
+              {engine.subtitleTracks.length > 0 ? (
+                <Pressable onPress={() => openSheet('subtitles')} style={styles.menuChip}>
+                  <Text style={styles.chipText}>CC</Text>
+                </Pressable>
+              ) : null}
+              {Platform.OS === 'android' && externalPlayers.length > 0 ? (
+                <Pressable onPress={() => openSheet('external')} style={styles.menuChip}>
+                  <Text style={styles.chipText}>Внешний</Text>
+                </Pressable>
+              ) : null}
               <Pressable onPress={() => openSheet('settings')} style={styles.menuChip}>
                 <Text style={styles.chipText}>Настройки</Text>
               </Pressable>
@@ -342,6 +419,60 @@ export function PhoneVideoPlayer({
                       <Text style={styles.sheetRowText}>{item.label}</Text>
                     </Pressable>
                   ))
+                : null}
+              {sheet === 'subtitles'
+                ? [
+                    <Pressable
+                      key="off"
+                      onPress={() => {
+                        engine.setSubtitleTrack(null);
+                        setSheet(null);
+                      }}
+                      style={[styles.sheetRow, !engine.activeSubtitle && styles.sheetRowSelected]}
+                    >
+                      <Text style={styles.sheetRowText}>Выкл</Text>
+                      {!engine.activeSubtitle ? <Text style={styles.check}>✓</Text> : null}
+                    </Pressable>,
+                    ...engine.subtitleTracks.map((track, index) => {
+                      const selected =
+                        !!engine.activeSubtitle &&
+                        engine.activeSubtitle.language === track.language &&
+                        engine.activeSubtitle.label === track.label;
+                      return (
+                        <Pressable
+                          key={track.id ?? `${track.language}-${index}`}
+                          onPress={() => {
+                            engine.setSubtitleTrack(track);
+                            setSheet(null);
+                          }}
+                          style={[styles.sheetRow, selected && styles.sheetRowSelected]}
+                        >
+                          <Text style={styles.sheetRowText}>{subtitleTrackLabel(track)}</Text>
+                          {selected ? <Text style={styles.check}>✓</Text> : null}
+                        </Pressable>
+                      );
+                    }),
+                  ]
+                : null}
+              {sheet === 'external'
+                ? externalPlayers.map((target) => {
+                    const selected =
+                      (target.packageName ?? '') ===
+                        (engine.prefs.lastExternalPlayerPackage ?? '') ||
+                      (target.id === 'system' && !engine.prefs.lastExternalPlayerPackage);
+                    return (
+                      <Pressable
+                        key={target.id}
+                        onPress={() => {
+                          void openExternal(target);
+                        }}
+                        style={[styles.sheetRow, selected && styles.sheetRowSelected]}
+                      >
+                        <Text style={styles.sheetRowText}>{target.label}</Text>
+                        {selected ? <Text style={styles.check}>✓</Text> : null}
+                      </Pressable>
+                    );
+                  })
                 : null}
               {sheetOptions?.map((option) => (
                 <Pressable

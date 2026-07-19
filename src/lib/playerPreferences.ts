@@ -12,6 +12,10 @@ export interface PlayerPreferences {
   videoFit: VideoFitMode;
   gestureControlsEnabled: boolean;
   gesturesLocked: boolean;
+  /** Preferred subtitle language code (e.g. `ru`, `en`); empty = off by default. */
+  preferredSubtitleLanguage: string;
+  /** Last Android package used for external playback (empty = system chooser). */
+  lastExternalPlayerPackage: string;
 }
 
 const STORAGE_KEY = 'aniverse-player-prefs';
@@ -30,6 +34,8 @@ const DEFAULTS: PlayerPreferences = {
   videoFit: 'contain',
   gestureControlsEnabled: true,
   gesturesLocked: false,
+  preferredSubtitleLanguage: '',
+  lastExternalPlayerPackage: '',
 };
 
 let memoryCache: PlayerPreferences | null = null;
@@ -56,6 +62,14 @@ function normalizePrefs(parsed: Partial<PlayerPreferences>): PlayerPreferences {
         ? parsed.videoFit
         : DEFAULTS.videoFit,
     gesturesLocked: Boolean(parsed.gesturesLocked),
+    preferredSubtitleLanguage:
+      typeof parsed.preferredSubtitleLanguage === 'string'
+        ? parsed.preferredSubtitleLanguage
+        : DEFAULTS.preferredSubtitleLanguage,
+    lastExternalPlayerPackage:
+      typeof parsed.lastExternalPlayerPackage === 'string'
+        ? parsed.lastExternalPlayerPackage
+        : DEFAULTS.lastExternalPlayerPackage,
   };
 }
 

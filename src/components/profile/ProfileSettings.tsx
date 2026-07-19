@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
-import { Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet, Text } from 'react-native';
 
 import { ProfileSection } from '@/components/profile/ProfileSection';
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 
 interface ProfileSettingsProps {
   onLogout: () => void;
@@ -14,16 +15,21 @@ export function ProfileSettings({ onLogout }: ProfileSettingsProps) {
   return (
     <ProfileSection title="Настройки">
       {!Platform.isTV ? (
-        <Pressable
+        <TvFocusable
           style={styles.row}
+          focusedStyle={styles.rowFocused}
           onPress={() => router.push('/accounts')}
         >
           <Text style={styles.rowLabel}>Управление аккаунтами</Text>
-        </Pressable>
+        </TvFocusable>
       ) : null}
-      <Pressable style={[styles.row, styles.logoutRow]} onPress={onLogout}>
+      <TvFocusable
+        style={[styles.row, styles.logoutRow]}
+        focusedStyle={styles.logoutFocused}
+        onPress={onLogout}
+      >
         <Text style={styles.logoutLabel}>Выйти</Text>
-      </Pressable>
+      </TvFocusable>
     </ProfileSection>
   );
 }
@@ -36,18 +42,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgCard,
     padding: spacing.lg,
   },
+  rowFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
   rowLabel: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: Platform.isTV ? 18 : 15,
     fontWeight: '600',
   },
   logoutRow: {
     borderColor: 'rgba(248,113,113,0.25)',
     backgroundColor: 'rgba(63,29,29,0.35)',
   },
+  logoutFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: 'rgba(127,29,29,0.55)',
+  },
   logoutLabel: {
     color: colors.danger,
-    fontSize: 15,
+    fontSize: Platform.isTV ? 18 : 15,
     fontWeight: '600',
     textAlign: 'center',
   },

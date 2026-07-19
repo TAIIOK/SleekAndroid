@@ -4,16 +4,28 @@ Native TV and phone player parity with web (`site/` TvVideoPlayer + desktop Vide
 
 ## Description
 
-Port the full watch experience into `aniverse-tv` on `expo-video`: TV remote HUD with panel focus and overlays, phone custom HUD with gestures, anime dubbing/quality/episodes, Lampa quality/connection/delivery, progress throttle + resume, player prefs, OP/ED skip, and auto-next.
+Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPlayer / Media3 on Android TV, MIT): TV remote HUD with panel focus and overlays, phone custom HUD with gestures, anime dubbing/quality/episodes, Lampa quality/connection/delivery, progress throttle + resume, player prefs, OP/ED skip, auto-next, and Lampa-style open-in-external-app.
 
 ## Requirements
 
 ### Engine and prefs
 
-- [x] `useNativeVideoEngine` wraps `expo-video` with play/pause, seek, rate, contentFit, loading/error/retry, startTime resume, skip segments, ended → auto-next
-- [x] Player preferences persist in AsyncStorage (`aniverse-player-prefs`)
+- [x] `useRNVideoEngine` wraps `react-native-video` with play/pause, seek, rate, contentFit, loading/error/retry, startTime resume, skip segments, ended → auto-next
+- [x] No commercial player license required (MIT)
+- [x] Source typing: HLS (`.m3u8`) vs progressive; optional request headers when provided by WatchHub
+- [x] High-bitrate / 4K-friendly ExoPlayer `bufferConfig` (avoid oversized forward buffers that thrash TV heap)
+- [x] Long-session stability: no React Query invalidate on mid-watch progress PUT; debounce rebuffer spinner; quieter timeUpdate state updates
+- [x] Player preferences persist in AsyncStorage (`aniverse-player-prefs`), including last external player package
 - [x] Throttled anime and Lampa progress PUT with flush on unmount; Lampa uses 1440s fallback duration when unknown
-- [x] `expo-video` listed in Expo plugins; README documents `expo-video`
+- [x] `react-native-video` Expo plugin registered; THEOplayer / `expo-video` removed after cutover
+- [x] `android:largeHeap` via config plugin for 4K heap headroom
+
+### External player (Android)
+
+- [x] Open current stream in Just Player, VLC, mpv, or system chooser (`ACTION_VIEW`)
+- [x] Pass URL, title, and resume position (ms) with Lampa-compatible extras where possible
+- [x] TV/phone UI: «Внешний плеер» overlay/sheet; pause in-app before launch; flush pending progress
+- [x] Graceful message when no suitable app is installed
 
 ### TV UI and remote
 
@@ -21,7 +33,8 @@ Port the full watch experience into `aniverse-tv` on `expo-video`: TV remote HUD
 - [x] TV panel visual: bottom fade, circular transport, labeled option pills, timeline thumb (site-like HUD)
 - [x] Hidden panel: ←/→ seek (prefs seconds), ↑/↓ show panel, OK play/pause, Back exit
 - [x] Visible panel: D-pad focus; Back hides panel or closes overlay before exit
-- [x] Overlays: dubbing, quality, connection, delivery, episodes, settings
+- [x] Overlays: dubbing, quality, connection, delivery, episodes, subtitles (when tracks exist), settings, external player
+- [x] Subtitle tracks from react-native-video text tracks; preferred language persisted in player prefs
 - [x] Long overlay lists scroll only when the focused row leaves the viewport; ↑/↓ navigation is rate-limited (~150ms)
 - [x] Panel options chip cycles video framing (`contain` → `cover` → `fill`) without opening settings
 - [x] Paused center badge; loading indicator; skip prompt button
@@ -33,7 +46,7 @@ Port the full watch experience into `aniverse-tv` on `expo-video`: TV remote HUD
 
 - [x] Custom HUD (not only native controls): transport, timeline scrub, back
 - [x] Gestures: tap play/pause, horizontal seek; volume via player.volume when gesture applies
-- [x] Sheets for dubbing/quality/episodes/settings (shared prefs)
+- [x] Sheets for dubbing/quality/episodes/settings/external player (shared prefs)
 
 ### Anime watch
 
@@ -57,19 +70,27 @@ Port the full watch experience into `aniverse-tv` on `expo-video`: TV remote HUD
 5. Phone: custom HUD play/seek/menus work without relying solely on native controls.
 6. Progress syncs periodically and flushes on leave; continue-watching queries invalidate after flush.
 7. Playback error shows Retry; empty source shows «Нет источника видео».
+8. HLS and progressive play on Android TV via react-native-video (ExoPlayer).
+9. External player opens installed Just Player / VLC / mpv (or system chooser) with stream URL and position.
 
 ## QA (from site/docs/TV_QA.md Watch)
 
-- [ ] Watch: Enter — play/pause, ← → — seek, ↑ ↓ — panel, Back — exit
-- [ ] Watch: panel focus transport → options; Enter activates; Back hides panel
-- [ ] Watch: hint disappears ~2.5s
-- [ ] Watch: dubbing / quality / episodes / settings overlays open and close with Back
-- [ ] Phone: scrub, transport, sheets, gestures
-- [ ] Anime resume + auto-next; Lampa modes + source sheet startProgress
+Code-verified against acceptance criteria and remote handler (device smoke still recommended on hardware):
+
+- [x] Watch: Enter — play/pause, ← → — seek, ↑ ↓ — panel, Back — exit (`useTvPlayerRemote`)
+- [x] Watch: panel focus transport → options; Enter activates; Back hides panel
+- [x] Watch: hint disappears ~2.5s (`TV_PLAYER_HINT_HIDE_MS`)
+- [x] Watch: dubbing / quality / episodes / subtitles / settings / external overlays open and close with Back
+- [x] Phone: scrub, transport, sheets, gestures
+- [x] Anime resume + auto-next; Lampa modes + source sheet startProgress
+- [ ] Device: multi-minute HLS / 4K on Television_1080p
+- [ ] Device: external Just Player / VLC launch with resume position
 
 ## Notes
 
 - Source of truth: `site` `TvVideoPlayer`, `useTvPlayerRemote`, desktop `VideoPlayer`, `WatchPage`.
 - Visual language uses `colors` / glass tokens; not pixel-perfect CSS copy.
 - Android TV: `useTVEventHandler` only fires when a focusable view is focused (rn-tvos#584); player HUD is software-focus, so `TvVideoPlayer` keeps a 1×1 focus sink.
-- Out of scope: ambient backdrop, PiP/cast, hover scrub preview, Norigin spatial nav.
+- Subtitles appear only when the media container exposes text tracks (HLS/embedded); many anime sources have no CC tracks.
+- For heavy 4K streams prefer «Внешний плеер» (Lampa model) if in-app ExoPlayer stutters.
+- Out of scope: ambient backdrop, PiP/cast, hover scrub preview, Norigin spatial nav, IMA/ads.

@@ -62,9 +62,9 @@ export function useThrottledLampaProgress(
       if (shouldSyncInitial || shouldSyncCompleted || shouldSyncInterval) {
         lastSyncRef.current = now;
         if (completed) completedSentRef.current = true;
-        void putLampaProgress(payload).then(() => {
-          void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
-        });
+        // Do not invalidate queries while watching — refetches compete with 4K I/O.
+        // Cache refresh happens on unmount flush below.
+        void putLampaProgress(payload);
       }
     },
     [enabled, lampaId, isSerial, season, episode, intervalMs],

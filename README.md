@@ -13,7 +13,7 @@
 | API | `@aniverse/api`, `@aniverse/types`, `@aniverse/playback` |
 | Auth | AsyncStorage + JWT refresh |
 | TV login | Device-code / QR (`DeviceQrLogin`) |
-| Player | `expo-video` (ExoPlayer / AVPlayer) |
+| Player | `react-native-video` (ExoPlayer / Media3, MIT) + external apps |
 | Кеш | `@tanstack/react-query` |
 
 ## Платформы
@@ -53,6 +53,10 @@ API URL задаётся в `app.json` → `expo.extra`:
   "sitePublicUrl": "https://preview.taiiok.ru"
 }
 ```
+
+После смены native-зависимостей нужен `npm run prebuild:tv` / `npm run android:tv`.
+
+Android-сборка ожидает JDK 17 (`openjdk@17`); JDK 25 ломает CMake у native-модулей. `scripts/with-expo-path.js` сам подставляет Homebrew `openjdk@17`, если он установлен.
 
 ## Сборка release APK (sideload)
 

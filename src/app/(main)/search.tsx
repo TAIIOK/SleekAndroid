@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Platform,
   Pressable,
@@ -10,9 +11,10 @@ import {
   View,
 } from 'react-native';
 
-import { searchCatalog } from '@/api/catalog';
+import { fetchGenres, searchCatalog } from '@/api/catalog';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
 import { OnScreenKeyboard } from '@/components/auth/OnScreenKeyboard';
+import { SearchFilters } from '@/components/search/SearchFilters';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { lampaDetailPath } from '@/lib/lampaDetail';
@@ -21,17 +23,11 @@ import {
   SEARCH_POPULAR_QUERIES,
   lampaKindForMediaFilter,
   searchTypeForMediaFilter,
+  usesAnimeFilters,
   type SearchMediaFilter,
 } from '@/lib/searchConfig';
 
 type SearchLampaItem = RailItem & { kind?: string };
-
-const MEDIA_OPTIONS: { id: SearchMediaFilter; label: string }[] = [
-  { id: 'all', label: 'Все' },
-  { id: 'anime', label: 'Аниме' },
-  { id: 'movie', label: 'Фильмы' },
-  { id: 'tv', label: 'Сериалы' },
-];
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -39,11 +35,19 @@ export default function SearchScreen() {
   const scrollYRef = useRef(0);
   const [query, setQuery] = useState('');
   const [media, setMedia] = useState<SearchMediaFilter>('all');
+  const [genre, setGenre] = useState('');
+  const [year, setYear] = useState('');
   const [animeItems, setAnimeItems] = useState<RailItem[]>([]);
   const [lampaItems, setLampaItems] = useState<SearchLampaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showKeyboard, setShowKeyboard] = useState(Platform.isTV);
+
+  const { data: genres = [] } = useQuery({
+    queryKey: ['search-genres'],
+    queryFn: fetchGenres,
+    staleTime: 60 * 60 * 1000,
+  });
 
   /** Only when returning from results — never on filter focus (causes bounce). */
   const revealHeader = useCallback(() => {
@@ -57,10 +61,14 @@ export default function SearchScreen() {
     setLoading(true);
     setError(null);
     try {
+      const animeFilters = usesAnimeFilters(media);
       const result = await searchCatalog({
         q: trimmed,
         type: searchTypeForMediaFilter(media),
         limit: 30,
+        genre: animeFilters && genre ? genre : undefined,
+        year: animeFilters && year ? year : undefined,
+        lampaKind: lampaKindForMediaFilter(media),
       });
       const lampaKind = lampaKindForMediaFilter(media);
       setAnimeItems(
@@ -149,16 +157,15 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      <View style={styles.filters}>
-        {MEDIA_OPTIONS.map((option) => (
-          <FilterChip
-            key={option.id}
-            label={option.label}
-            active={media === option.id}
-            onPress={() => setMedia(option.id)}
-          />
-        ))}
-      </View>
+      <SearchFilters
+        media={media}
+        onMediaChange={setMedia}
+        genre={genre}
+        onGenreChange={setGenre}
+        year={year}
+        onYearChange={setYear}
+        genres={genres}
+      />
 
       {Platform.isTV && (
         <TvFocusable onPress={() => setShowKeyboard((v) => !v)} style={styles.toggleKeyboard}>
@@ -199,7 +206,12 @@ export default function SearchScreen() {
               ? () =>
                   router.push({
                     pathname: '/search/all',
-                    params: { q: query.trim(), bucket: 'anime' },
+                    params: {
+                      q: query.trim(),
+                      bucket: 'anime',
+                      ...(genre ? { genre } : {}),
+                      ...(year ? { year } : {}),
+                    },
                   })
               : undefined
           }
@@ -304,11 +316,6 @@ const styles = StyleSheet.create({
   searchButtonLabel: {
     color: colors.text,
     fontWeight: '700',
-  },
-  filters: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
   },
   chip: {
     paddingHorizontal: spacing.md,

@@ -38,6 +38,7 @@ const TV_NAV_ITEMS = [
   { label: 'Аниме', path: '/anime' },
   { label: 'Фильмы', path: '/movies' },
   { label: 'Сериалы', path: '/series' },
+  { label: 'Расписание', path: '/schedule' },
   { label: 'Медиатека', path: '/library/lists' },
   { label: 'Поиск', path: '/search' },
   { label: 'История', path: '/history' },
@@ -223,8 +224,10 @@ function TvAppShellFrame({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const shellFocus = useTvShellFocus();
+  const profileActive = isActivePath(currentPath, '/profile') || isActivePath(currentPath, '/accounts');
   const activeNavIndex = TV_NAV_ITEMS.findIndex((item) => isActivePath(currentPath, item.path));
-  const sidebarAnchorIndex = activeNavIndex >= 0 ? activeNavIndex : 0;
+  // On profile/accounts the chip is the sidebar return target; otherwise the active nav row.
+  const sidebarAnchorIndex = profileActive ? -1 : activeNavIndex >= 0 ? activeNavIndex : 0;
 
   useEffect(() => {
     shellFocus?.resetExitFlags();
@@ -256,7 +259,8 @@ function TvAppShellFrame({
         </ScrollView>
         <ProfileChip
           nickname={userNickname}
-          active={isActivePath(currentPath, '/profile')}
+          active={profileActive}
+          isSidebarAnchor={profileActive}
           onPress={() => router.push('/profile')}
         />
       </TvFocusGuide>
@@ -330,15 +334,30 @@ function ProfileChip({
   nickname,
   active,
   onPress,
+  isSidebarAnchor,
 }: {
   nickname?: string | null;
   active: boolean;
   onPress: () => void;
+  isSidebarAnchor?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const shellFocus = useTvShellFocus();
+  const pressableRef = useRef<ViewType | null>(null);
+
+  const publishAnchor = () => {
+    if (isSidebarAnchor && pressableRef.current) {
+      shellFocus?.registerSidebarAnchor(pressableRef.current);
+    }
+  };
 
   return (
     <Pressable
+      ref={(node) => {
+        pressableRef.current = node as unknown as ViewType | null;
+        if (node) publishAnchor();
+      }}
+      onLayout={publishAnchor}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       onPress={onPress}
@@ -353,7 +372,7 @@ function ProfileChip({
       </View>
       <View style={styles.tvProfileText}>
         <Text style={styles.tvProfileName} numberOfLines={1}>
-          {nickname ?? 'Гость'}
+          {nickname?.trim() || 'Гость'}
         </Text>
         <Text style={styles.tvProfileHint}>Профиль</Text>
       </View>

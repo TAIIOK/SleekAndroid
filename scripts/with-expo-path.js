@@ -26,13 +26,38 @@ if (!command) {
   process.exit(1);
 }
 
+const fs = require('node:fs');
+
+/** JDK 25 breaks CMake configure for RN native modules; prefer 17 when present. */
+function resolveAndroidJavaHome() {
+  if (process.env.JAVA_HOME && !/openjdk-?25|jdk-?25/i.test(process.env.JAVA_HOME)) {
+    return process.env.JAVA_HOME;
+  }
+  const candidates = [
+    '/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
+    '/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'bin/java'))) return candidate;
+  }
+  return process.env.JAVA_HOME;
+}
+
+const env = {
+  ...process.env,
+  NODE_PATH: extraPaths,
+};
+
+const javaHome = resolveAndroidJavaHome();
+if (javaHome) {
+  env.JAVA_HOME = javaHome;
+  env.PATH = `${path.join(javaHome, 'bin')}${path.delimiter}${env.PATH || ''}`;
+}
+
 const result = spawnSync(command, args, {
   stdio: 'inherit',
   shell: process.platform === 'win32',
-  env: {
-    ...process.env,
-    NODE_PATH: extraPaths,
-  },
+  env,
 });
 
 process.exit(result.status ?? 1);

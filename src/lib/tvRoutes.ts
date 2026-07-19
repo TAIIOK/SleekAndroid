@@ -8,6 +8,7 @@ const TV_ALLOWED_PREFIXES = [
   '/anime',
   '/movies',
   '/series',
+  '/schedule',
   '/profile',
   '/accounts',
   '/login',

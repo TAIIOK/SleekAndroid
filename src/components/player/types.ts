@@ -24,6 +24,8 @@ export interface PlayerEpisodeNav {
 
 export interface VideoPlayerProps {
   src: string;
+  /** Optional HTTP headers for the media request (WatchHub / CDN). */
+  headers?: Record<string, string>;
   title?: string;
   subtitle?: string;
   /** Absolute resume time in seconds. */

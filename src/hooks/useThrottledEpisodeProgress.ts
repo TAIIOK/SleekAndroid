@@ -57,9 +57,9 @@ export function useThrottledEpisodeProgress(
       if (shouldSyncInitial || shouldSyncCompleted || shouldSyncInterval) {
         lastSyncRef.current = now;
         if (completed) completedSentRef.current = true;
-        void putAnimeProgress(payload).then(() => {
-          void queryClient.invalidateQueries({ queryKey: ['anime-progress'] });
-        });
+        // Do not invalidate queries while watching — refetches compete with 4K I/O.
+        // Cache refresh happens on unmount flush below.
+        void putAnimeProgress(payload);
       }
     },
     [enabled, animeId, episodeId, episodeOrdinal, intervalMs],

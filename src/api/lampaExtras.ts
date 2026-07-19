@@ -88,6 +88,69 @@ export async function fetchLampaRecommendations(
   return mapTmdbResults(payload, kind).filter((item) => Number(item.id) !== tmdbId);
 }
 
+/** Films from the same TMDB collection (franchise). Movies only. */
+export async function fetchLampaRelated(movieTmdbId: number): Promise<LampaItem[]> {
+  const detail = await fetchTmdbLampaDetail('movie', movieTmdbId);
+  const collection = detail?.belongs_to_collection as { id?: number } | undefined;
+  const collectionId = collection?.id;
+  if (!collectionId) return [];
+
+  const payload = await watchHubJson<{ parts?: unknown[] }>(
+    `/tmdb/api/3/collection/${collectionId}?${tmdbQuery()}`,
+  );
+  if (!Array.isArray(payload?.parts)) return [];
+
+  const seen = new Set<number>();
+  const items: LampaItem[] = [];
+  for (const raw of payload.parts) {
+    const mapped = mapTmdbMediaToLampaItem(raw, 'movie');
+    if (!mapped?.id || Number(mapped.id) === movieTmdbId || seen.has(Number(mapped.id))) continue;
+    seen.add(Number(mapped.id));
+    items.push(mapped);
+  }
+  return items;
+}
+
+export interface LampaCastMember {
+  id: number;
+  name: string;
+  character?: string;
+  profilePath?: string;
+}
+
+/** Top billed cast from TMDB credits. */
+export async function fetchLampaCast(
+  kind: 'movie' | 'tv',
+  tmdbId: number,
+  limit = 12,
+): Promise<LampaCastMember[]> {
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) return [];
+  const payload = await watchHubJson<{ cast?: unknown[] }>(
+    `/tmdb/api/3/${kind}/${tmdbId}/credits?${tmdbQuery()}`,
+  );
+  if (!Array.isArray(payload?.cast)) return [];
+
+  const members: LampaCastMember[] = [];
+  for (const raw of payload.cast) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as Record<string, unknown>;
+    const id = Number(entry.id);
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    if (!Number.isFinite(id) || !name) continue;
+    members.push({
+      id,
+      name,
+      character: typeof entry.character === 'string' ? entry.character : undefined,
+      profilePath:
+        typeof entry.profile_path === 'string' && entry.profile_path.trim()
+          ? entry.profile_path
+          : undefined,
+    });
+    if (members.length >= limit) break;
+  }
+  return members;
+}
+
 /** TMDB detail with Russian metadata via WatchHub. */
 export async function fetchTmdbLampaDetail(
   kind: 'movie' | 'tv',
