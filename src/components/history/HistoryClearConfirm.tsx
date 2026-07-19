@@ -1,5 +1,6 @@
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, StyleSheet, Text, View } from 'react-native';
 
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 
 export function HistoryClearConfirm({
@@ -20,12 +21,17 @@ export function HistoryClearConfirm({
           <Text style={styles.title}>Очистить историю?</Text>
           <Text style={styles.body}>Записи будут скрыты из списка на этом устройстве.</Text>
           <View style={styles.actions}>
-            <Pressable style={styles.cancel} onPress={onCancel} disabled={loading}>
+            <TvFocusable
+              style={styles.cancel}
+              onPress={onCancel}
+              disabled={loading}
+              hasTVPreferredFocus
+            >
               <Text style={styles.cancelLabel}>Отмена</Text>
-            </Pressable>
-            <Pressable style={styles.confirm} onPress={onConfirm} disabled={loading}>
+            </TvFocusable>
+            <TvFocusable style={styles.confirm} onPress={onConfirm} disabled={loading}>
               <Text style={styles.confirmLabel}>{loading ? 'Очистка…' : 'Очистить'}</Text>
-            </Pressable>
+            </TvFocusable>
           </View>
         </View>
       </View>

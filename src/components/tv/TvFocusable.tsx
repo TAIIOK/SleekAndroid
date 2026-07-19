@@ -1,35 +1,66 @@
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { radii, tvFocus } from '@/constants/aniverse';
+import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 interface TvFocusableProps {
   children: ReactNode;
   onPress?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   style?: StyleProp<ViewStyle>;
+  focusedStyle?: StyleProp<ViewStyle>;
   disabled?: boolean;
   /** Prefer this control as the first focus target on TV screens. */
   hasTVPreferredFocus?: boolean;
+  /** First item in a horizontal/vertical rail — Left jumps to the TV sidebar. */
+  railStart?: boolean;
+  /** Top content entry — Up jumps to the TV sidebar. */
+  contentEntry?: boolean;
 }
 
-/** TV-friendly brand focus ring (lavender + soft glow). */
+/** TV-friendly brand focus ring (lavender + wash). */
 export function TvFocusable({
   children,
   onPress,
+  onFocus,
+  onBlur,
   style,
+  focusedStyle,
   disabled,
   hasTVPreferredFocus,
+  railStart = false,
+  contentEntry = false,
 }: TvFocusableProps) {
   const [focused, setFocused] = useState(false);
+  const shellFocus = useTvShellFocus();
+  const exitLeft = Platform.isTV && railStart;
+  const exitUp = Platform.isTV && contentEntry;
+  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   return (
     <Pressable
       disabled={disabled}
+      focusable={!disabled}
       onPress={onPress}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      hasTVPreferredFocus={hasTVPreferredFocus}
-      style={[styles.base, focused && styles.focused, style]}
+      onFocus={() => {
+        setFocused(true);
+        if (exitLeft) shellFocus?.setExitLeftEnabled(true);
+        if (exitUp) shellFocus?.setExitUpEnabled(true);
+        onFocus?.();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        if (exitLeft) shellFocus?.setExitLeftEnabled(false);
+        if (exitUp) shellFocus?.setExitUpEnabled(false);
+        onBlur?.();
+      }}
+      hasTVPreferredFocus={hasTVPreferredFocus && !disabled}
+      // Pin Left to the sidebar so Android does not 2D-search across the page.
+      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
+      // Caller styles first; focused chrome must win (chips/options set their own border/bg).
+      style={[styles.base, style, focused && styles.focused, focused && focusedStyle]}
     >
       {children}
     </Pressable>
@@ -45,6 +76,6 @@ const styles = StyleSheet.create({
   focused: {
     borderColor: tvFocus.borderColor,
     backgroundColor: tvFocus.fill,
-    ...tvFocus.glow,
+    borderWidth: tvFocus.borderWidth,
   },
 });

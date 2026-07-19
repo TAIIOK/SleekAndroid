@@ -349,8 +349,8 @@ export function mapLampaToRailItem(item: LampaItem) {
   return {
     id: item.id,
     title: lampaItemTitle(item),
-    // Resolve here so cards always get a full WatchHub/TMDB URL
-    poster: posterPath ? resolveLampaPosterUrl(posterPath) : undefined,
+    // Resolve here so cards always get a full WatchHub/TMDB URL (w185 for dense rails).
+    poster: posterPath ? resolveLampaPosterUrl(posterPath, 'w185') : undefined,
     score:
       item.vote_average ??
       (typeof (item as { voteAverage?: number }).voteAverage === 'number'

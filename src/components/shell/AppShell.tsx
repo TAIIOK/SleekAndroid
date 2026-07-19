@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useSegments } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -38,6 +38,7 @@ const TV_NAV_ITEMS = [
   { label: 'Аниме', path: '/anime' },
   { label: 'Фильмы', path: '/movies' },
   { label: 'Сериалы', path: '/series' },
+  { label: 'Медиатека', path: '/library/lists' },
   { label: 'Поиск', path: '/search' },
   { label: 'История', path: '/history' },
 ] as const;
@@ -65,6 +66,10 @@ function normalizePath(segments: string[]): string {
 
 function isActivePath(currentPath: string, itemPath: string): boolean {
   if (itemPath === '/') return currentPath === '/';
+  // Hub entry points at lists; keep active across bookmarks/collections.
+  if (itemPath === '/library/lists') {
+    return currentPath === '/library' || currentPath.startsWith('/library/');
+  }
   return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
 }
 
@@ -76,10 +81,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const currentPath = normalizePath(segments as string[]);
   const isHome = currentPath === '/';
+  const tvBlocked = Platform.isTV && !isTvAllowedPath(currentPath);
 
-  if (Platform.isTV && !isTvAllowedPath(currentPath)) {
-    const redirect = tvRedirectPath(currentPath);
-    router.replace(redirect as '/');
+  useEffect(() => {
+    if (!tvBlocked) return;
+    router.replace(tvRedirectPath(currentPath) as '/');
+  }, [tvBlocked, currentPath, router]);
+
+  if (tvBlocked) {
     return null;
   }
 
@@ -213,8 +222,15 @@ function TvAppShellFrame({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const shellFocus = useTvShellFocus();
   const activeNavIndex = TV_NAV_ITEMS.findIndex((item) => isActivePath(currentPath, item.path));
   const sidebarAnchorIndex = activeNavIndex >= 0 ? activeNavIndex : 0;
+
+  useEffect(() => {
+    shellFocus?.resetExitFlags();
+    // Only on navigation — shellFocus identity changes when the sidebar tag resolves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path-only reset
+  }, [currentPath]);
 
   return (
     <View style={[styles.tvRoot, { paddingTop: insets.top }]}>
@@ -337,7 +353,7 @@ function ProfileChip({
       </View>
       <View style={styles.tvProfileText}>
         <Text style={styles.tvProfileName} numberOfLines={1}>
-          {nickname ?? 'Медиатека'}
+          {nickname ?? 'Гость'}
         </Text>
         <Text style={styles.tvProfileHint}>Профиль</Text>
       </View>

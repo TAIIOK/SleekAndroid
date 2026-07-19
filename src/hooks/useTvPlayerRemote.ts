@@ -13,6 +13,9 @@ import {
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
 import { cyclePlaybackRate, cycleVideoFit, type PlayerPreferences } from '@/lib/playerPreferences';
 
+/** Min interval between overlay ↑/↓ steps — held D-pad can fire faster than focus can follow. */
+const OVERLAY_NAV_MIN_MS = 150;
+
 interface UseTvPlayerRemoteOptions {
   playing: boolean;
   prefs: PlayerPreferences;
@@ -81,6 +84,7 @@ function buildEnabledButtons(options: UseTvPlayerRemoteOptions): Set<TvPlayerBut
   if (options.hasConnection) enabled.add('connection');
   if (options.hasDelivery) enabled.add('delivery');
   if (options.hasEpisodes) enabled.add('episodes');
+  enabled.add('fit');
   enabled.add('settings');
   return enabled;
 }
@@ -127,6 +131,7 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
   const [overlay, setOverlay] = useState<TvPlayerOverlay>(null);
   const [overlayFocusIndex, setOverlayFocusIndex] = useState(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastOverlayNavAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
@@ -272,6 +277,9 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
         case 'episodes':
           openOverlay('episodes');
           break;
+        case 'fit':
+          opts.onPrefsChange({ videoFit: cycleVideoFit(opts.prefs.videoFit) });
+          break;
         case 'settings':
           openOverlay('settings');
           break;
@@ -347,6 +355,8 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
 
   useTvEventHandlerSafe((event) => {
     if (event.eventType === 'focus' || event.eventType === 'blur') return;
+    // rn-tvos Android may emit key-down + key-up; handle key-up only.
+    if (event.eventKeyAction != null && event.eventKeyAction !== 1) return;
 
     const opts = optionsRef.current;
     const type = event.eventType;
@@ -361,10 +371,13 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
         return;
       }
       const count = overlayItemCount(overlay, opts);
-      if (count > 0) {
+      if (count > 0 && (type === 'down' || type === 'up')) {
+        const now = Date.now();
+        if (now - lastOverlayNavAtRef.current < OVERLAY_NAV_MIN_MS) return;
+        lastOverlayNavAtRef.current = now;
         if (type === 'down') {
           setOverlayFocusIndex((idx) => (idx + 1) % count);
-        } else if (type === 'up') {
+        } else {
           setOverlayFocusIndex((idx) => (idx - 1 + count) % count);
         }
       }

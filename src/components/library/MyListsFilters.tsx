@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import {
   MY_LISTS_STATUS_OPTIONS,
   type MyListsStatusFilter,
@@ -15,30 +16,17 @@ export function MyListsFilters({ status, onStatusChange }: MyListsFiltersProps) 
   return (
     <View style={styles.row}>
       {MY_LISTS_STATUS_OPTIONS.map((option) => (
-        <FilterChip
+        <TvFocusable
           key={option.id}
-          label={option.label}
-          active={status === option.id}
           onPress={() => onStatusChange(option.id)}
-        />
+          style={[styles.chip, status === option.id && styles.chipActive]}
+        >
+          <Text style={[styles.chipLabel, status === option.id && styles.chipLabelActive]}>
+            {option.label}
+          </Text>
+        </TvFocusable>
       ))}
     </View>
-  );
-}
-
-function FilterChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-      <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -48,7 +36,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: Platform.isTV ? 4 : spacing.xs,
     paddingHorizontal: spacing.lg,
   },
   chip: {
@@ -57,7 +45,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
+    // Keep width stable with TvFocusable ring (layout shift skips neighbors on TV).
+    borderWidth: tvFocus.borderWidth,
     borderColor: colors.border,
   },
   chipActive: {
@@ -66,7 +55,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: Platform.isTV ? 16 : 13,
     fontWeight: '600',
   },
   chipLabelActive: {

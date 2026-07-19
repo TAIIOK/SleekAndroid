@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Platform } from 'react-native';
 import { useQueries, useQuery } from '@tanstack/react-query';
 
 import { fetchSavedAnimeLibrary, fetchSavedLampaLibrary } from '@/api/library';
@@ -9,6 +10,9 @@ import {
   buildContinueWatchingItems,
 } from '@/lib/continueWatching';
 import { useAuth } from '@/providers/AuthProvider';
+
+/** Cap visible continue cards (and ordinal N+1 fetches) on TV. */
+const CONTINUE_WATCHING_LIMIT = Platform.isTV ? 10 : 40;
 
 export function useContinueWatching() {
   const { isAuthenticated } = useAuth();
@@ -37,10 +41,15 @@ export function useContinueWatching() {
     enabled: isAuthenticated,
   });
 
-  const continueBase = useMemo(
-    () => buildContinueWatchingItems(savedAnime, savedLampa, animeProgress, lampaProgress),
-    [savedAnime, savedLampa, animeProgress, lampaProgress],
-  );
+  const continueBase = useMemo(() => {
+    const items = buildContinueWatchingItems(
+      savedAnime,
+      savedLampa,
+      animeProgress,
+      lampaProgress,
+    );
+    return items.slice(0, CONTINUE_WATCHING_LIMIT);
+  }, [savedAnime, savedLampa, animeProgress, lampaProgress]);
 
   const continueEpisodeIds = useMemo(
     () =>

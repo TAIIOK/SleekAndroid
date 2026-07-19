@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import type { MyListsMediaFilter } from '@/lib/myLists';
 
 interface MyListsStatsProps {
@@ -29,14 +30,14 @@ export function MyListsStats({ anime, movie, tv, media, onMediaChange }: MyLists
       {STAT_ITEMS.map((item) => {
         const active = media === item.id;
         return (
-          <Pressable
+          <TvFocusable
             key={item.id}
             onPress={() => onMediaChange(active ? 'all' : item.id)}
             style={[styles.card, active && styles.cardActive]}
           >
             <Text style={[styles.count, active && styles.countActive]}>{counts[item.key]}</Text>
             <Text style={[styles.label, active && styles.labelActive]}>{item.label}</Text>
-          </Pressable>
+          </TvFocusable>
         );
       })}
     </View>
@@ -51,10 +52,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   card: {
-    minWidth: 104,
+    minWidth: Platform.isTV ? 120 : 104,
     flexGrow: 1,
     borderRadius: radii.lg,
-    borderWidth: 1,
+    borderWidth: tvFocus.borderWidth,
     borderColor: colors.border,
     backgroundColor: 'rgba(255,255,255,0.04)',
     paddingHorizontal: spacing.md,
@@ -66,7 +67,7 @@ const styles = StyleSheet.create({
   },
   count: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
   },
   countActive: {
@@ -74,7 +75,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: Platform.isTV ? 14 : 13,
     fontWeight: '500',
     marginTop: 4,
   },

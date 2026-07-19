@@ -127,6 +127,14 @@ export function TvVideoPlayer({
         nativeControls={false}
       />
 
+      {/* Android TV only delivers HW keys when a focusable view is focused. */}
+      <Pressable
+        focusable
+        hasTVPreferredFocus
+        accessible={false}
+        style={styles.focusSink}
+      />
+
       {engine.isLoading && !engine.playbackError ? (
         <View style={styles.center} pointerEvents="none">
           <ActivityIndicator color={colors.brand} size="large" />
@@ -144,10 +152,10 @@ export function TvVideoPlayer({
       {engine.playbackError ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{engine.playbackError}</Text>
-          <Pressable onPress={engine.retryPlayback} style={styles.retryBtn}>
+          <Pressable focusable={false} onPress={engine.retryPlayback} style={styles.retryBtn}>
             <Text style={styles.retryText}>Повторить</Text>
           </Pressable>
-          <Pressable onPress={handleBack} style={styles.backBtn}>
+          <Pressable focusable={false} onPress={handleBack} style={styles.backBtn}>
             <Text style={styles.retryText}>Назад</Text>
           </Pressable>
         </View>
@@ -156,6 +164,7 @@ export function TvVideoPlayer({
       {engine.visibleSkip && !remote.overlay ? (
         <View style={styles.skipWrap}>
           <Pressable
+            focusable={false}
             onPress={() => engine.applySkip(engine.visibleSkip!)}
             style={styles.skipBtn}
           >
@@ -214,6 +223,12 @@ export function TvVideoPlayer({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   video: { flex: 1, width: '100%', height: '100%' },
+  focusSink: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
   center: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

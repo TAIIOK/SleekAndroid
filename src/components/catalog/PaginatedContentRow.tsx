@@ -1,10 +1,17 @@
 import type { ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { PosterSkeleton } from '@/components/ui/Skeleton';
 import { colors, layout, spacing } from '@/constants/aniverse';
-import { tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 
 interface PaginatedContentRowProps<T> {
   title: string;
@@ -23,6 +30,19 @@ interface PaginatedContentRowProps<T> {
   layout?: 'rail' | 'grid' | 'showcase';
 }
 
+function maybeLoadMore(
+  event: NativeSyntheticEvent<NativeScrollEvent>,
+  hasNextPage?: boolean,
+  isFetchingNextPage?: boolean,
+  onLoadMore?: () => void,
+) {
+  if (!hasNextPage || isFetchingNextPage || !onLoadMore) return;
+  const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+  if (contentOffset.x + layoutMeasurement.width >= contentSize.width - 120) {
+    onLoadMore();
+  }
+}
+
 export function PaginatedContentRow<T>({
   title,
   subtitle,
@@ -39,6 +59,7 @@ export function PaginatedContentRow<T>({
   hideTitle,
 }: PaginatedContentRowProps<T>) {
   const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
+  const skeletonCount = Platform.isTV ? 4 : 6;
 
   if (!isLoading && (isError || items.length === 0)) {
     return null;
@@ -61,15 +82,9 @@ export function PaginatedContentRow<T>({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
-          {...(Platform.isTV
-            ? ({
-                snapToAlignment: 'start',
-                snapToInterval: layout.posterWidthRail + (Platform.isTV ? 10 : 12),
-                scrollAnimationEnabled: true,
-              } as object)
-            : {})}
+          {...tvHorizontalCatalogScrollProps}
         >
-          {Array.from({ length: 6 }).map((_, index) => (
+          {Array.from({ length: skeletonCount }).map((_, index) => (
             <PosterSkeleton key={index} />
           ))}
         </ScrollView>
@@ -78,23 +93,21 @@ export function PaginatedContentRow<T>({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
-          {...(Platform.isTV
-            ? ({
-                snapToAlignment: 'start',
-                snapToInterval: layout.posterWidthRail + (Platform.isTV ? 10 : 12),
-                scrollAnimationEnabled: true,
-              } as object)
-            : {})}
-          onScrollEndDrag={(event) => {
-            if (!hasNextPage || isFetchingNextPage || !onLoadMore) return;
-            const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-            if (contentOffset.x + layoutMeasurement.width >= contentSize.width - 120) {
-              onLoadMore();
-            }
-          }}
+          {...tvHorizontalCatalogScrollProps}
+          onScrollEndDrag={(event) =>
+            maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
+          }
+          onMomentumScrollEnd={(event) =>
+            maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
+          }
+          // TV focus jumps fire onScroll (no momentum); keep this for D-pad load-more.
+          onScroll={(event) => maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)}
+          scrollEventThrottle={64}
         >
           {items.map((item, index) => (
-            <View key={String(getItemKey(item, index))}>{renderItem(item, index)}</View>
+            <View key={String(getItemKey(item, index))} collapsable={false}>
+              {renderItem(item, index)}
+            </View>
           ))}
           {isFetchingNextPage ? <PosterSkeleton /> : null}
         </ScrollView>

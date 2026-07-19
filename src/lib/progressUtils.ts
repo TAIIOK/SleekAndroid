@@ -97,6 +97,20 @@ export function lampaProgressByKey(
   return map;
 }
 
+export function groupAnimeProgressByAnimeId(
+  rows: UserAnimeProgress[],
+): Map<number, UserAnimeProgress[]> {
+  const map = new Map<number, UserAnimeProgress[]>();
+  for (const row of rows) {
+    const animeId = row.animeId;
+    if (animeId == null) continue;
+    const list = map.get(animeId) ?? [];
+    list.push(row);
+    map.set(animeId, list);
+  }
+  return map;
+}
+
 export function groupLampaProgressById(
   rows: UserLampaProgress[],
 ): Map<string, UserLampaProgress[]> {

@@ -20,6 +20,7 @@ export type TvPlayerButtonId =
   | 'connection'
   | 'delivery'
   | 'episodes'
+  | 'fit'
   | 'settings';
 
 export const TV_PLAYER_TRANSPORT_ORDER: TvPlayerButtonId[] = [
@@ -36,6 +37,7 @@ export const TV_PLAYER_OPTIONS_ORDER: TvPlayerButtonId[] = [
   'connection',
   'delivery',
   'episodes',
+  'fit',
   'settings',
 ];
 

@@ -145,7 +145,9 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {isTv && mode === 'keyboard' && <OnScreenKeyboard onKey={handleKeyboardKey} />}
+          {isTv && mode === 'keyboard' && (
+            <OnScreenKeyboard onKey={handleKeyboardKey} initialLayout="en" />
+          )}
         </GlassSurface>
       </ScrollView>
     </SafeAreaView>

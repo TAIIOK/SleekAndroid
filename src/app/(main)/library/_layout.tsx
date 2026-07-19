@@ -1,4 +1,4 @@
-import { Redirect, Slot } from 'expo-router';
+import { Slot } from 'expo-router';
 
 import { LibraryHubLayout } from '@/components/library/LibraryHubLayout';
 

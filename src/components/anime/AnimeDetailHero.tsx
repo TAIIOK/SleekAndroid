@@ -16,6 +16,8 @@ import {
 } from '@/lib/animeDetail';
 import { resolveAnimePosterUrl } from '@/lib/config';
 import type { UserListStatus } from '@/lib/libraryStatus';
+import { animePoster } from '@/lib/poster';
+import type { CollectionItemInput } from '@/types/collection';
 import type { AnimeEpisode } from '@aniverse/types';
 
 interface AnimeDetailHeroProps {
@@ -27,6 +29,7 @@ interface AnimeDetailHeroProps {
   userStatus?: string;
   isFavorite?: boolean;
   libraryDisabled?: boolean;
+  collectionItem?: CollectionItemInput | null;
   onPlay: () => void;
   onStatusChange: (status: UserListStatus) => void;
   onToggleFavorite: () => void;
@@ -41,6 +44,7 @@ export function AnimeDetailHero({
   userStatus,
   isFavorite,
   libraryDisabled,
+  collectionItem,
   onPlay,
   onStatusChange,
   onToggleFavorite,
@@ -52,7 +56,7 @@ export function AnimeDetailHero({
   const status = detail.status ? localizedAnimeStatus(detail.status) : undefined;
   const genres = animeGenreNames(detail.genres).slice(0, 4);
   const backdrop = resolveAnimePosterUrl(animeHeroImageCandidates(detail)[0]);
-  const playDisabled = resumeLoading || !resumeEpisode;
+  const canPlay = Boolean(resumeEpisode) && !resumeLoading;
 
   const playLabel = hasHistory
     ? 'Продолжить просмотр'
@@ -112,10 +116,13 @@ export function AnimeDetailHero({
 
           <View style={styles.actions}>
             <TvFocusable
-              disabled={playDisabled}
-              onPress={onPlay}
+              onPress={() => {
+                if (canPlay) onPlay();
+              }}
               hasTVPreferredFocus={Platform.isTV}
-              style={[styles.playBtn, playDisabled && styles.playDisabled]}
+              contentEntry={Platform.isTV}
+              railStart={Platform.isTV}
+              style={[styles.playBtn, !canPlay && styles.playDisabled]}
             >
               <Text style={styles.playLabel}>▶ {playLabel}</Text>
               {playHint ? <Text style={styles.playHint}>{playHint}</Text> : null}
@@ -125,6 +132,14 @@ export function AnimeDetailHero({
               userStatus={userStatus}
               isFavorite={isFavorite}
               disabled={libraryDisabled}
+              collectionItem={
+                collectionItem ?? {
+                  mediaType: 'anime',
+                  mediaId: String(detail.id),
+                  title: detail.title ?? undefined,
+                  poster: animePoster(detail),
+                }
+              }
               onStatusChange={onStatusChange}
               onToggleFavorite={onToggleFavorite}
             />
@@ -137,32 +152,32 @@ export function AnimeDetailHero({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
+    borderRadius: Platform.isTV ? 16 : 24,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
-    minHeight: Platform.isTV ? 340 : 320,
+    minHeight: Platform.isTV ? 260 : 320,
   },
   backdrop: {
     flex: 1,
-    minHeight: Platform.isTV ? 340 : 320,
+    minHeight: Platform.isTV ? 260 : 320,
     justifyContent: 'flex-end',
   },
   content: {
-    padding: Platform.isTV ? spacing.xxl : spacing.lg,
+    padding: Platform.isTV ? spacing.lg : spacing.lg,
     gap: spacing.sm,
     maxWidth: Platform.isTV ? 720 : undefined,
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 32 : 28,
+    fontSize: Platform.isTV ? 28 : 28,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
   alt: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 18 : 14,
+    fontSize: Platform.isTV ? 15 : 14,
   },
   pills: {
     flexDirection: 'row',
@@ -173,38 +188,38 @@ const styles = StyleSheet.create({
   pill: {
     borderRadius: radii.pill,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: Platform.isTV ? 5 : 6,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   pillText: {
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: Platform.isTV ? 12 : 12,
     fontWeight: '600',
   },
   actions: {
-    marginTop: spacing.md,
-    gap: spacing.md,
+    marginTop: spacing.sm,
+    gap: spacing.sm,
   },
   playBtn: {
     alignSelf: 'flex-start',
     backgroundColor: colors.brandAccent,
     borderRadius: radii.lg,
     paddingHorizontal: spacing.xl,
-    paddingVertical: Platform.isTV ? 16 : 14,
-    gap: 4,
+    paddingVertical: Platform.isTV ? 12 : 14,
+    gap: 2,
   },
   playDisabled: {
-    opacity: 0.5,
+    opacity: 0.55,
   },
   playLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 20 : 16,
+    fontSize: Platform.isTV ? 17 : 16,
     fontWeight: '700',
   },
   playHint: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: Platform.isTV ? 12 : 13,
   },
 });

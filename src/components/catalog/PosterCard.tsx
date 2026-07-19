@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, layout, radii, tvFocus, typography } from '@/constants/aniverse';
@@ -12,6 +12,8 @@ export interface PosterCardProps {
   subtitle?: string;
   score?: number | null;
   onPress?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   width?: number;
   variant?: 'rail' | 'grid';
   /** First item in a horizontal rail — Left jumps to the TV sidebar. */
@@ -20,17 +22,22 @@ export interface PosterCardProps {
   contentEntry?: boolean;
 }
 
-export function PosterCard({
-  title,
-  poster,
-  subtitle,
-  score,
-  onPress,
-  width,
-  variant = 'rail',
-  railStart = false,
-  contentEntry = false,
-}: PosterCardProps) {
+export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
+  {
+    title,
+    poster,
+    subtitle,
+    score,
+    onPress,
+    onFocus,
+    onBlur,
+    width,
+    variant = 'rail',
+    railStart = false,
+    contentEntry = false,
+  },
+  ref,
+) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
   const cardWidth = width ?? (variant === 'grid' ? undefined : layout.posterWidthRail);
@@ -44,18 +51,22 @@ export function PosterCard({
   const ratingLabel = score != null && Number.isFinite(score) ? score.toFixed(1) : undefined;
   const exitLeft = Platform.isTV && railStart;
   const exitUp = Platform.isTV && contentEntry;
+  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   return (
     <Pressable
+      ref={ref}
       onFocus={() => {
         setFocused(true);
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);
+        onFocus?.();
       }}
       onBlur={() => {
         setFocused(false);
         if (exitLeft) shellFocus?.setExitLeftEnabled(false);
         if (exitUp) shellFocus?.setExitUpEnabled(false);
+        onBlur?.();
       }}
       onPress={onPress}
       style={[
@@ -68,13 +79,19 @@ export function PosterCard({
             : null,
         focused && styles.cardFocused,
       ]}
-      {...(Platform.isTV ? { scrollSnapAlign: 'start' as const } : {})}
       {...(contentEntry && Platform.isTV ? { hasTVPreferredFocus: true } : {})}
+      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
         <View style={[styles.poster, { aspectRatio: layout.posterAspect }]}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.image}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={imageUrl}
+            />
           ) : (
             <Text style={styles.fallback}>{title.slice(0, 1) || '?'}</Text>
           )}
@@ -98,11 +115,13 @@ export function PosterCard({
       ) : null}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
-    marginRight: Platform.isTV ? 10 : 12,
+    // Spacing comes from the rail ScrollView `gap` — avoid double stride that
+    // used to desync snap/focus scrolling on TV.
+    marginRight: 0,
   },
   cardGrid: {
     marginRight: 0,
@@ -124,7 +143,6 @@ const styles = StyleSheet.create({
   posterFrameFocused: {
     borderColor: Platform.isTV ? tvFocus.borderColor : 'transparent',
     backgroundColor: Platform.isTV ? tvFocus.wash : 'transparent',
-    ...(Platform.isTV ? tvFocus.glow : {}),
   },
   poster: {
     backgroundColor: colors.bgCard,

@@ -23,8 +23,14 @@ import { LampaDetailSidebar } from '@/components/lampa/detail/LampaDetailSidebar
 import { LampaDetailSkeleton } from '@/components/lampa/detail/LampaDetailSkeleton';
 import { LampaSourceSheet } from '@/components/lampa/LampaSourceSheet';
 import { colors, spacing } from '@/constants/aniverse';
-import { lampaDetailPath, parseLampaSeasons, resolveLampaTmdbId } from '@/lib/lampaDetail';
+import {
+  lampaDetailPath,
+  lampaTitle,
+  parseLampaSeasons,
+  resolveLampaTmdbId,
+} from '@/lib/lampaDetail';
 import type { UserListStatus } from '@/lib/libraryStatus';
+import { lampaPosterPath } from '@/lib/poster';
 import { buildLampaPlaybackState } from '@/lib/progressUtils';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -191,6 +197,12 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           userStatus={savedState?.status}
           isFavorite={savedState?.isFavorite}
           libraryDisabled={!isAuthenticated}
+          collectionItem={{
+            mediaType: 'lampa',
+            mediaId: `${kind}:${routeId}`,
+            title: lampaTitle(detail),
+            poster: lampaPosterPath(detail),
+          }}
           onWatch={() => openSources(!!savedState?.hasHistory)}
           onOpenSources={isSerial ? () => openSources(false) : undefined}
           onStatusChange={onStatusChange}

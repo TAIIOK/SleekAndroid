@@ -1,3 +1,6 @@
+import { forwardRef } from 'react';
+import { View } from 'react-native';
+
 import { layout } from '@/constants/aniverse';
 import { PosterCard, type PosterCardProps } from '@/components/catalog/PosterCard';
 
@@ -11,29 +14,39 @@ export interface CatalogPosterCardProps extends Omit<PosterCardProps, 'width' | 
 }
 
 /** Site-compatible poster card wrapper (CatalogPosterCard parity). */
-export function CatalogPosterCard({
-  title,
-  poster,
-  subtitle,
-  rating,
-  score,
-  onPress,
-  variant = 'rail',
-  width,
-  railStart,
-  contentEntry,
-}: CatalogPosterCardProps) {
-  return (
-    <PosterCard
-      title={title}
-      poster={poster}
-      subtitle={subtitle}
-      score={rating ?? score}
-      onPress={onPress}
-      width={width ?? (variant === 'grid' ? undefined : layout.posterWidthRail)}
-      variant={variant}
-      railStart={railStart}
-      contentEntry={contentEntry}
-    />
-  );
-}
+export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
+  function CatalogPosterCard(
+    {
+      title,
+      poster,
+      subtitle,
+      rating,
+      score,
+      onPress,
+      onFocus,
+      onBlur,
+      variant = 'rail',
+      width,
+      railStart,
+      contentEntry,
+    },
+    ref,
+  ) {
+    return (
+      <PosterCard
+        ref={ref}
+        title={title}
+        poster={poster}
+        subtitle={subtitle}
+        score={rating ?? score}
+        onPress={onPress}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        width={width ?? (variant === 'grid' ? undefined : layout.posterWidthRail)}
+        variant={variant}
+        railStart={railStart}
+        contentEntry={contentEntry}
+      />
+    );
+  },
+);

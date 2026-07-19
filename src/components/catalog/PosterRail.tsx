@@ -1,5 +1,6 @@
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PaginatedContentRow } from '@/components/catalog/PaginatedContentRow';
+import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
 
 export interface RailItem {
   id: string | number;
@@ -35,6 +36,8 @@ export function PosterRail({
   isFetchingNextPage,
   onLoadMore,
 }: PosterRailProps) {
+  const { bindItem } = useTvRailFocusRestore(items.length);
+
   return (
     <PaginatedContentRow
       title={title}
@@ -48,17 +51,33 @@ export function PosterRail({
       isFetchingNextPage={isFetchingNextPage}
       onLoadMore={onLoadMore}
       onSeeAll={onSeeAll}
-      renderItem={(item, index) => (
-        <CatalogPosterCard
-          title={item.title}
-          poster={item.poster}
-          subtitle={item.subtitle}
-          rating={item.score}
-          onPress={() => onItemPress?.(item)}
-          variant="rail"
-          railStart={index === 0}
-        />
-      )}
+      renderItem={(item, index) => {
+        const railFocus = bindItem(index);
+        return (
+          <CatalogPosterCard
+            ref={railFocus.ref}
+            title={item.title}
+            poster={item.poster}
+            subtitle={item.subtitle}
+            rating={item.score}
+            onPress={() => onItemPress?.(item)}
+            onFocus={() => {
+              railFocus.onFocus?.();
+              if (
+                hasNextPage &&
+                !isFetchingNextPage &&
+                onLoadMore &&
+                index >= items.length - 3
+              ) {
+                onLoadMore();
+              }
+            }}
+            onBlur={railFocus.onBlur}
+            variant="rail"
+            railStart={index === 0}
+          />
+        );
+      }}
     />
   );
 }

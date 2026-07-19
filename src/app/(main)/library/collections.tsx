@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,12 +21,14 @@ import {
 } from '@/api/collections';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PosterGrid } from '@/components/catalog/PosterGrid';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import {
   collectionItemPath,
   collectionItemPoster,
   formatCollectionItemCount,
 } from '@/lib/collectionItems';
 import { colors, layout, radii, spacing } from '@/constants/aniverse';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 
 export default function CollectionsScreen() {
   const router = useRouter();
@@ -108,7 +110,11 @@ export default function CollectionsScreen() {
   }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      {...tvVerticalCatalogScrollProps}
+    >
       <View style={styles.createRow}>
         <TextInput
           style={styles.input}
@@ -117,13 +123,13 @@ export default function CollectionsScreen() {
           placeholder="Название новой коллекции"
           placeholderTextColor={colors.textSecondary}
         />
-        <Pressable
+        <TvFocusable
           style={[styles.createBtn, (!newName.trim() || createMut.isPending) && styles.btnDisabled]}
           disabled={!newName.trim() || createMut.isPending}
           onPress={() => createMut.mutate()}
         >
           <Text style={styles.createBtnLabel}>Создать</Text>
-        </Pressable>
+        </TvFocusable>
       </View>
 
       {createError ? <Text style={styles.error}>{createError}</Text> : null}
@@ -131,9 +137,9 @@ export default function CollectionsScreen() {
       {isError ? (
         <View style={styles.errorBox}>
           <Text style={styles.error}>Не удалось загрузить коллекции</Text>
-          <Pressable onPress={() => void refetch()}>
+          <TvFocusable onPress={() => void refetch()} style={styles.linkBtn}>
             <Text style={styles.link}>Повторить</Text>
-          </Pressable>
+          </TvFocusable>
         </View>
       ) : !collections.length ? (
         <Text style={styles.muted}>
@@ -144,10 +150,11 @@ export default function CollectionsScreen() {
           {collections.map((col, index) => {
             const preview = previewQueries[index]?.data?.items?.slice(0, 3) ?? [];
             return (
-              <Pressable
+              <TvFocusable
                 key={col.id}
                 style={[styles.card, selectedId === col.id && styles.cardSelected]}
                 onPress={() => setSelectedId(col.id)}
+                railStart={index === 0}
               >
                 <Text style={styles.cardTitle}>{col.name}</Text>
                 {col.description ? (
@@ -158,7 +165,7 @@ export default function CollectionsScreen() {
                 <Text style={styles.cardMeta}>
                   {formatCollectionItemCount(col.itemCount ?? preview.length)}
                 </Text>
-              </Pressable>
+              </TvFocusable>
             );
           })}
         </View>
@@ -175,7 +182,7 @@ export default function CollectionsScreen() {
                 </Text>
               ) : null}
             </View>
-            <Pressable
+            <TvFocusable
               style={styles.deleteBtn}
               disabled={deleteMut.isPending}
               onPress={() => confirmDeleteCollection(selectedId)}
@@ -183,7 +190,7 @@ export default function CollectionsScreen() {
               <Text style={styles.deleteLabel}>
                 {deleteMut.isPending ? 'Удаление…' : 'Удалить'}
               </Text>
-            </Pressable>
+            </TvFocusable>
           </View>
 
           {detailLoading ? (
@@ -191,9 +198,9 @@ export default function CollectionsScreen() {
           ) : detailError ? (
             <View style={styles.errorBox}>
               <Text style={styles.error}>Не удалось открыть коллекцию</Text>
-              <Pressable onPress={() => void refetchDetail()}>
+              <TvFocusable onPress={() => void refetchDetail()} style={styles.linkBtn}>
                 <Text style={styles.link}>Повторить</Text>
-              </Pressable>
+              </TvFocusable>
             </View>
           ) : !detail?.items.length ? (
             <Text style={styles.muted}>
@@ -201,7 +208,7 @@ export default function CollectionsScreen() {
             </Text>
           ) : (
             <PosterGrid>
-              {detail.items.map((item) => (
+              {detail.items.map((item, index) => (
                 <View key={item.id} style={styles.gridItem}>
                   <CatalogPosterCard
                     variant="grid"
@@ -210,15 +217,16 @@ export default function CollectionsScreen() {
                     poster={collectionItemPoster(item.mediaType, item.poster)}
                     subtitle={item.mediaType}
                     onPress={() => router.push(collectionItemPath(item) as '/')}
+                    railStart={index === 0}
                   />
-                  <Pressable
+                  <TvFocusable
                     style={styles.removeItemBtn}
                     onPress={() =>
                       removeItemMut.mutate({ collectionId: selectedId, itemId: item.id })
                     }
                   >
                     <Text style={styles.removeItemLabel}>×</Text>
-                  </Pressable>
+                  </TvFocusable>
                 </View>
               ))}
             </PosterGrid>
@@ -231,7 +239,11 @@ export default function CollectionsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { paddingBottom: spacing.xxl, gap: spacing.lg },
+  content: {
+    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xxl,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
   loader: { paddingVertical: spacing.xxl, alignItems: 'center' },
   createRow: { flexDirection: 'row', gap: spacing.sm },
   input: {
@@ -259,6 +271,11 @@ const styles = StyleSheet.create({
   },
   error: { color: colors.danger, fontSize: 14 },
   errorBox: { gap: spacing.sm },
+  linkBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
   link: { color: colors.brand, fontWeight: '600', fontSize: 14 },
   muted: { color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
   cards: { gap: spacing.md },

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -13,7 +13,8 @@ import {
 import { searchCatalog } from '@/api/catalog';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
 import { OnScreenKeyboard } from '@/components/auth/OnScreenKeyboard';
-import { colors, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { lampaDetailPath } from '@/lib/lampaDetail';
 import { animePoster } from '@/lib/poster';
 import {
@@ -34,6 +35,8 @@ const MEDIA_OPTIONS: { id: SearchMediaFilter; label: string }[] = [
 
 export default function SearchScreen() {
   const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
   const [query, setQuery] = useState('');
   const [media, setMedia] = useState<SearchMediaFilter>('all');
   const [animeItems, setAnimeItems] = useState<RailItem[]>([]);
@@ -41,6 +44,12 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showKeyboard, setShowKeyboard] = useState(Platform.isTV);
+
+  /** Only when returning from results — never on filter focus (causes bounce). */
+  const revealHeader = useCallback(() => {
+    if (!Platform.isTV || scrollYRef.current < 48) return;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
 
   const runSearch = async (q: string) => {
     const trimmed = q.trim();
@@ -106,23 +115,41 @@ export default function SearchScreen() {
     media === 'tv' ? 'Сериалы' : media === 'movie' ? 'Фильмы' : 'Фильмы и сериалы';
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Поиск</Text>
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.input}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Название аниме, фильма или сериала"
-          placeholderTextColor={colors.textSecondary}
-          onSubmitEditing={() => void runSearch(query)}
-        />
-        <Pressable style={styles.searchButton} onPress={() => void runSearch(query)}>
-          <Text style={styles.searchButtonLabel}>Найти</Text>
-        </Pressable>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      onScroll={(event) => {
+        scrollYRef.current = event.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
+    >
+      <View style={styles.topBar}>
+        <Text style={styles.title}>Поиск</Text>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.input}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Название аниме, фильма или сериала"
+            placeholderTextColor={colors.textSecondary}
+            onSubmitEditing={() => void runSearch(query)}
+            showSoftInputOnFocus={!Platform.isTV}
+            onFocus={revealHeader}
+          />
+          <TvFocusable
+            onPress={() => void runSearch(query)}
+            onFocus={revealHeader}
+            style={styles.searchButton}
+            focusedStyle={styles.searchButtonFocused}
+          >
+            <Text style={styles.searchButtonLabel}>Найти</Text>
+          </TvFocusable>
+        </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+      <View style={styles.filters}>
         {MEDIA_OPTIONS.map((option) => (
           <FilterChip
             key={option.id}
@@ -131,14 +158,14 @@ export default function SearchScreen() {
             onPress={() => setMedia(option.id)}
           />
         ))}
-      </ScrollView>
+      </View>
 
       {Platform.isTV && (
-        <Pressable onPress={() => setShowKeyboard((v) => !v)} style={styles.toggleKeyboard}>
+        <TvFocusable onPress={() => setShowKeyboard((v) => !v)} style={styles.toggleKeyboard}>
           <Text style={styles.toggleKeyboardLabel}>
             {showKeyboard ? 'Скрыть клавиатуру' : 'Показать клавиатуру'}
           </Text>
-        </Pressable>
+        </TvFocusable>
       )}
       {Platform.isTV && showKeyboard && <OnScreenKeyboard onKey={handleKey} />}
 
@@ -226,7 +253,7 @@ function FilterChip({
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       onPress={onPress}
-      style={[styles.chip, (active || focused) && styles.chipActive]}
+      style={[styles.chip, (active || focused) && styles.chipActive, focused && styles.chipFocused]}
     >
       <Text style={styles.chipLabel}>{label}</Text>
     </Pressable>
@@ -237,6 +264,10 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
     padding: Platform.isTV ? spacing.lg : spacing.xxl,
+    gap: Platform.isTV ? spacing.md : spacing.lg,
+    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xxl,
+  },
+  topBar: {
     gap: Platform.isTV ? spacing.md : spacing.lg,
   },
   title: {
@@ -265,23 +296,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  searchButtonFocused: {
+    borderColor: colors.text,
+    backgroundColor: colors.brand,
+    transform: [{ scale: 1.06 }],
+  },
   searchButtonLabel: {
     color: colors.text,
     fontWeight: '700',
   },
-  filters: { gap: spacing.sm },
+  filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: colors.bgCard,
-    borderWidth: 1,
+    borderWidth: tvFocus.borderWidth,
     borderColor: colors.border,
-    marginRight: spacing.sm,
   },
   chipActive: {
     borderColor: colors.brand,
     backgroundColor: 'rgba(195,192,255,0.12)',
+  },
+  chipFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
   },
   chipLabel: {
     color: colors.text,

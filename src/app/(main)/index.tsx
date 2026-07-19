@@ -19,6 +19,8 @@ import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
 import { resolveEnabledContentTypes } from '@/lib/homeSettings';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 
+const isTv = Platform.isTV;
+
 export default function HomeScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { config, persist, ready } = useHomeCatalogConfig();
@@ -43,30 +45,36 @@ export default function HomeScreen() {
     queryFn: fetchLampaCategories,
   });
 
+  // Quick Actions is phone-only; skip these fetches on TV release builds.
   const { data: savedAnime = [] } = useQuery({
     queryKey: ['library-anime', 'include-anime'],
     queryFn: fetchSavedAnimeLibrary,
+    enabled: !isTv,
   });
 
   const { data: savedLampa = [] } = useQuery({
     queryKey: ['library-lampa', 'include-lampa'],
     queryFn: fetchSavedLampaLibrary,
+    enabled: !isTv,
   });
 
   const { data: history = [] } = useQuery({
     queryKey: ['history'],
     queryFn: fetchHistory,
+    enabled: !isTv,
   });
 
   const { data: bookmarks = [] } = useQuery({
     queryKey: ['library-favorites'],
     queryFn: fetchFavoriteBookmarks,
+    enabled: !isTv,
     retry: false,
   });
 
   const { data: collections = [] } = useQuery({
     queryKey: ['collections'],
     queryFn: fetchCollections,
+    enabled: !isTv,
     retry: false,
   });
 
@@ -94,12 +102,17 @@ export default function HomeScreen() {
         <ContinueWatchingRow items={continueItems} />
 
         <QuickActionsSection
-          counts={{
-            bookmarks: bookmarks.length,
-            lists: savedAnime.length + savedLampa.length,
-            collections: collections.length,
-            history: history.length,
-          }}
+          contentEntry={continueItems.length === 0}
+          counts={
+            isTv
+              ? undefined
+              : {
+                  bookmarks: bookmarks.length,
+                  lists: savedAnime.length + savedLampa.length,
+                  collections: collections.length,
+                  history: history.length,
+                }
+          }
         />
 
         {enabledTypes.includes('anime') ? (

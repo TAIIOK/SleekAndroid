@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { colors, layout, radii, spacing } from '@/constants/aniverse';
+import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 export interface QuickActionCounts {
   bookmarks: number;
@@ -14,7 +17,10 @@ export interface QuickActionCounts {
 }
 
 interface QuickActionsSectionProps {
-  counts: QuickActionCounts;
+  /** When omitted (TV), cards stay enabled and use static subtitles — no count fetches. */
+  counts?: QuickActionCounts;
+  /** First card is the top content entry when continue-watching is empty. */
+  contentEntry?: boolean;
 }
 
 const actions = [
@@ -23,21 +29,23 @@ const actions = [
     title: 'Закладки',
     icon: 'bookmark' as const,
     href: '/library/bookmarks',
-    subtitle: (n: number) => (n === 0 ? 'Пусто' : itemsLabel(n)),
+    subtitle: (n: number | undefined) =>
+      n == null ? 'Избранное' : n === 0 ? 'Пусто' : itemsLabel(n),
   },
   {
     key: 'lists' as const,
     title: 'Мои списки',
     icon: 'list' as const,
     href: '/library/lists',
-    subtitle: (n: number) => (n === 0 ? 'Пусто' : 'Персональные подборки'),
+    subtitle: () => 'Персональные подборки',
   },
   {
     key: 'collections' as const,
     title: 'Коллекции',
     icon: 'albums' as const,
     href: '/library/collections',
-    subtitle: (n: number) => (n === 0 ? 'Пусто' : itemsLabel(n)),
+    subtitle: (n: number | undefined) =>
+      n == null ? 'Ваши подборки' : n === 0 ? 'Пусто' : itemsLabel(n),
   },
   {
     key: 'history' as const,
@@ -61,13 +69,38 @@ function itemsLabel(n: number): string {
   return `${n} элементов`;
 }
 
-export function QuickActionsSection({ counts }: QuickActionsSectionProps) {
-  if (Platform.isTV) return null;
-
+export function QuickActionsSection({ counts, contentEntry = false }: QuickActionsSectionProps) {
   const actionByKey = Object.fromEntries(actions.map((action) => [action.key, action])) as Record<
     (typeof actions)[number]['key'],
     (typeof actions)[number]
   >;
+  const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
+
+  if (Platform.isTV) {
+    return (
+      <View style={styles.wrap} {...tvRailSectionSnapProps}>
+        <SectionHeader title="Быстрые действия" variant="quick" />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.rail, { paddingHorizontal: horizontalPad }]}
+          {...tvHorizontalCatalogScrollProps}
+        >
+          {actions.map((action, index) => (
+            <QuickActionCard
+              key={action.key}
+              action={action}
+              count={counts?.[action.key]}
+              alwaysEnabled
+              railStart={index === 0}
+              contentEntry={contentEntry && index === 0}
+              spaced
+            />
+          ))}
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -87,7 +120,7 @@ export function QuickActionsSection({ counts }: QuickActionsSectionProps) {
                 <QuickActionCard
                   key={key}
                   action={actionByKey[key]}
-                  count={counts[key]}
+                  count={counts?.[key] ?? 0}
                 />
               ))}
             </View>
@@ -101,22 +134,38 @@ export function QuickActionsSection({ counts }: QuickActionsSectionProps) {
 function QuickActionCard({
   action,
   count,
+  alwaysEnabled = false,
+  railStart = false,
+  contentEntry = false,
+  spaced = false,
 }: {
   action: (typeof actions)[number];
-  count: number;
+  count?: number;
+  alwaysEnabled?: boolean;
+  railStart?: boolean;
+  contentEntry?: boolean;
+  spaced?: boolean;
 }) {
   const router = useRouter();
-  const enabled = action.key === 'history' || action.key === 'lists' || count > 0;
+  const [focused, setFocused] = useState(false);
+  const shellFocus = useTvShellFocus();
+  const enabled =
+    alwaysEnabled || action.key === 'history' || action.key === 'lists' || (count ?? 0) > 0;
+  const exitLeft = Platform.isTV && railStart;
+  const exitUp = Platform.isTV && contentEntry;
+  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   const inner = (
     <>
       <View style={styles.cardHeader}>
-        <View style={styles.iconWrap}>
-          <Ionicons name={action.icon} size={14} color={colors.brand} />
+        <View style={[styles.iconWrap, focused && styles.iconWrapFocused]}>
+          <Ionicons name={action.icon} size={Platform.isTV ? 18 : 14} color={colors.brand} />
         </View>
-        <Text style={styles.cardTitle}>{action.title}</Text>
+        <Text style={[styles.cardTitle, focused && styles.cardTitleFocused]}>{action.title}</Text>
       </View>
-      <Text style={styles.cardSubtitle}>{action.subtitle(count)}</Text>
+      <Text style={[styles.cardSubtitle, focused && styles.cardSubtitleFocused]}>
+        {action.subtitle(count)}
+      </Text>
     </>
   );
 
@@ -136,14 +185,32 @@ function QuickActionCard({
   return (
     <Pressable
       disabled={!enabled}
+      focusable={enabled}
       onPress={() => router.push(action.href as '/')}
-      style={[styles.cardPressable, !enabled && styles.cardDisabled]}
+      onFocus={() => {
+        setFocused(true);
+        if (exitLeft) shellFocus?.setExitLeftEnabled(true);
+        if (exitUp) shellFocus?.setExitUpEnabled(true);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        if (exitLeft) shellFocus?.setExitLeftEnabled(false);
+        if (exitUp) shellFocus?.setExitUpEnabled(false);
+      }}
+      style={[
+        styles.cardPressable,
+        spaced && styles.cardSpaced,
+        !enabled && styles.cardDisabled,
+        focused && styles.cardFocused,
+      ]}
+      {...(contentEntry && Platform.isTV ? { hasTVPreferredFocus: true } : {})}
+      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
     >
       <LinearGradient
         colors={['#1b1b24', '#1f1f28']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.card}
+        style={[styles.card, focused && styles.cardInnerFocused]}
       >
         {inner}
       </LinearGradient>
@@ -153,11 +220,13 @@ function QuickActionCard({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 32,
+    marginBottom: Platform.isTV ? spacing.md : 32,
   },
   rail: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: Platform.isTV ? 0 : spacing.md,
+    paddingTop: Platform.isTV ? 8 : 0,
+    paddingBottom: Platform.isTV ? 10 : spacing.sm,
+    gap: Platform.isTV ? 10 : 0,
   },
   grid: {
     flexDirection: 'row',
@@ -171,16 +240,29 @@ const styles = StyleSheet.create({
     height: layout.quickActionCardHeight,
     borderRadius: radii.quickAction,
     overflow: 'hidden',
+    borderWidth: Platform.isTV ? tvFocus.borderWidth : 0,
+    borderColor: 'transparent',
+  },
+  cardSpaced: {
+    marginRight: 0,
+  },
+  cardFocused: {
+    zIndex: 2,
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.wash,
   },
   card: {
     flex: 1,
-    width: layout.quickActionCardWidth,
-    height: layout.quickActionCardHeight,
+    width: '100%',
+    height: '100%',
     borderRadius: radii.quickAction,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    padding: 10,
+    padding: Platform.isTV ? 14 : 10,
     justifyContent: 'space-between',
+  },
+  cardInnerFocused: {
+    borderColor: 'transparent',
   },
   cardDisabled: {
     opacity: 0.55,
@@ -191,25 +273,35 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   iconWrap: {
-    width: 28,
-    height: 28,
+    width: Platform.isTV ? 32 : 28,
+    height: Platform.isTV ? 32 : 28,
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconWrapFocused: {
+    backgroundColor: 'rgba(195,192,255,0.22)',
+  },
   cardTitle: {
     color: colors.text,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: Platform.isTV ? 16 : 14,
+    lineHeight: Platform.isTV ? 22 : 18,
     fontWeight: '600',
     flex: 1,
     backgroundColor: 'transparent',
   },
+  cardTitleFocused: {
+    color: tvFocus.titleColor,
+    fontWeight: '700',
+  },
   cardSubtitle: {
     color: colors.textSecondary,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: Platform.isTV ? 13 : 11,
+    lineHeight: Platform.isTV ? 18 : 15,
     backgroundColor: 'transparent',
+  },
+  cardSubtitleFocused: {
+    color: colors.brand,
   },
 });

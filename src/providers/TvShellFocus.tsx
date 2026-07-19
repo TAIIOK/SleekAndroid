@@ -4,9 +4,10 @@ import {
   useContext,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
+import { findNodeHandle, Platform } from 'react-native';
 
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
 
@@ -16,11 +17,15 @@ type FocusHost = {
 
 interface TvShellFocusValue {
   registerSidebarAnchor: (node: unknown) => void;
+  /** Native tag for `nextFocusLeft` on rail-edge controls (avoids wild Left focus search). */
+  sidebarNativeTag: number | undefined;
   /** True while a leftmost rail/continue card owns focus — Left exits to sidebar. */
   setExitLeftEnabled: (enabled: boolean) => void;
   /** True while the top content entry owns focus — Up exits to sidebar. */
   setExitUpEnabled: (enabled: boolean) => void;
   requestSidebarFocus: () => void;
+  /** Drop armed Left/Up exits (call on route change). */
+  resetExitFlags: () => void;
 }
 
 const TvShellFocusContext = createContext<TvShellFocusValue | null>(null);
@@ -31,7 +36,7 @@ const TvShellFocusContext = createContext<TvShellFocusValue | null>(null);
  * Without this arm delay, Left from the 2nd card lands on the 1st then immediately
  * exits to the sidebar in the same press.
  */
-const EXIT_ARM_MS = 180;
+const EXIT_ARM_MS = 220;
 
 function useArmedExitFlag() {
   const countRef = useRef(0);
@@ -45,6 +50,12 @@ function useArmedExitFlag() {
     }
   };
 
+  const reset = useCallback(() => {
+    countRef.current = 0;
+    clearTimer();
+    armedRef.current = false;
+  }, []);
+
   const setEnabled = useCallback((enabled: boolean) => {
     const next = Math.max(0, countRef.current + (enabled ? 1 : -1));
     countRef.current = next;
@@ -55,7 +66,8 @@ function useArmedExitFlag() {
       return;
     }
 
-    if (enabled && next === 1) {
+    // Re-arm whenever an edge control gains focus so a fresh 220ms window starts.
+    if (enabled) {
       armedRef.current = false;
       clearTimer();
       timerRef.current = setTimeout(() => {
@@ -65,36 +77,49 @@ function useArmedExitFlag() {
     }
   }, []);
 
-  return { armedRef, setEnabled };
+  return { armedRef, setEnabled, reset };
 }
 
 /**
  * TV sidebar focus bridge.
  * Horizontal ScrollViews on Android TV often swallow `nextFocusLeft`, so we
  * listen for D-pad Left/Up and call `requestTVFocus()` on the sidebar anchor.
+ * Rail-edge controls also set `nextFocusLeft` to the sidebar tag when available
+ * so Left does not 2D-search across the whole page.
  */
 export function TvShellFocusProvider({ children }: { children: ReactNode }) {
   const hostRef = useRef<FocusHost | null>(null);
+  const [sidebarNativeTag, setSidebarNativeTag] = useState<number | undefined>(undefined);
   const exitLeft = useArmedExitFlag();
   const exitUp = useArmedExitFlag();
 
   const registerSidebarAnchor = useCallback((node: unknown) => {
     hostRef.current = (node as FocusHost) ?? null;
+    const tag =
+      node != null ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined) : undefined;
+    setSidebarNativeTag((prev) => (prev === tag ? prev : tag));
   }, []);
 
   const requestSidebarFocus = useCallback(() => {
     hostRef.current?.requestTVFocus?.();
   }, []);
 
+  const resetExitFlags = useCallback(() => {
+    exitLeft.reset();
+    exitUp.reset();
+  }, [exitLeft.reset, exitUp.reset]);
+
   useTvEventHandlerSafe((event) => {
     // rn-tvos Android defaults to key-up HW events. Skip key-down if both fire.
     if (event.eventKeyAction === 0) return;
 
     if (event.eventType === 'left' && exitLeft.armedRef.current) {
+      exitLeft.armedRef.current = false;
       hostRef.current?.requestTVFocus?.();
       return;
     }
     if (event.eventType === 'up' && exitUp.armedRef.current) {
+      exitUp.armedRef.current = false;
       hostRef.current?.requestTVFocus?.();
     }
   });
@@ -102,11 +127,20 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       registerSidebarAnchor,
+      sidebarNativeTag,
       setExitLeftEnabled: exitLeft.setEnabled,
       setExitUpEnabled: exitUp.setEnabled,
       requestSidebarFocus,
+      resetExitFlags,
     }),
-    [registerSidebarAnchor, exitLeft.setEnabled, exitUp.setEnabled, requestSidebarFocus],
+    [
+      registerSidebarAnchor,
+      sidebarNativeTag,
+      exitLeft.setEnabled,
+      exitUp.setEnabled,
+      requestSidebarFocus,
+      resetExitFlags,
+    ],
   );
 
   if (!Platform.isTV) {

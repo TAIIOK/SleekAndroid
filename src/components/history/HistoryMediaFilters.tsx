@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import type { HistoryMediaFilter } from '@/lib/history';
 
 const OPTIONS: { id: HistoryMediaFilter; label: string }[] = [
@@ -19,52 +19,34 @@ export function HistoryMediaFilters({
   onChange: (value: HistoryMediaFilter) => void;
 }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+    <View style={styles.row}>
       {OPTIONS.map((option) => (
-        <FilterChip
+        <TvFocusable
           key={option.id}
-          label={option.label}
-          active={value === option.id}
           onPress={() => onChange(option.id)}
-        />
+          style={[styles.chip, value === option.id && styles.chipActive]}
+        >
+          <Text style={styles.chipLabel}>{option.label}</Text>
+        </TvFocusable>
       ))}
-    </ScrollView>
-  );
-}
-
-function FilterChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <Pressable
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onPress={onPress}
-      style={[styles.chip, (active || focused) && styles.chipActive]}
-    >
-      <Text style={styles.chipLabel}>{label}</Text>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     paddingBottom: spacing.sm,
+    paddingTop: Platform.isTV ? 4 : 0,
   },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: colors.bgCard,
-    borderWidth: 1,
+    borderWidth: tvFocus.borderWidth,
     borderColor: colors.border,
   },
   chipActive: {

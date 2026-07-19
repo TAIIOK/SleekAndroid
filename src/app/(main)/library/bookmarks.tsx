@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchFavoriteBookmarks } from '@/api/library';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PosterGrid } from '@/components/catalog/PosterGrid';
 import { colors, layout, spacing } from '@/constants/aniverse';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 
 export default function BookmarksScreen() {
   const router = useRouter();
@@ -15,14 +16,18 @@ export default function BookmarksScreen() {
   });
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      {...tvVerticalCatalogScrollProps}
+    >
       {isLoading ? (
         <ActivityIndicator color={colors.brand} style={styles.loader} />
       ) : !bookmarks.length ? (
         <Text style={styles.empty}>Закладок пока нет</Text>
       ) : (
         <PosterGrid>
-          {bookmarks.map((item) => (
+          {bookmarks.map((item, index) => (
             <CatalogPosterCard
               key={`${item.kind}-${item.id}`}
               variant="grid"
@@ -31,6 +36,7 @@ export default function BookmarksScreen() {
               poster={item.poster}
               subtitle={item.subtitle}
               onPress={() => router.push(item.to as '/')}
+              railStart={index === 0}
             />
           ))}
         </PosterGrid>
@@ -41,11 +47,12 @@ export default function BookmarksScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { paddingBottom: spacing.xl },
+  content: { paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xl },
   loader: { marginTop: spacing.xxl },
   empty: {
     color: colors.textSecondary,
     fontSize: 15,
     paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
 });

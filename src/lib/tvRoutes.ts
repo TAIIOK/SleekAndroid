@@ -4,6 +4,7 @@ const TV_ALLOWED_PREFIXES = [
   '/watch',
   '/search',
   '/history',
+  '/library',
   '/anime',
   '/movies',
   '/series',
@@ -20,9 +21,6 @@ export function isTvAllowedPath(pathname: string): boolean {
 }
 
 export function tvRedirectPath(pathname: string): string {
-  if (pathname.startsWith('/library') && !pathname.startsWith('/history')) {
-    return '/history';
-  }
   if (pathname.startsWith('/manga')) return '/anime';
   if (pathname === '/downloads' || pathname.startsWith('/downloads/')) return '/';
   if (pathname === '/feed' || pathname.startsWith('/feed/')) return '/';

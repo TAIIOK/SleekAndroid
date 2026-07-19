@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import {
   fetchLampaSectionItems,
@@ -9,12 +9,14 @@ import {
   mapLampaToRailItem,
   type LampaSection,
 } from '@/api/catalog';
+import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
 import {
   filterLampaSectionsForHomeKind,
   resolveLampaSectionEndpoints,
 } from '@/lib/homeSettings';
 import type { ContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
+import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
 import type { CatalogHomeConfig } from '@/types/homeConfig';
 
 function LampaSectionRail({
@@ -29,19 +31,35 @@ function LampaSectionRail({
   excludeLampaKeys?: ReadonlySet<string>;
 }) {
   const isRecommendation = isLampaRecommendationEndpoint(section.endpoint);
-  const { data = [], isLoading, isError, error } = useQuery({
-    queryKey: ['lampa-items', kind, section.endpoint, section.fetch?.urlPath],
-    queryFn: () => fetchLampaSectionItems(kind, section, 1, 24),
+  const pageSize = CATALOG_RAIL_PAGE_SIZE;
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['lampa-items', kind, section.endpoint, section.fetch?.urlPath, pageSize],
+    queryFn: ({ pageParam }) => fetchLampaSectionItems(kind, section, pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.length < pageSize) return undefined;
+      return allPages.length + 1;
+    },
     retry: isRecommendation ? false : 1,
   });
 
-  if (!isLoading && (isError || data.length === 0)) {
+  const rawItems = useMemo(() => (data?.pages ?? []).flat(), [data]);
+
+  if (!isLoading && (isError || rawItems.length === 0)) {
     return null;
   }
 
   const visibleItems = excludeLampaKeys?.size
-    ? data.filter((item) => !excludeLampaKeys.has(`${kind}:${item.id}`))
-    : data;
+    ? rawItems.filter((item) => !excludeLampaKeys.has(`${kind}:${item.id}`))
+    : rawItems;
 
   if (!isLoading && visibleItems.length === 0) {
     return null;
@@ -54,6 +72,11 @@ function LampaSectionRail({
       loading={isLoading}
       onItemPress={onItemPress}
       errorMessage={isError && !isRecommendation ? (error as Error).message : undefined}
+      hasNextPage={hasNextPage}
+      isFetchingNextPage={isFetchingNextPage}
+      onLoadMore={() => {
+        void fetchNextPage();
+      }}
     />
   );
 }
@@ -118,13 +141,14 @@ export function LampaKindRails({
   return (
     <>
       {visibleSections.map((section) => (
-        <LampaSectionRail
-          key={`${kind}-${section.endpoint}`}
-          kind={kind}
-          section={section}
-          onItemPress={openItem}
-          excludeLampaKeys={home ? continueWatchingDedupe?.lampaKeys : undefined}
-        />
+        <LazyCatalogRail key={`${kind}-${section.endpoint}`}>
+          <LampaSectionRail
+            kind={kind}
+            section={section}
+            onItemPress={openItem}
+            excludeLampaKeys={home ? continueWatchingDedupe?.lampaKeys : undefined}
+          />
+        </LazyCatalogRail>
       ))}
     </>
   );

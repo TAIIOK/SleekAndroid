@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PosterGrid } from '@/components/catalog/PosterGrid';
@@ -72,20 +72,26 @@ export function MyListsContent({
   }
 
   if (!groupByStatus) {
+    let posterIndex = 0;
     return (
       <PosterGrid>
-        {visibleAnime.map((item) => (
-          <CatalogPosterCard
-            key={`anime-${item.animeId}`}
-            variant="grid"
-            width={cardWidth}
-            title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
-            poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
-            subtitle="Аниме"
-            onPress={() => router.push(`/anime/${item.animeId}` as '/')}
-          />
-        ))}
+        {visibleAnime.map((item) => {
+          const index = posterIndex++;
+          return (
+            <CatalogPosterCard
+              key={`anime-${item.animeId}`}
+              variant="grid"
+              width={cardWidth}
+              title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
+              poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
+              subtitle="Аниме"
+              onPress={() => router.push(`/anime/${item.animeId}` as '/')}
+              railStart={index === 0}
+            />
+          );
+        })}
         {visibleLampa.map((row) => {
+          const index = posterIndex++;
           const kind = getLampaKind(row);
           const nested = (row.lampa ?? row) as Record<string, unknown>;
           return (
@@ -101,6 +107,7 @@ export function MyListsContent({
               }
               subtitle={kind === 'tv' ? 'Сериал' : 'Фильм'}
               onPress={() => router.push(lampaDetailPath(kind, nested) as '/')}
+              railStart={index === 0}
             />
           );
         })}
@@ -110,6 +117,7 @@ export function MyListsContent({
 
   const animeGroups = groupAnimeByStatus(visibleAnime);
   const lampaGroups = groupLampaByStatus(visibleLampa, media);
+  let posterIndex = 0;
 
   return (
     <View style={styles.sections}>
@@ -128,17 +136,21 @@ export function MyListsContent({
               showAccent={Platform.isTV}
             />
             <PosterGrid>
-              {group.items.map((item) => (
-                <CatalogPosterCard
-                  key={`anime-${item.animeId}`}
-                  variant="grid"
-                  width={cardWidth}
-                  title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
-                  poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
-                  subtitle="Аниме"
-                  onPress={() => router.push(`/anime/${item.animeId}` as '/')}
-                />
-              ))}
+              {group.items.map((item) => {
+                const index = posterIndex++;
+                return (
+                  <CatalogPosterCard
+                    key={`anime-${item.animeId}`}
+                    variant="grid"
+                    width={cardWidth}
+                    title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
+                    poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
+                    subtitle="Аниме"
+                    onPress={() => router.push(`/anime/${item.animeId}` as '/')}
+                    railStart={index === 0}
+                  />
+                );
+              })}
             </PosterGrid>
           </View>
         ) : null,
@@ -161,6 +173,7 @@ export function MyListsContent({
             />
             <PosterGrid>
               {group.items.map((row) => {
+                const index = posterIndex++;
                 const kind = getLampaKind(row);
                 const nested = (row.lampa ?? row) as Record<string, unknown>;
                 return (
@@ -176,6 +189,7 @@ export function MyListsContent({
                     }
                     subtitle={kind === 'tv' ? 'Сериал' : 'Фильм'}
                     onPress={() => router.push(lampaDetailPath(kind, nested) as '/')}
+                    railStart={index === 0}
                   />
                 );
               })}

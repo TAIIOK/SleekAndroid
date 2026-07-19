@@ -18,10 +18,16 @@ Port the full watch experience into `aniverse-tv` on `expo-video`: TV remote HUD
 ### TV UI and remote
 
 - [x] Panel: timeline → transport → options; auto-hide 3s while playing; hint ~2.5s
+- [x] TV panel visual: bottom fade, circular transport, labeled option pills, timeline thumb (site-like HUD)
 - [x] Hidden panel: ←/→ seek (prefs seconds), ↑/↓ show panel, OK play/pause, Back exit
 - [x] Visible panel: D-pad focus; Back hides panel or closes overlay before exit
 - [x] Overlays: dubbing, quality, connection, delivery, episodes, settings
+- [x] Long overlay lists scroll only when the focused row leaves the viewport; ↑/↓ navigation is rate-limited (~150ms)
+- [x] Panel options chip cycles video framing (`contain` → `cover` → `fill`) without opening settings
 - [x] Paused center badge; loading indicator; skip prompt button
+- [x] Invisible focusable sink (`hasTVPreferredFocus`) so Android TV delivers HW keys to `useTVEventHandler` when the HUD is software-focus only
+- [x] Overlay / skip / error `Pressable`s use `focusable={false}` so they do not steal focus from the sink
+- [x] Remote handler ignores `eventKeyAction === 0` (key-down) to avoid double seek/play
 
 ### Phone UI
 
@@ -65,4 +71,5 @@ Port the full watch experience into `aniverse-tv` on `expo-video`: TV remote HUD
 
 - Source of truth: `site` `TvVideoPlayer`, `useTvPlayerRemote`, desktop `VideoPlayer`, `WatchPage`.
 - Visual language uses `colors` / glass tokens; not pixel-perfect CSS copy.
+- Android TV: `useTVEventHandler` only fires when a focusable view is focused (rn-tvos#584); player HUD is software-focus, so `TvVideoPlayer` keeps a 1×1 focus sink.
 - Out of scope: ambient backdrop, PiP/cast, hover scrub preview, Norigin spatial nav.

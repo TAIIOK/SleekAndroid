@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { View } from 'react-native';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import {
   fetchAnimeCategories,
@@ -8,7 +9,9 @@ import {
   fetchAnimeRecommendationFeed,
   type CatalogShowcase,
 } from '@/api/catalog';
+import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
+import { useNearViewport } from '@/hooks/useNearViewport';
 import {
   dedupeAnimeRailsByPath,
   isHomeExcludedAnimeRecommendationSection,
@@ -18,6 +21,8 @@ import {
   resolveRegularAnimeShowcaseIds,
 } from '@/lib/homeSettings';
 import type { ContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
+import { estimateCatalogRailHeight } from '@/lib/catalogRailLayout';
+import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
 import { mapAnimeToRailItem } from '@/lib/poster';
 import type { CatalogHomeConfig } from '@/types/homeConfig';
 
@@ -28,18 +33,42 @@ function AnimeShowcaseRail({
   showcase: CatalogShowcase;
   onItemPress: (item: RailItem) => void;
 }) {
-  const { data = [], isLoading, isError, error } = useQuery({
-    queryKey: ['anime-list', showcase.path],
-    queryFn: () => fetchAnimeList(showcase.path, 1, 24),
+  const pageSize = CATALOG_RAIL_PAGE_SIZE;
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['anime-list', showcase.path, pageSize],
+    queryFn: ({ pageParam }) => fetchAnimeList(showcase.path, pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.length < pageSize) return undefined;
+      return allPages.length + 1;
+    },
   });
+
+  const items = useMemo(
+    () => (data?.pages ?? []).flatMap((page) => page.map(mapAnimeToRailItem)),
+    [data],
+  );
 
   return (
     <PosterRail
       title={showcase.name}
-      items={data.map(mapAnimeToRailItem)}
+      items={items}
       loading={isLoading}
       onItemPress={onItemPress}
       errorMessage={isError ? (error as Error).message : undefined}
+      hasNextPage={hasNextPage}
+      isFetchingNextPage={isFetchingNextPage}
+      onLoadMore={() => {
+        void fetchNextPage();
+      }}
     />
   );
 }
@@ -57,6 +86,7 @@ function AnimeRecommendationRails({
   forHome?: boolean;
   continueWatchingDedupe?: ContinueWatchingDedupeKeys;
 }) {
+  const { ref, active, onLayoutCheck } = useNearViewport();
   const feedSectionIds = useMemo(
     () => resolveRecommendationFeedSectionIds(enabledShowcaseIds),
     [enabledShowcaseIds],
@@ -67,10 +97,11 @@ function AnimeRecommendationRails({
     [showcases],
   );
 
+  const pageSize = CATALOG_RAIL_PAGE_SIZE;
   const { data: feedSections = [], isLoading } = useQuery({
-    queryKey: ['anime-recommendations-feed', feedSectionIds.join(',')],
-    queryFn: () => fetchAnimeRecommendationFeed(24),
-    enabled: feedSectionIds.length > 0,
+    queryKey: ['anime-recommendations-feed', feedSectionIds.join(','), pageSize],
+    queryFn: () => fetchAnimeRecommendationFeed(pageSize),
+    enabled: active && feedSectionIds.length > 0,
   });
 
   const visibleSections = useMemo(() => {
@@ -101,18 +132,33 @@ function AnimeRecommendationRails({
 
   if (!feedSectionIds.length) return null;
 
+  if (!active) {
+    const placeholderRails = Math.min(Math.max(feedSectionIds.length, 1), 4);
+    return (
+      <View
+        ref={ref}
+        collapsable={false}
+        onLayout={onLayoutCheck}
+        style={{ minHeight: estimateCatalogRailHeight() * placeholderRails }}
+      />
+    );
+  }
+
   return (
-    <>
+    <View ref={ref} collapsable={false} onLayout={onLayoutCheck}>
+      {isLoading && !visibleSections.length ? (
+        <PosterRail title="Рекомендации" items={[]} loading onItemPress={() => {}} />
+      ) : null}
       {visibleSections.map((section) => (
-        <PosterRail
-          key={section.id}
-          title={section.title}
-          items={section.items.map(mapAnimeToRailItem)}
-          loading={isLoading}
-          onItemPress={onItemPress}
-        />
+        <LazyCatalogRail key={section.id}>
+          <PosterRail
+            title={section.title}
+            items={section.items.map(mapAnimeToRailItem)}
+            onItemPress={onItemPress}
+          />
+        </LazyCatalogRail>
       ))}
-    </>
+    </View>
   );
 }
 
@@ -180,14 +226,17 @@ export function AnimeCatalogRails({
         continueWatchingDedupe={continueWatchingDedupe}
       />
       {regularShowcases.map((showcase) => (
-        <AnimeShowcaseRail key={showcase.id} showcase={showcase} onItemPress={openAnime} />
+        <LazyCatalogRail key={showcase.id}>
+          <AnimeShowcaseRail showcase={showcase} onItemPress={openAnime} />
+        </LazyCatalogRail>
       ))}
       {customSections.map((section) => (
-        <AnimeShowcaseRail
-          key={section.id}
-          showcase={{ id: section.id, name: section.title, path: section.path }}
-          onItemPress={openAnime}
-        />
+        <LazyCatalogRail key={section.id}>
+          <AnimeShowcaseRail
+            showcase={{ id: section.id, name: section.title, path: section.path }}
+            onItemPress={openAnime}
+          />
+        </LazyCatalogRail>
       ))}
     </>
   );

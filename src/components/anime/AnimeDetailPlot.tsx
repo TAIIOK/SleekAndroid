@@ -13,7 +13,7 @@ interface AnimeDetailPlotProps {
 export function AnimeDetailPlot({ detail }: AnimeDetailPlotProps) {
   const [expanded, setExpanded] = useState(false);
   const desc = detail.description?.trim() ?? '';
-  const limit = 420;
+  const limit = Platform.isTV ? 320 : 420;
   const needsExpand = desc.length > limit;
   const cut = desc.lastIndexOf(' ', limit);
   const displayText =
@@ -55,20 +55,21 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: Platform.isTV ? 20 : 18,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
   body: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 16 : 14,
-    lineHeight: Platform.isTV ? 26 : 22,
+    fontSize: Platform.isTV ? 14 : 14,
+    lineHeight: Platform.isTV ? 22 : 22,
   },
   more: {
     alignSelf: 'flex-start',
     marginTop: spacing.xs,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingVertical: Platform.isTV ? 8 : 6,
+    paddingHorizontal: Platform.isTV ? 8 : 4,
+    justifyContent: 'center',
   },
   moreLabel: {
     color: colors.brand,

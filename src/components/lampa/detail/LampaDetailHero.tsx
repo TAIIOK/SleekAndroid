@@ -16,6 +16,8 @@ import {
   lampaYear,
   localizedLampaStatus,
 } from '@/lib/lampaDetail';
+import { lampaPosterPath } from '@/lib/poster';
+import type { CollectionItemInput } from '@/types/collection';
 
 interface LampaDetailHeroProps {
   detail: LampaDetail;
@@ -28,6 +30,7 @@ interface LampaDetailHeroProps {
   userStatus?: string;
   isFavorite?: boolean;
   libraryDisabled?: boolean;
+  collectionItem?: CollectionItemInput | null;
   onWatch: () => void;
   onOpenSources?: () => void;
   onStatusChange: (status: UserListStatus) => void;
@@ -45,6 +48,7 @@ export function LampaDetailHero({
   userStatus,
   isFavorite,
   libraryDisabled,
+  collectionItem,
   onWatch,
   onOpenSources,
   onStatusChange,
@@ -124,6 +128,14 @@ export function LampaDetailHero({
               userStatus={userStatus}
               isFavorite={isFavorite}
               disabled={libraryDisabled}
+              collectionItem={
+                collectionItem ?? {
+                  mediaType: 'lampa',
+                  mediaId: `${kind === 'home' ? 'tv' : kind}:${detail.id ?? ''}`,
+                  title: title || undefined,
+                  poster: lampaPosterPath(detail),
+                }
+              }
               onStatusChange={onStatusChange}
               onToggleFavorite={onToggleFavorite}
               extraActions={

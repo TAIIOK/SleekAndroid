@@ -1,9 +1,15 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { TvPlayerButtonId, TvPlayerPanelFocus } from '@/components/player/tv/tvPlayerTypes';
-import { colors, spacing } from '@/constants/aniverse';
+import { colors, radii, spacing } from '@/constants/aniverse';
 import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
-import { formatPlaybackRate, type PlayerPreferences } from '@/lib/playerPreferences';
+import {
+  formatPlaybackRate,
+  videoFitLabel,
+  type PlayerPreferences,
+} from '@/lib/playerPreferences';
 
 interface TvPlayerPanelProps {
   visible: boolean;
@@ -26,18 +32,57 @@ interface TvPlayerPanelProps {
   selectedDelivery?: string;
 }
 
-function FocusChip({
-  label,
+function TransportButton({
   focused,
-  large,
+  play,
+  children,
 }: {
-  label: string;
   focused: boolean;
-  large?: boolean;
+  play?: boolean;
+  children: ReactNode;
 }) {
   return (
-    <View style={[styles.chip, large && styles.chipLarge, focused && styles.chipFocused]}>
-      <Text style={[styles.chipText, large && styles.chipTextLarge]}>{label}</Text>
+    <View
+      style={[
+        styles.transportBtn,
+        play && styles.transportBtnPlay,
+        focused && styles.transportBtnFocused,
+      ]}
+    >
+      <Text
+        style={[
+          styles.transportBtnText,
+          play && styles.transportBtnTextPlay,
+          focused && styles.transportBtnTextFocused,
+        ]}
+      >
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+function OptionPill({
+  label,
+  value,
+  focused,
+  compact,
+}: {
+  label?: string;
+  value: string;
+  focused: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <View style={[styles.pill, compact && styles.pillCompact, focused && styles.pillFocused]}>
+      {label ? (
+        <Text style={[styles.pillLabel, focused && styles.pillLabelFocused]} numberOfLines={1}>
+          {label}
+        </Text>
+      ) : null}
+      <Text style={[styles.pillValue, focused && styles.pillValueFocused]} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -66,20 +111,33 @@ export function TvPlayerPanel({
 
   const isFocused = (id: TvPlayerButtonId) => panelFocus === id;
   const timelineFocused = panelFocus === 'timeline';
+  const progressWidth = `${Math.min(100, Math.max(0, progress))}%`;
 
   return (
     <View style={styles.wrap} pointerEvents="none">
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.88)']}
+        locations={[0, 0.45, 1]}
+        style={styles.fade}
+      />
+
       <View style={styles.body}>
         {(title || subtitle) && (
           <View style={styles.meta}>
-            {title ? <Text style={styles.title} numberOfLines={1}>{title}</Text> : null}
-            {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
+            {title ? (
+              <Text style={styles.title} numberOfLines={1}>{title}</Text>
+            ) : null}
+            {subtitle ? (
+              <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+            ) : null}
           </View>
         )}
 
         <View style={[styles.timeline, timelineFocused && styles.timelineFocused]}>
           <View style={styles.track}>
-            <View style={[styles.progress, { width: `${Math.min(100, Math.max(0, progress))}%` }]} />
+            <View style={[styles.progress, { width: progressWidth }]}>
+              <View style={styles.thumb} />
+            </View>
           </View>
         </View>
 
@@ -89,57 +147,73 @@ export function TvPlayerPanel({
         </View>
 
         <View style={styles.transport}>
-          {enabledButtons.has('prev_episode') ? (
-            <FocusChip label="⏮" focused={isFocused('prev_episode')} />
-          ) : null}
-          <FocusChip
-            label={`−${prefs.skipBackwardSeconds}`}
-            focused={isFocused('rprev')}
-          />
-          <FocusChip
-            label={playing ? '❚❚' : '▶'}
-            focused={isFocused('play')}
-            large
-          />
-          <FocusChip
-            label={`+${prefs.skipForwardSeconds}`}
-            focused={isFocused('rnext')}
-          />
-          {enabledButtons.has('next_episode') ? (
-            <FocusChip label="⏭" focused={isFocused('next_episode')} />
-          ) : null}
+          <View style={styles.transportSide}>
+            {enabledButtons.has('prev_episode') ? (
+              <TransportButton focused={isFocused('prev_episode')}>⏮</TransportButton>
+            ) : (
+              <View style={styles.transportSpacer} />
+            )}
+            <TransportButton focused={isFocused('rprev')}>
+              −{prefs.skipBackwardSeconds}
+            </TransportButton>
+          </View>
+
+          <TransportButton focused={isFocused('play')} play>
+            {playing ? '❚❚' : '▶'}
+          </TransportButton>
+
+          <View style={[styles.transportSide, styles.transportSideEnd]}>
+            <TransportButton focused={isFocused('rnext')}>
+              +{prefs.skipForwardSeconds}
+            </TransportButton>
+            {enabledButtons.has('next_episode') ? (
+              <TransportButton focused={isFocused('next_episode')}>⏭</TransportButton>
+            ) : (
+              <View style={styles.transportSpacer} />
+            )}
+          </View>
         </View>
 
         <View style={styles.options}>
           {hasDubbing ? (
-            <FocusChip
-              label={selectedDubbing ?? 'Озвучка'}
+            <OptionPill
+              label="Озвучка"
+              value={selectedDubbing ?? '—'}
               focused={isFocused('dubbing')}
             />
           ) : null}
           {hasQuality ? (
-            <FocusChip
-              label={selectedQuality ?? 'Качество'}
+            <OptionPill
+              label="Качество"
+              value={selectedQuality ?? '—'}
               focused={isFocused('quality')}
             />
           ) : null}
           {hasConnection ? (
-            <FocusChip
-              label={selectedConnection ?? 'Подключение'}
+            <OptionPill
+              label="Подключение"
+              value={selectedConnection ?? '—'}
               focused={isFocused('connection')}
             />
           ) : null}
           {hasDelivery ? (
-            <FocusChip
-              label={selectedDelivery ?? 'Тип'}
+            <OptionPill
+              label="Поток"
+              value={selectedDelivery ?? '—'}
               focused={isFocused('delivery')}
             />
           ) : null}
           {enabledButtons.has('episodes') ? (
-            <FocusChip label="Эпизоды" focused={isFocused('episodes')} />
+            <OptionPill value="Эпизоды" focused={isFocused('episodes')} compact />
           ) : null}
-          <FocusChip
-            label={`⚙ ${formatPlaybackRate(prefs.playbackRate)}`}
+          <OptionPill
+            label="Кадр"
+            value={videoFitLabel(prefs.videoFit)}
+            focused={isFocused('fit')}
+          />
+          <OptionPill
+            label="Настройки"
+            value={formatPlaybackRate(prefs.playbackRate)}
             focused={isFocused('settings')}
           />
         </View>
@@ -154,74 +228,178 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.xxl,
+  },
+  fade: {
+    ...StyleSheet.absoluteFillObject,
+    top: -120,
   },
   body: {
-    borderRadius: 20,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderRadius: radii.xl,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
+    backgroundColor: 'rgba(12,11,18,0.78)',
     gap: spacing.md,
   },
-  meta: { gap: 4 },
-  title: { color: colors.text, fontSize: 26, fontWeight: '700' },
-  subtitle: { color: colors.textSecondary, fontSize: 18 },
+  meta: { gap: 4, marginBottom: 2 },
+  title: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  subtitle: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 16,
+    fontWeight: '400',
+  },
   timeline: {
-    borderRadius: 8,
-    paddingVertical: 6,
+    height: 10,
+    borderRadius: radii.pill,
+    justifyContent: 'center',
+    paddingVertical: 2,
   },
   timelineFocused: {
+    borderRadius: radii.pill,
     borderWidth: 2,
     borderColor: colors.brand,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
   },
   track: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    overflow: 'hidden',
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    overflow: 'visible',
+    justifyContent: 'center',
   },
   progress: {
-    height: '100%',
-    backgroundColor: colors.brand,
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: '#fff',
+    maxWidth: '100%',
+    position: 'relative',
+  },
+  thumb: {
+    position: 'absolute',
+    right: -7,
+    top: '50%',
+    marginTop: -7,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#fff',
   },
   times: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: -4,
   },
-  time: { color: colors.textSecondary, fontSize: 16, fontVariant: ['tabular-nums'] },
+  time: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 15,
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
   transport: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  transportSide: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  transportSideEnd: {
+    justifyContent: 'flex-end',
+  },
+  transportSpacer: {
+    width: 56,
+    height: 56,
+  },
+  transportBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  transportBtnPlay: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  transportBtnFocused: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
+  },
+  transportBtnText: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 16,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  transportBtnTextPlay: {
+    fontSize: 26,
+    marginLeft: 2,
+  },
+  transportBtnTextFocused: {
+    color: '#111',
   },
   options: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: 10,
+    marginTop: 4,
   },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 12,
-    backgroundColor: colors.bgElevated,
-    borderWidth: 2,
-    borderColor: 'transparent',
+  pill: {
+    minWidth: 118,
+    maxWidth: 200,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    gap: 2,
   },
-  chipLarge: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    minWidth: 88,
-    alignItems: 'center',
+  pillCompact: {
+    minWidth: 96,
+    justifyContent: 'center',
   },
-  chipFocused: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandAccent,
+  pillFocused: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
   },
-  chipText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  chipTextLarge: { fontSize: 22 },
+  pillLabel: {
+    color: 'rgba(255,255,255,0.48)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  pillLabelFocused: {
+    color: 'rgba(0,0,0,0.45)',
+  },
+  pillValue: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  pillValueFocused: {
+    color: '#111',
+  },
 });

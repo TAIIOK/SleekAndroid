@@ -1,10 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import {
+  Animated,
+  Platform,
+  StyleSheet,
+  View,
+  type DimensionValue,
+  type ViewStyle,
+} from 'react-native';
 
 import { colors, layout, radii } from '@/constants/aniverse';
 
 interface SkeletonProps {
-  width?: number | string;
+  width?: DimensionValue;
   height?: number;
   style?: ViewStyle;
   rounded?: number;
@@ -14,6 +21,7 @@ export function Skeleton({ width = '100%', height = 16, style, rounded = radii.m
   const opacity = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
+    if (Platform.isTV) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.9, duration: 900, useNativeDriver: true }),
@@ -23,6 +31,18 @@ export function Skeleton({ width = '100%', height = 16, style, rounded = radii.m
     loop.start();
     return () => loop.stop();
   }, [opacity]);
+
+  if (Platform.isTV) {
+    return (
+      <View
+        style={[
+          styles.base,
+          { width, height, borderRadius: rounded, opacity: 0.55 },
+          style,
+        ]}
+      />
+    );
+  }
 
   return (
     <Animated.View

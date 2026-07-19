@@ -50,8 +50,8 @@ export const layout = {
   posterWidthShowcase: Platform.isTV ? 140 : 140,
   maxContentWidth: 1440,
   continueCardWidth: Platform.isTV ? 220 : 260,
-  quickActionCardWidth: 168,
-  quickActionCardHeight: 88,
+  quickActionCardWidth: Platform.isTV ? 200 : 168,
+  quickActionCardHeight: Platform.isTV ? 96 : 88,
 };
 
 export function mobileTopChromeInset(safeTop: number): number {
@@ -129,17 +129,13 @@ export const radii = {
   quickAction: 14,
 };
 
-/** Shared TV D-pad focus chrome — brand lavender ring + soft glow. */
+/** Shared TV D-pad focus chrome — brand lavender ring + wash (no shadows; cheaper on Fire TV). */
 export const tvFocus = {
   borderWidth: 2,
   borderColor: colors.brandTint,
   wash: 'rgba(195,192,255,0.14)',
   fill: 'rgba(195,192,255,0.18)',
   titleColor: colors.brandTint,
-  glow: {
-    shadowColor: colors.focusGlow,
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 } as const,
-  },
+  /** Kept for callers; intentionally empty — shadows are expensive on Android TV GPUs. */
+  glow: {},
 };

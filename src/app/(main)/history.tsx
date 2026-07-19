@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { fetchSavedAnimeLibrary } from '@/api/library';
+import { fetchSavedAnimeLibrary, fetchSavedLampaLibrary } from '@/api/library';
+import { fetchAnimeProgress, fetchLampaProgress } from '@/api/progress';
 import { fetchActivityHistory, hideActivityFeed } from '@/api/user';
-import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { HistoryClearConfirm } from '@/components/history/HistoryClearConfirm';
+import { HistoryDateRail } from '@/components/history/HistoryDateRail';
 import { HistoryMediaFilters } from '@/components/history/HistoryMediaFilters';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import {
   buildWatchHistoryItems,
@@ -16,9 +18,10 @@ import {
   getHiddenHistoryIds,
   groupHistoryByDate,
   hideHistoryIds,
+  historyContentKey,
   type HistoryMediaFilter,
 } from '@/lib/history';
-import { tvRailSectionSnapProps, tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function HistoryScreen() {
@@ -34,9 +37,27 @@ export default function HistoryScreen() {
     queryFn: fetchActivityHistory,
   });
 
-  const { data: savedAnime = [] } = useQuery({
-    queryKey: ['library-anime-history'],
+  const { data: savedAnime = [], isLoading: savedAnimeLoading } = useQuery({
+    queryKey: ['library-anime', 'include-anime'],
     queryFn: fetchSavedAnimeLibrary,
+    enabled: isAuthenticated,
+  });
+
+  const { data: savedLampa = [], isLoading: savedLampaLoading } = useQuery({
+    queryKey: ['library-lampa', 'include-lampa'],
+    queryFn: fetchSavedLampaLibrary,
+    enabled: isAuthenticated,
+  });
+
+  const { data: animeProgress = [], isLoading: animeProgressLoading } = useQuery({
+    queryKey: ['anime-progress'],
+    queryFn: () => fetchAnimeProgress(),
+    enabled: isAuthenticated,
+  });
+
+  const { data: lampaProgress = [], isLoading: lampaProgressLoading } = useQuery({
+    queryKey: ['lampa-progress'],
+    queryFn: () => fetchLampaProgress(),
     enabled: isAuthenticated,
   });
 
@@ -46,9 +67,15 @@ export default function HistoryScreen() {
   });
 
   const allItems = useMemo(() => {
-    const built = enrichHistoryPosters(buildWatchHistoryItems(history), savedAnime);
-    return built.filter((item) => !hiddenIds.has(item.id));
-  }, [history, savedAnime, hiddenIds]);
+    const built = enrichHistoryPosters(
+      buildWatchHistoryItems(history, savedAnime, savedLampa, animeProgress, lampaProgress),
+      savedAnime,
+      savedLampa,
+    );
+    return built.filter(
+      (item) => !hiddenIds.has(historyContentKey(item)) && !hiddenIds.has(item.id),
+    );
+  }, [history, savedAnime, savedLampa, animeProgress, lampaProgress, hiddenIds]);
 
   const filteredItems = useMemo(
     () => filterHistoryByMedia(allItems, media),
@@ -57,11 +84,19 @@ export default function HistoryScreen() {
 
   const groups = useMemo(() => groupHistoryByDate(filteredItems), [filteredItems]);
 
+  const isLoading =
+    historyLoading ||
+    (isAuthenticated &&
+      (savedAnimeLoading || savedLampaLoading || animeProgressLoading || lampaProgressLoading));
+
   const clearMutation = useMutation({
     mutationFn: async (items: typeof filteredItems) => {
       const feedIds = items.map((item) => item.id).filter((id) => !id.startsWith('progress-'));
       await Promise.allSettled(feedIds.map((id) => hideActivityFeed(id)));
-      await hideHistoryIds(items.map((item) => item.id));
+      await hideHistoryIds([
+        ...items.map((item) => historyContentKey(item)),
+        ...items.map((item) => item.id),
+      ]);
     },
     onSuccess: () => {
       setHiddenRevision((value) => value + 1);
@@ -82,9 +117,9 @@ export default function HistoryScreen() {
         <View style={[styles.header, { paddingHorizontal: horizontalPad }]}>
           <Text style={styles.title}>История просмотра</Text>
           {filteredItems.length > 0 ? (
-            <Pressable onPress={() => setConfirmClear(true)}>
+            <TvFocusable onPress={() => setConfirmClear(true)} style={styles.clearBtn}>
               <Text style={styles.clear}>Очистить</Text>
-            </Pressable>
+            </TvFocusable>
           ) : null}
         </View>
 
@@ -92,38 +127,19 @@ export default function HistoryScreen() {
           <HistoryMediaFilters value={media} onChange={setMedia} />
         </View>
 
-        {historyLoading ? (
+        {isLoading ? (
           <Text style={[styles.hint, { paddingHorizontal: horizontalPad }]}>Загрузка…</Text>
         ) : groups.length === 0 ? (
           <Text style={[styles.hint, { paddingHorizontal: horizontalPad }]}>История пуста</Text>
         ) : (
-          groups.map((group) => (
-            <View key={group.key} style={styles.group} {...tvRailSectionSnapProps}>
-              <Text style={[styles.groupTitle, { paddingHorizontal: horizontalPad }]}>
-                {group.label}
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.rail, { paddingHorizontal: horizontalPad }]}
-              >
-                {group.items.map((item, index) => (
-                  <CatalogPosterCard
-                    key={item.id}
-                    title={item.title}
-                    poster={item.poster}
-                    subtitle={
-                      item.progressPercent != null
-                        ? `${item.progressPercent}%`
-                        : undefined
-                    }
-                    onPress={() => router.push(item.href as never)}
-                    variant="rail"
-                    railStart={index === 0}
-                  />
-                ))}
-              </ScrollView>
-            </View>
+          groups.map((group, groupIndex) => (
+            <HistoryDateRail
+              key={group.key}
+              title={group.label}
+              items={group.items}
+              contentEntryRail={groupIndex === 0}
+              onItemPress={(item) => router.push(item.href as never)}
+            />
           ))
         )}
       </ScrollView>
@@ -140,7 +156,12 @@ export default function HistoryScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingVertical: spacing.xl, gap: spacing.lg },
+  content: {
+    paddingVertical: spacing.xl,
+    gap: spacing.lg,
+    // Room so the last rail can snap fully into view on TV.
+    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xl,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -151,19 +172,15 @@ const styles = StyleSheet.create({
     fontSize: Platform.isTV ? 26 : 24,
     fontWeight: '700',
   },
+  clearBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 8,
+  },
   clear: {
     color: colors.danger,
     fontSize: 16,
     fontWeight: '600',
   },
   hint: { color: colors.textSecondary, fontSize: 16 },
-  group: { gap: spacing.sm },
-  groupTitle: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  rail: { gap: 0, paddingBottom: spacing.xs },
 });

@@ -22,11 +22,13 @@ import { AnimeDetailHero } from '@/components/anime/AnimeDetailHero';
 import { AnimeDetailPlot } from '@/components/anime/AnimeDetailPlot';
 import { AnimeDetailSidebar } from '@/components/anime/AnimeDetailSidebar';
 import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { useAccumulatedEpisodes } from '@/hooks/useAccumulatedEpisodes';
 import { useResumeEpisode } from '@/hooks/useResumeEpisode';
 import { extractRelatedItems, getUniqueDubbingOptions } from '@/lib/animeDetail';
 import type { UserListStatus } from '@/lib/libraryStatus';
+import { animePoster } from '@/lib/poster';
 import { buildAnimePlaybackState } from '@/lib/progressUtils';
 import { useAuth } from '@/providers/AuthProvider';
 import { pickPlaybackUrl } from '@aniverse/playback';
@@ -38,7 +40,8 @@ export default function AnimeDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  const useWideLayout = Platform.isTV || width >= 960;
+  // TV: stacked full-width (episodes need space + reliable D-pad). Phone wide tablets keep 2-col.
+  const useWideLayout = !Platform.isTV && width >= 960;
   const { id } = useLocalSearchParams<{ id: string }>();
   const animeId = Number(id);
   const { isAuthenticated } = useAuth();
@@ -55,6 +58,7 @@ export default function AnimeDetailScreen() {
     data: detail,
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ['anime', animeId],
     queryFn: () => fetchAnimeDetail(animeId),
@@ -154,6 +158,15 @@ export default function AnimeDetailScreen() {
       <View style={styles.loader}>
         <Text style={styles.errorTitle}>Не удалось загрузить</Text>
         <Text style={styles.errorBody}>Проверьте подключение или попробуйте позже</Text>
+        <TvFocusable
+          hasTVPreferredFocus={Platform.isTV}
+          onPress={() => {
+            void refetch();
+          }}
+          style={styles.retryBtn}
+        >
+          <Text style={styles.retryLabel}>Повторить</Text>
+        </TvFocusable>
       </View>
     );
   }
@@ -190,7 +203,11 @@ export default function AnimeDetailScreen() {
   );
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      nestedScrollEnabled
+    >
       <AnimeDetailHero
         detail={detail}
         resumeEpisode={resumeEpisode}
@@ -200,6 +217,12 @@ export default function AnimeDetailScreen() {
         userStatus={savedState.userStatus}
         isFavorite={savedState.isFavorite}
         libraryDisabled={!isAuthenticated}
+        collectionItem={{
+          mediaType: 'anime',
+          mediaId: String(animeId),
+          title: detail.title ?? undefined,
+          poster: animePoster(detail),
+        }}
         onPlay={playResume}
         onStatusChange={onStatusChange}
         onToggleFavorite={onToggleFavorite}
@@ -216,14 +239,14 @@ export default function AnimeDetailScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
-    padding: Platform.isTV ? spacing.xxl : spacing.lg,
-    gap: spacing.xl,
-    paddingBottom: spacing.xxl * 2,
+    padding: Platform.isTV ? spacing.lg : spacing.lg,
+    gap: Platform.isTV ? spacing.md : spacing.xl,
+    paddingBottom: Platform.isTV ? spacing.xl : spacing.xxl * 2,
   },
   grid: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.xl,
+    gap: Platform.isTV ? spacing.md : spacing.xl,
   },
   stacked: {
     flexDirection: 'column',
@@ -231,7 +254,7 @@ const styles = StyleSheet.create({
   main: {
     flex: 1,
     minWidth: 0,
-    gap: spacing.xl,
+    gap: Platform.isTV ? spacing.md : spacing.xl,
   },
   loader: {
     flex: 1,
@@ -249,5 +272,17 @@ const styles = StyleSheet.create({
   errorBody: {
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.brandAccent,
+  },
+  retryLabel: {
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: Platform.isTV ? 18 : 15,
   },
 });

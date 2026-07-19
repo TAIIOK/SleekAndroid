@@ -85,7 +85,7 @@ export function AnimeDetailSidebar({
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: Platform.isTV ? 280 : '100%',
+    width: '100%',
     gap: spacing.lg,
   },
   block: {
@@ -96,20 +96,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.md,
-    paddingVertical: 10,
+    paddingVertical: Platform.isTV ? 8 : 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   metaLabel: {
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: Platform.isTV ? 11 : 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   metaValue: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: Platform.isTV ? 14 : 14,
     fontWeight: '600',
     textAlign: 'right',
     flexShrink: 1,

@@ -1,34 +1,47 @@
 import { useRouter, useSegments } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { LIBRARY_HUB_TITLE, libraryHubTabs } from '@/lib/libraryHub';
+
+function normalizePath(segments: string[]): string {
+  const cleaned = segments.filter((segment) => !segment.startsWith('('));
+  if (cleaned.length === 0) return '/';
+  return `/${cleaned.join('/')}`;
+}
 
 export function LibraryHubLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
-  const currentPath = `/${(segments as string[]).join('/')}`;
+  const currentPath = normalizePath(segments as string[]);
 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.push('/')} hitSlop={8}>
-          <Text style={styles.back}>← Назад</Text>
-        </Pressable>
+        {!Platform.isTV ? (
+          <TvFocusable onPress={() => router.push('/')} style={styles.backBtn}>
+            <Text style={styles.back}>← Назад</Text>
+          </TvFocusable>
+        ) : null}
         <Text style={styles.title}>{LIBRARY_HUB_TITLE}</Text>
       </View>
 
       <View style={styles.tabsRow}>
-        {libraryHubTabs.map((tab) => {
+        {libraryHubTabs.map((tab, index) => {
           const active = currentPath === tab.to || currentPath.startsWith(`${tab.to}/`);
           return (
-            <Pressable
+            <TvFocusable
               key={tab.to}
               onPress={() => router.push(tab.to as '/')}
               style={[styles.tab, active && styles.tabActive]}
+              focusedStyle={styles.tabFocused}
+              hasTVPreferredFocus={active}
+              railStart={index === 0}
+              contentEntry={active}
             >
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tab.label}</Text>
-            </Pressable>
+            </TvFocusable>
           );
         })}
       </View>
@@ -47,6 +60,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     gap: spacing.sm,
   },
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
   back: {
     color: colors.brand,
     fontSize: 14,
@@ -54,7 +72,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 28,
+    fontSize: Platform.isTV ? 26 : 28,
     fontWeight: '700',
   },
   tabsRow: {
@@ -71,16 +89,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
+    borderWidth: tvFocus.borderWidth,
     borderColor: colors.border,
   },
   tabActive: {
     backgroundColor: colors.brand,
     borderColor: colors.brand,
   },
+  tabFocused: {
+    borderColor: '#ffffff',
+  },
   tabLabel: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: Platform.isTV ? 16 : 14,
     fontWeight: '600',
   },
   tabLabelActive: {

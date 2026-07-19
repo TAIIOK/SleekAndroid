@@ -15,6 +15,19 @@ export const tvVerticalCatalogScrollProps = Platform.isTV
     } as const)
   : ({} as const);
 
+/**
+ * Horizontal rail / continue ScrollView props for Android TV.
+ * Instant focus scrolling — animated paging + snapToInterval often clears focus
+ * when the rail shifts to keep the focused poster on screen.
+ */
+export const tvHorizontalCatalogScrollProps = Platform.isTV
+  ? ({
+      scrollAnimationEnabled: false,
+      // ScrollView must not compete with poster Pressables for D-pad focus.
+      focusable: false,
+    } as const)
+  : ({} as const);
+
 /** Put on rail/continue section wrappers so the title stays visible when a card is focused. */
 export const tvRailSectionSnapProps = Platform.isTV
   ? ({

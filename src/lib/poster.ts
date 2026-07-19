@@ -8,13 +8,18 @@ interface AnimePosterImage {
   preview?: string;
 }
 
-function pickPosterImageUrl(img: AnimePosterImage): string | undefined {
-  const candidates = [img.optimized, img.source, img.thumbnail, img.preview];
+function pickPosterImageUrl(
+  img: AnimePosterImage,
+  preferSmall = false,
+): string | undefined {
+  const candidates = preferSmall
+    ? [img.thumbnail, img.preview, img.optimized, img.source]
+    : [img.optimized, img.source, img.thumbnail, img.preview];
   return candidates.find((value) => typeof value === 'string' && value.length > 0);
 }
 
 /** Normalize API poster field (string, object, or array) to a single path/url. */
-export function extractPosterPath(poster: unknown): string | undefined {
+export function extractPosterPath(poster: unknown, preferSmall = false): string | undefined {
   if (!poster) return undefined;
   if (typeof poster === 'string') {
     const trimmed = poster.trim();
@@ -30,17 +35,24 @@ export function extractPosterPath(poster: unknown): string | undefined {
       ) ?? poster[0];
     if (!match) return undefined;
     if (typeof match === 'string') return match.trim() || undefined;
-    if (typeof match === 'object') return pickPosterImageUrl(match as AnimePosterImage);
+    if (typeof match === 'object') {
+      return pickPosterImageUrl(match as AnimePosterImage, preferSmall);
+    }
     return undefined;
   }
   if (typeof poster === 'object') {
-    return pickPosterImageUrl(poster as AnimePosterImage);
+    return pickPosterImageUrl(poster as AnimePosterImage, preferSmall);
   }
   return undefined;
 }
 
 export function animePoster(item: { poster?: unknown }): string | undefined {
   return extractPosterPath(item.poster);
+}
+
+/** Prefer thumbnail/preview for dense catalog rails. */
+export function animePosterForRail(item: { poster?: unknown }): string | undefined {
+  return extractPosterPath(item.poster, true);
 }
 
 export function lampaPosterPath(item: {
@@ -59,7 +71,7 @@ export function mapAnimeToRailItem(item: AnimeListItem) {
   return {
     id: item.id,
     title: item.title ?? 'Без названия',
-    poster: animePoster(item),
+    poster: animePosterForRail(item),
     score: item.score,
   };
 }

@@ -1,16 +1,16 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
 import {
   formatProgressTime,
   type ContinueWatchingItem,
 } from '@/lib/continueWatching';
-import { tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 const CARD_WIDTH = layout.continueCardWidth;
@@ -21,6 +21,7 @@ interface ContinueWatchingRowProps {
 
 export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   const router = useRouter();
+  const { bindItem } = useTvRailFocusRestore(items.length);
   const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
   const rowCount = Platform.isTV ? 1 : items.length <= 4 ? 1 : 2;
   const columns =
@@ -39,41 +40,48 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
-        {...(Platform.isTV
-          ? ({
-              snapToAlignment: 'start',
-              snapToInterval: CARD_WIDTH + (Platform.isTV ? 10 : 12),
-              scrollAnimationEnabled: true,
-            } as object)
-          : {})}
+        {...tvHorizontalCatalogScrollProps}
       >
         {rowCount > 1 ? (
           <View style={styles.twoRowGrid}>
             {columns.map((columnItems, columnIndex) => (
               <View key={`col-${columnIndex}`} style={styles.twoRowColumn}>
-                {columnItems.map((item, rowIndex) => (
-                  <ContinueCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => openItem(router, item)}
-                    isContentEntry={columnIndex === 0 && rowIndex === 0}
-                    railStart={columnIndex === 0}
-                  />
-                ))}
+                {columnItems.map((item, rowIndex) => {
+                  const index = columnIndex * rowCount + rowIndex;
+                  const railFocus = bindItem(index);
+                  return (
+                    <ContinueCard
+                      key={item.id}
+                      ref={railFocus.ref}
+                      item={item}
+                      onPress={() => openItem(router, item)}
+                      onFocus={railFocus.onFocus}
+                      onBlur={railFocus.onBlur}
+                      isContentEntry={columnIndex === 0 && rowIndex === 0}
+                      railStart={columnIndex === 0}
+                    />
+                  );
+                })}
               </View>
             ))}
           </View>
         ) : (
-          items.map((item, index) => (
-            <ContinueCard
-              key={item.id}
-              item={item}
-              onPress={() => openItem(router, item)}
-              isContentEntry={index === 0}
-              railStart={index === 0}
-              spaced
-            />
-          ))
+          items.map((item, index) => {
+            const railFocus = bindItem(index);
+            return (
+              <ContinueCard
+                key={item.id}
+                ref={railFocus.ref}
+                item={item}
+                onPress={() => openItem(router, item)}
+                onFocus={railFocus.onFocus}
+                onBlur={railFocus.onBlur}
+                isContentEntry={index === 0}
+                railStart={index === 0}
+                spaced
+              />
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -101,35 +109,41 @@ function openItem(
   router.push(item.href as never);
 }
 
-function ContinueCard({
-  item,
-  onPress,
-  isContentEntry,
-  railStart,
-  spaced,
-}: {
-  item: ContinueWatchingItem;
-  onPress: () => void;
-  isContentEntry?: boolean;
-  railStart?: boolean;
-  spaced?: boolean;
-}) {
+const ContinueCard = forwardRef<
+  View,
+  {
+    item: ContinueWatchingItem;
+    onPress: () => void;
+    onFocus?: () => void;
+    onBlur?: () => void;
+    isContentEntry?: boolean;
+    railStart?: boolean;
+    spaced?: boolean;
+  }
+>(function ContinueCard(
+  { item, onPress, onFocus, onBlur, isContentEntry, railStart, spaced },
+  ref,
+) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
   const exitLeft = Platform.isTV && Boolean(railStart || isContentEntry);
   const exitUp = Platform.isTV && Boolean(isContentEntry);
+  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   return (
     <Pressable
+      ref={ref}
       onFocus={() => {
         setFocused(true);
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);
+        onFocus?.();
       }}
       onBlur={() => {
         setFocused(false);
         if (exitLeft) shellFocus?.setExitLeftEnabled(false);
         if (exitUp) shellFocus?.setExitUpEnabled(false);
+        onBlur?.();
       }}
       onPress={onPress}
       style={[
@@ -139,20 +153,24 @@ function ContinueCard({
         focused && styles.cardFocused,
       ]}
       {...(isContentEntry && Platform.isTV ? { hasTVPreferredFocus: true } : {})}
+      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
         <View style={styles.posterWrap}>
           {item.poster ? (
-            <Image source={{ uri: item.poster }} style={styles.poster} contentFit="cover" />
+            <Image
+              source={{ uri: item.poster }}
+              style={styles.poster}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={item.poster}
+            />
           ) : (
             <View style={[styles.poster, styles.posterFallback]}>
               <Text style={styles.posterFallbackText}>{item.title.slice(0, 1)}</Text>
             </View>
           )}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.8)']}
-            style={styles.posterGradient}
-          />
+          <View style={styles.posterScrim} pointerEvents="none" />
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.round(item.progress * 100)}%` }]} />
           </View>
@@ -172,7 +190,7 @@ function ContinueCard({
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   section: {
@@ -194,7 +212,8 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   cardSpaced: {
-    marginRight: Platform.isTV ? 10 : 12,
+    // Spacing from ScrollView `gap` only (same as poster rails).
+    marginRight: 0,
   },
   cardFocused: {
     zIndex: 2,
@@ -208,7 +227,6 @@ const styles = StyleSheet.create({
   posterFrameFocused: {
     borderColor: Platform.isTV ? tvFocus.borderColor : 'transparent',
     backgroundColor: Platform.isTV ? tvFocus.wash : 'transparent',
-    ...(Platform.isTV ? tvFocus.glow : {}),
   },
   posterWrap: {
     borderRadius: Platform.isTV ? radii.md : radii.lg,
@@ -225,12 +243,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  posterGradient: {
+  posterScrim: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: '50%',
+    height: '22%',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   posterFallback: {
     alignItems: 'center',
