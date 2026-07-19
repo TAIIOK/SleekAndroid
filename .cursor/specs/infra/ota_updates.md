@@ -16,6 +16,7 @@ In-app over-the-air updates for JS, styles, and assets via Expo EAS Update / `ex
 8. [x] Publish scripts exist: `update:production`, `update:preview`; one-time link via `eas:configure`.
 9. [x] `extra.eas.projectId` and `updates.url` are set to the Sleek EAS project.
 10. [ ] A release APK built after configure is distributed once so devices include the updates native module.
+11. [x] Binary APK updates compare `versionCode` to `releases/latest.json` (site CDN) via `NativeApkUpdatePrompt`.
 
 ## Acceptance Criteria
 

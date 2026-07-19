@@ -35,6 +35,7 @@
       "apiUrl": "https://api.taiiok.ru",
       "watchHubUrl": "https://watchhub.taiiok.ru",
       "sitePublicUrl": "https://preview.taiiok.ru",
+      "releasesUrl": "https://preview.taiiok.ru/releases/latest.json",
       "eas": {
         "projectId": "5131c8a0-3572-4e6f-af54-5515652ca844"
       }
