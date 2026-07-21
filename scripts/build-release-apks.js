@@ -83,12 +83,25 @@ function setVersion(version) {
     process.exit(1);
   }
 
-  const appConfig = fs.readFileSync(APP_CONFIG, 'utf8');
+  let appConfig = fs.readFileSync(APP_CONFIG, 'utf8');
   if (!/version:\s*'[^']+'/.test(appConfig)) {
     console.error(`Could not find version: '...' in ${APP_CONFIG}`);
     process.exit(1);
   }
-  fs.writeFileSync(APP_CONFIG, appConfig.replace(/version:\s*'[^']+'/, `version: '${version}'`));
+  const prevVersion = appConfig.match(/version:\s*'([^']+)'/)?.[1];
+  appConfig = appConfig.replace(/version:\s*'[^']+'/, `version: '${version}'`);
+
+  // Keep Android versionCode ahead of previous when the marketing version changes.
+  if (prevVersion && prevVersion !== version) {
+    const codeMatch = appConfig.match(/versionCode:\s*(\d+)/);
+    if (codeMatch) {
+      const nextCode = Number(codeMatch[1]) + 1;
+      appConfig = appConfig.replace(/versionCode:\s*\d+/, `versionCode: ${nextCode}`);
+      console.log(`Bumped versionCode → ${nextCode}`);
+    }
+  }
+
+  fs.writeFileSync(APP_CONFIG, appConfig);
 
   const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
   pkg.version = version;

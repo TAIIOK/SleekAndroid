@@ -27,11 +27,34 @@ export function getReleasesUrl(): string {
 export function getLocalVersionCode(): number {
   const build = Constants.nativeBuildVersion;
   const parsed = Number(build);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  const fromConfig = Constants.expoConfig?.android?.versionCode;
+  if (typeof fromConfig === 'number' && fromConfig > 0) return fromConfig;
+  return 0;
 }
 
 export function getLocalVersionName(): string {
   return Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '0.0.0';
+}
+
+/** Compare dotted version names (e.g. 1.0.3); returns >0 if a is newer than b. */
+export function compareVersionNames(a: string, b: string): number {
+  const parse = (v: string) =>
+    v
+      .split(/[.+-]/)
+      .filter(Boolean)
+      .map((part) => {
+        const n = Number.parseInt(part, 10);
+        return Number.isFinite(n) ? n : 0;
+      });
+  const pa = parse(a);
+  const pb = parse(b);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i += 1) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
+  return 0;
 }
 
 export async function fetchAppReleaseManifest(): Promise<AppReleaseManifest | null> {
@@ -61,7 +84,15 @@ export async function fetchAppReleaseManifest(): Promise<AppReleaseManifest | nu
 }
 
 export function isBinaryUpdateAvailable(manifest: AppReleaseManifest): boolean {
-  return manifest.versionCode > getLocalVersionCode();
+  // Never offer a same/older release by name (guards stale CDN + mismatched versionCode).
+  if (compareVersionNames(manifest.versionName, getLocalVersionName()) <= 0) {
+    return false;
+  }
+  const localCode = getLocalVersionCode();
+  if (localCode > 0) {
+    return manifest.versionCode > localCode;
+  }
+  return true;
 }
 
 export function pickApkDownloadUrl(manifest: AppReleaseManifest): string | null {
