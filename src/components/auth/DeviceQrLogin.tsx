@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { createDeviceAuthSession, pollDeviceAuthSession } from '@/api/auth';
 import { QrCodeMatrix } from '@/components/auth/QrCodeMatrix';
@@ -18,14 +18,27 @@ export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
   const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionKey, setSessionKey] = useState(0);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onAuthenticatedRef = useRef(onAuthenticated);
+  onAuthenticatedRef.current = onAuthenticated;
+
+  const refreshSession = useCallback(() => {
+    setSessionKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function start() {
+      if (pollTimer.current) {
+        clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
       setLoading(true);
       setError(null);
+      setCode(null);
+      setVerifyUrl(null);
       try {
         const session = await createDeviceAuthSession({
           deviceId: await getOrCreateDeviceId(),
@@ -44,9 +57,10 @@ export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
             if ('status' in result) return;
             const { setTokens } = await import('@/lib/storage');
             await setTokens(result.accessToken, result.refreshToken);
-            onAuthenticated();
+            if (pollTimer.current) clearInterval(pollTimer.current);
+            onAuthenticatedRef.current();
           } catch (err) {
-            if (err instanceof Error && err.message.includes('истёк')) {
+            if (err instanceof Error && /истёк|отклонён/.test(err.message)) {
               setError(err.message);
               if (pollTimer.current) clearInterval(pollTimer.current);
             }
@@ -69,7 +83,7 @@ export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
       cancelled = true;
       if (pollTimer.current) clearInterval(pollTimer.current);
     };
-  }, [onAuthenticated]);
+  }, [sessionKey]);
 
   return (
     <View style={styles.container}>
@@ -83,10 +97,16 @@ export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
       <View style={styles.textBlock}>
         <Text style={styles.title}>Вход по QR</Text>
         <Text style={styles.subtitle}>
-          Откройте Sleek на телефоне, войдите в аккаунт и подтвердите код — или отсканируйте QR.
+          Откройте Sleek на телефоне, войдите в аккаунт и подтвердите код — или отсканируйте QR в
+          Telegram.
         </Text>
         {code ? <Text style={styles.code}>{code}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <Pressable onPress={refreshSession} style={styles.refreshBtn}>
+            <Text style={styles.refreshText}>Обновить QR</Text>
+          </Pressable>
+        ) : null}
         {loading ? <Text style={styles.subtitle}>Генерация кода…</Text> : null}
       </View>
     </View>
@@ -135,5 +155,14 @@ const styles = StyleSheet.create({
   error: {
     color: colors.danger,
     fontSize: 15,
+  },
+  refreshBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+  },
+  refreshText: {
+    color: colors.brand,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

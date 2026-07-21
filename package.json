@@ -1,7 +1,7 @@
 {
   "name": "aniverse-tv",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "scripts": {
     "start": "node ./scripts/with-expo-path.js expo start",
     "android": "node ./scripts/with-expo-path.js expo run:android",
@@ -17,13 +17,16 @@
     "android:release": "NODE_ENV=production node ./scripts/with-expo-path.js ./android/gradlew -p android assembleRelease",
     "android:release:phone": "npm run prebuild:phone && npm run android:release",
     "android:release:tv": "npm run prebuild:tv && EXPO_TV=1 npm run android:release",
+    "android:release:all": "node ./scripts/build-release-apks.js",
     "postinstall": "node ./scripts/link-expo-router.js && node ./scripts/patch-gradle-foojay.js",
     "deploy": "npx expo export -p web && npx eas-cli@latest deploy",
     "eas:configure": "npx eas-cli@latest update:configure",
     "update:production": "npx eas-cli@latest update --channel production --environment production",
     "update:production:tv": "EXPO_TV=1 npx eas-cli@latest update --channel production-tv --environment production",
     "update:preview": "npx eas-cli@latest update --channel preview --environment preview",
-    "update:preview:tv": "EXPO_TV=1 npx eas-cli@latest update --channel preview-tv --environment preview"
+    "update:preview:tv": "EXPO_TV=1 npx eas-cli@latest update --channel preview-tv --environment preview",
+    "update:all": "node ./scripts/ota-update-both.js",
+    "update:all:preview": "node ./scripts/ota-update-both.js --preview"
   },
   "dependencies": {
     "@aniverse/api": "0.1.0",

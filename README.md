@@ -87,16 +87,23 @@ npm run eas:configure   # запишет real projectId и updates.url в app.co
 ### Публикация обновления
 
 ```bash
-# production phone (sideload / production_android)
+# phone + TV одним сообщением (каналы production и production-tv)
+npm run update:all -- "Fix search focus"
+
+# то же + записать version в app.config.ts / package.json
+npm run update:all -- "Fix search focus" --version 1.0.1
+
+# preview phone + TV
+npm run update:all:preview -- "QA: new home rail" --version 1.0.1
+
+# по отдельности
 npm run update:production -- --message "Fix search focus"
-
-# production TV — отдельный канал, иначе phone OTA перетрёт TV UI
 npm run update:production:tv -- --message "Fix TV login"
-
-# preview
-npm run update:preview -- --message "QA: new home rail"
-npm run update:preview:tv -- --message "QA: TV rails"
 ```
+
+`runtimeVersion` = `appVersion`: OTA попадает только на APK с той же `version`.
+Для обычных JS-фиксов **не поднимайте** version — пушьте без `--version`.
+`--version` нужен, когда дальше раздаёте новые phone/TV APK с этим номером.
 
 Каналы в `app.config.ts` → `updates.requestHeaders["expo-channel-name"]`:
 - phone: `production`
@@ -117,11 +124,19 @@ npm run update:preview:tv -- --message "QA: TV rails"
 ```bash
 cd aniverse-tv
 
-# Phone → ru.taiiok.aniverse.app
+# Phone + TV → dist/sleek.apk + dist/sleek-tv.apk
+npm run android:release:all
+
+# с bump version перед сборкой
+npm run android:release:all -- --version 1.0.1
+
+# только один target
+npm run android:release:all -- --phone
+npm run android:release:all -- --tv
+
+# по отдельности (сырой gradle APK)
 npm run android:release:phone
 # → android/app/build/outputs/apk/release/app-release.apk
-
-# TV → ru.taiiok.aniverse.tv (leanback required, forceTvUi)
 npm run android:release:tv
 # → android/app/build/outputs/apk/release/app-release.apk
 ```

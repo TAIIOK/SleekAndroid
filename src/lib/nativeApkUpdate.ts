@@ -9,6 +9,8 @@ export interface AppReleaseManifest {
   versionCode: number;
   phoneApkUrl: string;
   tvApkUrl: string;
+  /** @deprecated Prefer phoneApkUrl — legacy universal APK field. */
+  apkUrl?: string;
   releasedAt?: string;
   changelog?: string;
 }
@@ -40,11 +42,16 @@ export async function fetchAppReleaseManifest(): Promise<AppReleaseManifest | nu
     if (typeof data.versionName !== 'string' || typeof data.versionCode !== 'number') {
       return null;
     }
+    const phoneApkUrl =
+      (typeof data.phoneApkUrl === 'string' && data.phoneApkUrl) ||
+      (typeof data.apkUrl === 'string' && data.apkUrl) ||
+      '';
     return {
       versionName: data.versionName,
       versionCode: data.versionCode,
-      phoneApkUrl: typeof data.phoneApkUrl === 'string' ? data.phoneApkUrl : '',
+      phoneApkUrl,
       tvApkUrl: typeof data.tvApkUrl === 'string' ? data.tvApkUrl : '',
+      apkUrl: typeof data.apkUrl === 'string' ? data.apkUrl : '',
       releasedAt: data.releasedAt,
       changelog: data.changelog,
     };

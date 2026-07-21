@@ -1,19 +1,22 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { approveDeviceAuthSession } from '@/api/auth';
+import { approveDeviceAuthSession, declineDeviceAuthSession } from '@/api/auth';
 import { SleekLogo } from '@/components/brand/SleekLogo';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { useAuth } from '@/providers/AuthProvider';
+
+type Status = 'idle' | 'pending' | 'done' | 'declined' | 'error';
 
 export default function DeviceApproveScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
   const code = (params.code ?? '').trim().toUpperCase();
   const { isAuthenticated, loading } = useAuth();
-  const [status, setStatus] = useState<'idle' | 'pending' | 'done' | 'error'>('idle');
+  const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState<string | null>(null);
+  const autoApproveStarted = useRef(false);
 
   useEffect(() => {
     if (!code) setMessage('Код устройства не указан');
@@ -32,6 +35,28 @@ export default function DeviceApproveScreen() {
       setMessage(err instanceof Error ? err.message : 'Не удалось подтвердить вход');
     }
   };
+
+  const decline = async () => {
+    if (!code) return;
+    setStatus('pending');
+    setMessage(null);
+    try {
+      await declineDeviceAuthSession(code);
+      setStatus('declined');
+      setMessage('Вход на TV отклонён.');
+    } catch (err) {
+      setStatus('error');
+      setMessage(err instanceof Error ? err.message : 'Не удалось отклонить вход');
+    }
+  };
+
+  useEffect(() => {
+    if (loading || !isAuthenticated || !code || autoApproveStarted.current) return;
+    autoApproveStarted.current = true;
+    void approve();
+    // Auto-approve once when landing authenticated with a device code (e.g. after login).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, isAuthenticated, code]);
 
   if (loading) {
     return (
@@ -65,24 +90,51 @@ export default function DeviceApproveScreen() {
     );
   }
 
+  const busy = status === 'pending' || status === 'done' || status === 'declined';
+
   return (
     <View style={styles.center}>
       <SleekLogo size={72} />
       <Text style={styles.title}>Подтвердить TV</Text>
       {code ? <Text style={styles.code}>{code}</Text> : null}
-      <Text style={styles.subtitle}>Разрешить вход на телевизоре с этим кодом?</Text>
+      <Text style={styles.subtitle}>
+        {status === 'pending'
+          ? 'Подтверждаем вход на телевизоре…'
+          : status === 'done'
+            ? 'Вход на телевизоре подтверждён.'
+            : status === 'declined'
+              ? 'Вход на телевизоре отклонён.'
+              : 'Разрешить вход на телевизоре с этим кодом?'}
+      </Text>
       {message ? (
-        <Text style={[styles.message, status === 'error' && styles.messageError]}>{message}</Text>
+        <Text
+          style={[
+            styles.message,
+            status === 'error' && styles.messageError,
+            status === 'declined' && styles.messageWarn,
+          ]}
+        >
+          {message}
+        </Text>
       ) : null}
       <Pressable
-        style={[styles.primaryBtn, (!code || status === 'done') && styles.primaryBtnDisabled]}
-        disabled={!code || status === 'pending' || status === 'done'}
+        style={[styles.primaryBtn, (!code || busy) && styles.primaryBtnDisabled]}
+        disabled={!code || busy}
         onPress={() => void approve()}
       >
         <Text style={styles.primaryBtnText}>
-          {status === 'done' ? 'Готово' : status === 'pending' ? 'Подтверждаем…' : 'Подтвердить'}
+          {status === 'done' ? 'Готово' : status === 'pending' ? 'Обрабатываем…' : 'Подтвердить'}
         </Text>
       </Pressable>
+      {status !== 'done' && status !== 'declined' ? (
+        <Pressable
+          style={[styles.secondaryBtn, (!code || status === 'pending') && styles.primaryBtnDisabled]}
+          disabled={!code || status === 'pending'}
+          onPress={() => void decline()}
+        >
+          <Text style={styles.secondaryBtnText}>Отклонить</Text>
+        </Pressable>
+      ) : null}
       <Pressable onPress={() => router.replace('/')}>
         <Text style={styles.link}>На главную</Text>
       </Pressable>
@@ -126,6 +178,9 @@ const styles = StyleSheet.create({
   messageError: {
     color: colors.danger,
   },
+  messageWarn: {
+    color: '#fbbf24',
+  },
   primaryBtn: {
     backgroundColor: colors.brand,
     borderRadius: radii.lg,
@@ -141,6 +196,21 @@ const styles = StyleSheet.create({
     color: colors.brandOn,
     fontSize: 16,
     fontWeight: '700',
+  },
+  secondaryBtn: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  secondaryBtnText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
   link: {
     color: colors.brand,

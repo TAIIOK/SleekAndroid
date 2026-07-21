@@ -81,7 +81,7 @@ export async function pollDeviceAuthSession(
     return { status: 'pending' };
   }
   if (res.status === 410) {
-    throw new Error('Код истёк — обновите QR на TV');
+    throw new Error('Код истёк или вход отклонён — обновите QR на TV');
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -92,4 +92,19 @@ export async function pollDeviceAuthSession(
 
 export async function approveDeviceAuthSession(code: string): Promise<void> {
   await request(`/api/auth/device/${encodeURIComponent(code)}/approve`, { method: 'POST' });
+}
+
+export async function declineDeviceAuthSession(code: string): Promise<void> {
+  await request(`/api/auth/device/${encodeURIComponent(code)}/decline`, { method: 'POST' });
+}
+
+export interface CatalogDeeplink {
+  deeplink: string;
+  serverUrl?: string;
+  serverName?: string;
+}
+
+/** Same sleek:// payload the Telegram bot builds for «Открыть в Sleek». */
+export async function fetchCatalogDeeplink(): Promise<CatalogDeeplink> {
+  return request<CatalogDeeplink>('/api/user/catalog-deeplink');
 }
