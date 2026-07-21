@@ -14,7 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: isTvBuild ? 'Sleek TV' : 'Sleek',
   slug: 'sleek',
-  version: '1.0.2',
+  version: '1.0.3',
   scheme: 'sleek',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -43,7 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     predictiveBackGestureEnabled: false,
     package: isTvBuild ? 'ru.taiiok.aniverse.tv' : 'ru.taiiok.aniverse.app',
-    versionCode: 3,
+    versionCode: 4,
     intentFilters: [
       {
         action: 'VIEW',
@@ -55,8 +55,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     apiUrl: 'https://api.taiiok.ru',
     watchHubUrl: 'https://watchhub.taiiok.ru',
-    sitePublicUrl: 'https://preview.taiiok.ru',
-    releasesUrl: 'https://preview.taiiok.ru/releases/latest.json',
+    sitePublicUrl: 'https://sleekapp.ru',
+    releasesUrl: 'https://sleekapp.ru/releases/latest.json',
     forceTvUi: isTvBuild,
     eas: {
       projectId: '5131c8a0-3572-4e6f-af54-5515652ca844',
