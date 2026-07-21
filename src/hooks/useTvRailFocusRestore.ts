@@ -1,5 +1,8 @@
 import { useCallback, useLayoutEffect, useRef, type RefCallback } from 'react';
-import { Platform, type View } from 'react-native';
+import {
+  type View,
+} from 'react-native';
+import { isTvUi } from '@/lib/isTvUi';
 
 type FocusHost = View & {
   requestTVFocus?: () => void;
@@ -45,14 +48,14 @@ export function useTvRailFocusRestore(itemCount: number): {
   }, []);
 
   useLayoutEffect(() => {
-    if (!Platform.isTV || !ownsFocusRef.current) return;
+    if (!isTvUi() || !ownsFocusRef.current) return;
     const host = hostsRef.current.get(lastIndexRef.current);
     host?.requestTVFocus?.();
   }, [itemCount]);
 
   const bindItem = useCallback(
     (index: number): TvRailFocusBind => {
-      if (!Platform.isTV) return {};
+      if (!isTvUi()) return {};
       return {
         ref: (node) => register(index, node),
         onFocus: () => onItemFocus(index),

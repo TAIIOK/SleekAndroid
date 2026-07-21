@@ -1,4 +1,18 @@
-import * as Updates from 'expo-updates';
+type UpdatesModule = typeof import('expo-updates');
+
+let cachedUpdates: UpdatesModule | null | undefined;
+
+export function getUpdatesModule(): UpdatesModule | null {
+  if (cachedUpdates !== undefined) return cachedUpdates;
+  try {
+    // String literal required so Metro includes the module.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    cachedUpdates = require('expo-updates') as UpdatesModule;
+  } catch {
+    cachedUpdates = null;
+  }
+  return cachedUpdates;
+}
 
 export type OtaCheckResult =
   | { status: 'disabled' }
@@ -8,12 +22,19 @@ export type OtaCheckResult =
 
 export function isOtaEnabled(): boolean {
   if (__DEV__) return false;
+  const Updates = getUpdatesModule();
+  if (!Updates) return false;
   return Updates.isEnabled;
 }
 
 /** Check for and download a remote update. No-op in dev / when updates are disabled. */
 export async function checkAndFetchOtaUpdate(): Promise<OtaCheckResult> {
   if (!isOtaEnabled()) {
+    return { status: 'disabled' };
+  }
+
+  const Updates = getUpdatesModule();
+  if (!Updates) {
     return { status: 'disabled' };
   }
 
@@ -38,5 +59,7 @@ export async function checkAndFetchOtaUpdate(): Promise<OtaCheckResult> {
 /** Apply a pending update by reloading the JS runtime. */
 export async function reloadWithOtaUpdate(): Promise<void> {
   if (!isOtaEnabled()) return;
+  const Updates = getUpdatesModule();
+  if (!Updates) return;
   await Updates.reloadAsync();
 }

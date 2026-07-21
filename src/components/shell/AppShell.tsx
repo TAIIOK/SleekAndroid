@@ -32,6 +32,7 @@ import { openHomeSettings } from '@/lib/homeSettingsBridge';
 import { isTvAllowedPath, tvRedirectPath } from '@/lib/tvRoutes';
 import { useAuth } from '@/providers/AuthProvider';
 import { TvShellFocusProvider, useTvShellFocus } from '@/providers/TvShellFocus';
+import { isTvUi } from '@/lib/isTvUi';
 
 const TV_NAV_ITEMS = [
   { label: 'Главная', path: '/' },
@@ -82,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const currentPath = normalizePath(segments as string[]);
   const isHome = currentPath === '/';
-  const tvBlocked = Platform.isTV && !isTvAllowedPath(currentPath);
+  const tvBlocked = isTvUi() && !isTvAllowedPath(currentPath);
 
   useEffect(() => {
     if (!tvBlocked) return;
@@ -93,7 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  if (Platform.isTV) {
+  if (isTvUi()) {
     return (
       <TvShellFocusProvider>
         <TvAppShellFrame currentPath={currentPath} userNickname={user?.nickname}>

@@ -1,6 +1,11 @@
 # AniVerse Native (react-native-tvos)
 
-Нативное приложение **Android phone + Android TV** (один APK) на базе Expo SDK 56 и `react-native-tvos`.
+Нативное приложение на базе Expo SDK 56 и `react-native-tvos` — **два отдельных Android APK**:
+
+| Сборка | Имя | Package | UI |
+|--------|-----|---------|-----|
+| Phone | Sleek | `ru.taiiok.aniverse.app` | Адаптивный (phone) |
+| TV | Sleek TV | `ru.taiiok.aniverse.tv` | Всегда TV UI (`forceTvUi`) |
 
 > В монорепо пакет называется `aniverse-tv` (историческое имя). Это и есть native-клиент из плана `aniverse-native`.
 
@@ -9,7 +14,7 @@
 | Слой | Технология |
 |------|------------|
 | UI | React Native + expo-router |
-| TV focus | `Platform.isTV`, `Pressable`, `useTVEventHandler` |
+| TV focus | `isTvUi()`, `Pressable`, `useTVEventHandler` |
 | API | `@aniverse/api`, `@aniverse/types`, `@aniverse/playback` |
 | Auth | AsyncStorage + JWT refresh |
 | TV login | Device-code / QR (`DeviceQrLogin`) |
@@ -20,10 +25,16 @@
 
 | Платформа | Клиент |
 |-----------|--------|
-| Android phone | `aniverse-tv` APK |
-| Android TV / Fire TV | тот же APK (`EXPO_TV=1` prebuild) |
+| Android phone | Sleek APK (`ru.taiiok.aniverse.app`) |
+| Android TV / Fire TV / приставки | Sleek TV APK (`ru.taiiok.aniverse.tv`, `EXPO_TV=1`) |
 | Smart TV браузеры | [`site/`](../site/) web + TVShell |
 | Capacitor | [`site/android/`](../site/android/) — **заморожен** |
+
+TV-сборка форсит TV UI через `extra.forceTvUi` (см. `src/lib/isTvUi.ts`), даже если приставка отдаёт phone `uiMode`. Не ставьте phone APK на приставку.
+
+### Миграция со старого единого APK
+
+Раньше один APK (`ru.taiiok.aniverse.app`) обслуживал phone и TV. Теперь на приставках нужна **разовая** установка **Sleek TV** (`ru.taiiok.aniverse.tv`); старое приложение можно удалить.
 
 ## Разработка
 
@@ -35,26 +46,28 @@ cd aniverse-tv
 npm run postinstall   # symlink expo-router для @expo/cli (npm workspaces)
 npm run start
 
-# Android phone emulator
-npm run android
+# Android phone
+npm run prebuild:phone
+npm run android:phone
 
-# Android TV (leanback launcher + banner)
+# Android TV (leanback required + banner)
 # запускает AVD Television_1080p (не phone)
 npm run prebuild:tv
 npm run android:tv
 ```
 
-API URL задаётся в `app.json` → `expo.extra`:
+При смене phone ↔ TV target всегда делайте `prebuild --clean` (`prebuild:phone` / `prebuild:tv`).
 
-```json
+API URL задаётся в `app.config.ts` → `extra`:
+
+```ts
 {
-  "apiUrl": "https://api.taiiok.ru",
-  "watchHubUrl": "https://watchhub.taiiok.ru",
-  "sitePublicUrl": "https://preview.taiiok.ru"
+  apiUrl: 'https://api.taiiok.ru',
+  watchHubUrl: 'https://watchhub.taiiok.ru',
+  sitePublicUrl: 'https://preview.taiiok.ru',
+  forceTvUi: /* true when EXPO_TV=1 */,
 }
 ```
-
-После смены native-зависимостей нужен `npm run prebuild:tv` / `npm run android:tv`.
 
 Android-сборка ожидает JDK 17 (`openjdk@17`); JDK 25 ломает CMake у native-модулей. `scripts/with-expo-path.js` сам подставляет Homebrew `openjdk@17`, если он установлен.
 
@@ -66,29 +79,35 @@ JS, стили и ассеты можно пушить через [EAS Update](h
 
 ```bash
 npx eas-cli@latest login
-npm run eas:configure   # запишет real projectId и updates.url в app.json
-npm run prebuild:tv
-npm run android:release # раздать эту APK один раз
+npm run eas:configure   # запишет real projectId и updates.url в app.config.ts
 ```
 
-`app.json` уже содержит `extra.eas.projectId` и `updates.url` для проекта Sleek. Если переносите на другой Expo-аккаунт — снова запустите `npm run eas:configure`.
+`app.config.ts` уже содержит `extra.eas.projectId` и `updates.url` для проекта Sleek. Если переносите на другой Expo-аккаунт — снова запустите `npm run eas:configure`.
 
 ### Публикация обновления
 
 ```bash
-# production (sideload / production_android)
+# production phone (sideload / production_android)
 npm run update:production -- --message "Fix search focus"
 
-# preview-сборки
+# production TV — отдельный канал, иначе phone OTA перетрёт TV UI
+npm run update:production:tv -- --message "Fix TV login"
+
+# preview
 npm run update:preview -- --message "QA: new home rail"
+npm run update:preview:tv -- --message "QA: TV rails"
 ```
 
-Канал для локальных release-сборок задан в `app.json` → `updates.requestHeaders["expo-channel-name"]` = `production`.
+Каналы в `app.config.ts` → `updates.requestHeaders["expo-channel-name"]`:
+- phone: `production`
+- TV (`EXPO_TV=1`): `production-tv`
+
+`android:release:tv` обязан идти с `EXPO_TV=1` и на prebuild, и на `assembleRelease` — иначе в APK попадёт `forceTvUi: false` и телефонный login.
 
 ### Как проверить
 
-1. Установить release APK, собранную после `eas:configure`.
-2. Опубликовать update на канал `production`.
+1. Установить release APK нужного target (phone или TV).
+2. Опубликовать update на тот же канал (`production` или `production-tv`).
 3. Перезапустить приложение — появится диалог «Доступно обновление» → «Перезапустить», либо update применится на следующем cold start.
 
 В dev (`expo start`) OTA отключен.
@@ -98,13 +117,26 @@ npm run update:preview -- --message "QA: new home rail"
 ```bash
 cd aniverse-tv
 
-# 1. Prebuild с TV-манифестом (LEANBACK_LAUNCHER, banner)
-npm run prebuild:tv
+# Phone → ru.taiiok.aniverse.app
+npm run android:release:phone
+# → android/app/build/outputs/apk/release/app-release.apk
 
-# 2. Release APK
-npm run android:release
+# TV → ru.taiiok.aniverse.tv (leanback required, forceTvUi)
+npm run android:release:tv
 # → android/app/build/outputs/apk/release/app-release.apk
 ```
+
+Или EAS:
+
+```bash
+# Phone
+eas build --profile production_android --platform android
+
+# TV
+eas build --profile production_android_tv --platform android
+```
+
+Бинарные обновления sideload читают `phoneApkUrl` / `tvApkUrl` из `releases/latest.json` и выбирают URL через `isTvUi()`.
 
 ### Подпись release
 
@@ -126,17 +158,11 @@ ANIVERSE_UPLOAD_KEY_PASSWORD=***
 
 3. Настройте `android/app/build.gradle` signingConfigs (после prebuild) и пересоберите.
 
-Или используйте EAS:
-
-```bash
-eas build --profile production_android --platform android
-```
-
 ## TV MVP scope
 
 Включено: Home, Anime, Movies, Series, Search, History, Profile, Watch (anime), Device QR auth.
 
-Скрыто на TV (`Platform.isTV`): manga, downloads, feed, party — см. `src/lib/tvRoutes.ts`.
+Скрыто на TV (`isTvUi()`): manga, downloads, feed, party — см. `src/lib/tvRoutes.ts`.
 
 ## Структура
 
@@ -145,15 +171,15 @@ src/
   api/           # HTTP client, auth, catalog, progress
   app/           # expo-router screens
   components/    # PosterRail, AppShell, VideoPlayer, DeviceQrLogin
-  lib/           # storage, config, tvRoutes
+  lib/           # storage, config, tvRoutes, isTvUi
   providers/     # AuthProvider, QueryProvider
 ```
 
 ## QA
 
-- Android TV Emulator (API 31+, Leanback)
-- Реальная приставка: D-pad навигация, QR login, HLS playback
-- Телефон: таб-бар, password login, те же API
+- Android TV Emulator (API 31+, Leanback) — **Sleek TV** APK
+- Реальная приставка: D-pad навигация, QR login, HLS playback — только TV APK
+- Телефон: таб-бар, password login — phone APK
 
 См. также [`site/docs/TV_QA.md`](../site/docs/TV_QA.md) для web TV регрессии.
 

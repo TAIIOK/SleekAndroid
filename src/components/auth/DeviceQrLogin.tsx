@@ -5,12 +5,13 @@ import { createDeviceAuthSession, pollDeviceAuthSession } from '@/api/auth';
 import { QrCodeMatrix } from '@/components/auth/QrCodeMatrix';
 import { colors, spacing } from '@/constants/aniverse';
 import { getOrCreateDeviceId } from '@/lib/storage';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface DeviceQrLoginProps {
   onAuthenticated: () => void;
 }
 
-const QR_SIZE = Platform.isTV ? 168 : 200;
+const QR_SIZE = isTvUi() ? 168 : 200;
 
 export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
   const [code, setCode] = useState<string | null>(null);
@@ -94,9 +95,9 @@ export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: Platform.isTV ? 'row' : 'column',
+    flexDirection: isTvUi() ? 'row' : 'column',
     alignItems: 'center',
-    gap: Platform.isTV ? spacing.lg : spacing.xl,
+    gap: isTvUi() ? spacing.lg : spacing.xl,
     width: '100%',
   },
   qrBox: {
@@ -116,18 +117,18 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 24 : 22,
+    fontSize: isTvUi() ? 24 : 22,
     fontWeight: '700',
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 15 : 15,
-    lineHeight: Platform.isTV ? 22 : 22,
+    fontSize: isTvUi() ? 15 : 15,
+    lineHeight: isTvUi() ? 22 : 22,
   },
   code: {
     color: colors.brand,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    fontSize: Platform.isTV ? 32 : 28,
+    fontSize: isTvUi() ? 32 : 28,
     letterSpacing: 4,
     fontWeight: '700',
   },

@@ -1,10 +1,14 @@
-import { Platform, StyleSheet, View } from 'react-native';
+import {
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, spacing } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 export function AnimeDetailSkeleton() {
-  const tv = Platform.isTV;
+  const tv = isTvUi();
 
   return (
     <View style={styles.root}>
@@ -42,7 +46,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    padding: Platform.isTV ? spacing.lg : spacing.md,
+    padding: isTvUi() ? spacing.lg : spacing.md,
     gap: spacing.md,
   },
   stacked: {

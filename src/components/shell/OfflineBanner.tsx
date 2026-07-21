@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, layout, radii, spacing } from '@/constants/aniverse';
 import { useOnline } from '@/hooks/useOnline';
+import { isTvUi } from '@/lib/isTvUi';
 
 export function OfflineBanner() {
   const online = useOnline();
@@ -16,7 +21,7 @@ export function OfflineBanner() {
 
   if (!visible) return null;
 
-  const top = Platform.isTV
+  const top = isTvUi()
     ? insets.top + spacing.md
     : insets.top + layout.mobileTopBarHeight + spacing.sm;
 

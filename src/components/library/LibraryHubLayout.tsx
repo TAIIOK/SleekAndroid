@@ -1,9 +1,14 @@
 import { useRouter, useSegments } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { LIBRARY_HUB_TITLE, libraryHubTabs } from '@/lib/libraryHub';
+import { isTvUi } from '@/lib/isTvUi';
 
 function normalizePath(segments: string[]): string {
   const cleaned = segments.filter((segment) => !segment.startsWith('('));
@@ -19,7 +24,7 @@ export function LibraryHubLayout({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        {!Platform.isTV ? (
+        {!isTvUi() ? (
           <TvFocusable onPress={() => router.push('/')} style={styles.backBtn}>
             <Text style={styles.back}>← Назад</Text>
           </TvFocusable>
@@ -72,7 +77,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 28,
+    fontSize: isTvUi() ? 26 : 28,
     fontWeight: '700',
   },
   tabsRow: {
@@ -101,7 +106,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 16 : 14,
+    fontSize: isTvUi() ? 16 : 14,
     fontWeight: '600',
   },
   tabLabelActive: {

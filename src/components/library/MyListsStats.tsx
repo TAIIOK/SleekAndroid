@@ -1,8 +1,13 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import type { MyListsMediaFilter } from '@/lib/myLists';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface MyListsStatsProps {
   anime: number;
@@ -52,7 +57,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   card: {
-    minWidth: Platform.isTV ? 120 : 104,
+    minWidth: isTvUi() ? 120 : 104,
     flexGrow: 1,
     borderRadius: radii.lg,
     borderWidth: tvFocus.borderWidth,
@@ -67,7 +72,7 @@ const styles = StyleSheet.create({
   },
   count: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 24,
+    fontSize: isTvUi() ? 26 : 24,
     fontWeight: '700',
   },
   countActive: {
@@ -75,7 +80,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 14 : 13,
+    fontSize: isTvUi() ? 14 : 13,
     fontWeight: '500',
     marginTop: 4,
   },

@@ -54,6 +54,7 @@ export function PhoneVideoPlayer({
   onProgress,
   onEnded,
   onAutoPlayNext,
+  onPlaybackError,
   skipSegments = [],
   episodeNav,
   onBack,
@@ -72,6 +73,7 @@ export function PhoneVideoPlayer({
     onProgress,
     onEnded,
     onAutoPlayNext,
+    onPlaybackError,
   });
 
   const [controlsVisible, setControlsVisible] = useState(true);

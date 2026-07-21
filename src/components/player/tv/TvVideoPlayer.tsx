@@ -34,6 +34,7 @@ export function TvVideoPlayer({
   onProgress,
   onEnded,
   onAutoPlayNext,
+  onPlaybackError,
   skipSegments = [],
   episodeNav,
   onBack,
@@ -53,6 +54,7 @@ export function TvVideoPlayer({
     onProgress,
     onEnded,
     onAutoPlayNext,
+    onPlaybackError,
   });
 
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);

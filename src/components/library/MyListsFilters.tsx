@@ -1,7 +1,12 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   MY_LISTS_STATUS_OPTIONS,
   type MyListsStatusFilter,
@@ -41,7 +46,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: Platform.isTV ? 4 : spacing.xs,
+    paddingVertical: isTvUi() ? 4 : spacing.xs,
     paddingHorizontal: spacing.lg,
   },
   chip: {
@@ -68,7 +73,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 16 : 13,
+    fontSize: isTvUi() ? 16 : 13,
     fontWeight: '600',
   },
   chipLabelActive: {

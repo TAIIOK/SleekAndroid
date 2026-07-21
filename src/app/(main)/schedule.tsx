@@ -1,7 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { fetchSchedule } from '@/api/catalog';
 import { PosterRail } from '@/components/catalog/PosterRail';
@@ -13,6 +19,7 @@ import {
   scheduleWeekLabel,
 } from '@/lib/schedule';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 
 const WEEK_OPTIONS = [
   { offset: 0, label: 'Эта неделя' },
@@ -111,7 +118,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    paddingHorizontal: Platform.isTV ? spacing.lg : spacing.lg,
+    paddingHorizontal: isTvUi() ? spacing.lg : spacing.lg,
     marginBottom: spacing.sm,
   },
   chip: {
@@ -132,7 +139,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 14,
+    fontSize: isTvUi() ? 15 : 14,
     fontWeight: '600',
   },
   stateBox: {

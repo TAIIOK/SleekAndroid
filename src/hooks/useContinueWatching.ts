@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Platform } from 'react-native';
+
 import { useQueries, useQuery } from '@tanstack/react-query';
 
 import { fetchEpisodeById } from '@/api/catalog';
@@ -11,9 +11,10 @@ import {
   buildContinueWatchingItems,
 } from '@/lib/continueWatching';
 import { useAuth } from '@/providers/AuthProvider';
+import { isTvUi } from '@/lib/isTvUi';
 
 /** Cap visible continue cards (and ordinal N+1 fetches) on TV. */
-const CONTINUE_WATCHING_LIMIT = Platform.isTV ? 10 : 40;
+const CONTINUE_WATCHING_LIMIT = isTvUi() ? 10 : 40;
 
 export function useContinueWatching() {
   const { isAuthenticated } = useAuth();

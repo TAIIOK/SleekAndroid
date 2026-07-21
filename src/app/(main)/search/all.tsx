@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   StyleSheet,
   Text,
   View,
@@ -17,6 +16,7 @@ import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { usePosterGridLayout } from '@/hooks/usePosterGridLayout';
 import { lampaDetailPath } from '@/lib/lampaDetail';
 import { animePoster } from '@/lib/poster';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   lampaKindForMediaFilter,
   mediaForSearchBucket,
@@ -107,7 +107,7 @@ export default function SearchAllScreen() {
           onPress={() => router.back()}
           style={styles.backBtn}
           focusedStyle={styles.backBtnFocused}
-          hasTVPreferredFocus={Platform.isTV}
+          hasTVPreferredFocus={isTvUi()}
         >
           <Text style={styles.back}>← Назад</Text>
         </TvFocusable>
@@ -167,12 +167,12 @@ const styles = StyleSheet.create({
   },
   back: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 16 : 14,
+    fontSize: isTvUi() ? 16 : 14,
     fontWeight: '600',
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 22 : 22,
+    fontSize: isTvUi() ? 22 : 22,
     fontWeight: '700',
   },
   loader: {

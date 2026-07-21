@@ -1,7 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { fetchAchievements, fetchFullProfile, fetchLeaderboard, fetchUserStats } from '@/api/user';
 import { ProfileAchievements } from '@/components/profile/ProfileAchievements';
@@ -16,6 +22,7 @@ import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { resolvePosterUrl } from '@/lib/config';
 import { useAuth } from '@/providers/AuthProvider';
 import type { LeaderboardPeriod, LeaderboardType } from '@/types/profile';
+import { isTvUi } from '@/lib/isTvUi';
 
 function isPremiumSubscriber(
   profile: { boostySubscriptions?: { status?: string }[] } | null | undefined,
@@ -99,7 +106,7 @@ export default function ProfileScreen() {
 
         <ProfileStatsGrid stats={stats} loading={statsLoading} />
 
-        {!Platform.isTV ? (
+        {!isTvUi() ? (
           <>
             <ProfileLeaderboard
               entries={leaderboard?.data ?? []}
@@ -115,8 +122,8 @@ export default function ProfileScreen() {
         ) : null}
 
         <TvFocusable
-          hasTVPreferredFocus={Platform.isTV}
-          contentEntry={Platform.isTV}
+          hasTVPreferredFocus={isTvUi()}
+          contentEntry={isTvUi()}
           onPress={() => router.push('/accounts')}
           style={styles.button}
           focusedStyle={styles.buttonFocused}
@@ -142,7 +149,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xxl, gap: spacing.lg },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 24,
+    fontSize: isTvUi() ? 26 : 24,
     fontWeight: '700',
   },
   card: {
@@ -165,7 +172,7 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, gap: spacing.xs },
   name: {
     color: colors.text,
-    fontSize: Platform.isTV ? 28 : 20,
+    fontSize: isTvUi() ? 28 : 20,
     fontWeight: '700',
   },
   meta: { color: colors.textSecondary, fontSize: 16 },
@@ -195,7 +202,7 @@ const styles = StyleSheet.create({
   },
   buttonLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 20 : 16,
+    fontSize: isTvUi() ? 20 : 16,
     fontWeight: '600',
   },
 });

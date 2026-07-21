@@ -17,6 +17,7 @@ import {
   type VideoFitMode,
 } from '@/lib/playerPreferences';
 import { findActiveSkipPrompt, type PlayerSkipSegment } from '@/lib/playerSkip';
+import { toPlaybackErrorInfo, type PlaybackErrorInfo } from '@/lib/playbackErrors';
 import {
   findPreferredSubtitleTrack,
   type SubtitleTrackInfo,
@@ -52,6 +53,8 @@ export interface RNVideoEngineOptions {
   onProgress?: (current: number, duration: number) => void;
   onEnded?: () => void;
   onAutoPlayNext?: () => void;
+  /** Return true if the caller handled recovery (e.g. switched URL); error UI is skipped. */
+  onPlaybackError?: (info: PlaybackErrorInfo) => boolean | void;
 }
 
 export function useRNVideoEngine({
@@ -63,6 +66,7 @@ export function useRNVideoEngine({
   onProgress,
   onEnded,
   onAutoPlayNext,
+  onPlaybackError,
 }: RNVideoEngineOptions) {
   const [prefs, setPrefs] = useState<PlayerPreferences>(() => getPlayerPreferencesSync());
   const [currentTime, setCurrentTime] = useState(0);
@@ -91,6 +95,7 @@ export function useRNVideoEngine({
   const onProgressRef = useRef(onProgress);
   const onEndedRef = useRef(onEnded);
   const onAutoPlayNextRef = useRef(onAutoPlayNext);
+  const onPlaybackErrorRef = useRef(onPlaybackError);
   const startTimeRef = useRef(startTime);
   const startProgressFractionRef = useRef(startProgressFraction);
 
@@ -99,6 +104,7 @@ export function useRNVideoEngine({
   onProgressRef.current = onProgress;
   onEndedRef.current = onEnded;
   onAutoPlayNextRef.current = onAutoPlayNext;
+  onPlaybackErrorRef.current = onPlaybackError;
   startTimeRef.current = startTime;
   startProgressFractionRef.current = startProgressFraction;
 
@@ -265,11 +271,14 @@ export function useRNVideoEngine({
   }, []);
 
   const onError = useCallback((error: OnVideoErrorData) => {
-    const message =
-      error?.error?.errorString ||
-      error?.error?.errorException ||
-      'Не удалось воспроизвести видео';
-    setPlaybackError(message);
+    const info = toPlaybackErrorInfo(error);
+    if (onPlaybackErrorRef.current?.(info)) {
+      setPlaybackError(null);
+      setShowBuffering(true);
+      setPlaying(false);
+      return;
+    }
+    setPlaybackError(info.message);
     setShowBuffering(false);
     setPlaying(false);
   }, []);

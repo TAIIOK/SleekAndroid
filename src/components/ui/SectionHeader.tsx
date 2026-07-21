@@ -1,7 +1,12 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, radii, spacing, tvFocus, typography } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 export type SectionHeaderVariant = 'continue' | 'quick' | 'group' | 'rail' | 'rail-featured';
 
@@ -37,7 +42,7 @@ function titleStyleForVariant(variant: SectionHeaderVariant) {
 }
 
 function marginBottomForVariant(variant: SectionHeaderVariant) {
-  if (Platform.isTV) return spacing.md;
+  if (isTvUi()) return spacing.md;
   if (variant === 'group') return spacing.sm;
   return 12;
 }
@@ -53,7 +58,7 @@ export function SectionHeader({
   tvFocusEntry = false,
 }: SectionHeaderProps) {
   const accentVisible =
-    showAccent ?? (Platform.isTV || variant === 'rail-featured' || Boolean(onSeeAll));
+    showAccent ?? (isTvUi() || variant === 'rail-featured' || Boolean(onSeeAll));
 
   const titleText = (
     <Text style={[styles.title, titleStyleForVariant(variant)]}>{title}</Text>
@@ -61,7 +66,7 @@ export function SectionHeader({
 
   const titleBlock = (
     <View style={styles.titleBlock}>
-      {tvFocusEntry && Platform.isTV ? (
+      {tvFocusEntry && isTvUi() ? (
         <TvFocusable
           hasTVPreferredFocus
           contentEntry
@@ -106,7 +111,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingHorizontal: Platform.isTV ? layout.gutterDesktop : layout.gutterMobile,
+    paddingHorizontal: isTvUi() ? layout.gutterDesktop : layout.gutterMobile,
     gap: spacing.md,
   },
   wrapFlush: {
@@ -134,15 +139,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   accent: {
-    width: Platform.isTV ? 32 : 48,
-    height: Platform.isTV ? 4 : 6,
+    width: isTvUi() ? 32 : 48,
+    height: isTvUi() ? 4 : 6,
     borderRadius: 999,
     backgroundColor: colors.brand,
     marginTop: spacing.xs,
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 12 : 14,
+    fontSize: isTvUi() ? 12 : 14,
     backgroundColor: 'transparent',
   },
   seeAll: {
@@ -150,8 +155,8 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     backgroundColor: colors.glass,
     borderRadius: 999,
-    paddingHorizontal: Platform.isTV ? 16 : 24,
-    paddingVertical: Platform.isTV ? 8 : 10,
+    paddingHorizontal: isTvUi() ? 16 : 24,
+    paddingVertical: isTvUi() ? 8 : 10,
     marginBottom: 2,
   },
   seeAllFocused: {

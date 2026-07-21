@@ -1,9 +1,14 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { LampaDetail } from '@/api/catalog';
 import { GlassSurface } from '@/components/ui/GlassSurface';
 import { colors, spacing } from '@/constants/aniverse';
 import { buildLampaInfoRows, lampaRating } from '@/lib/lampaDetail';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface LampaDetailSidebarProps {
   detail: LampaDetail;
@@ -45,11 +50,11 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 16,
+    fontSize: isTvUi() ? 22 : 16,
     fontWeight: '700',
   },
   block: {
-    paddingHorizontal: Platform.isTV ? spacing.md : spacing.sm + 4,
+    paddingHorizontal: isTvUi() ? spacing.md : spacing.sm + 4,
     paddingVertical: spacing.xs,
   },
   metaRow: {
@@ -57,7 +62,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: Platform.isTV ? 12 : 8,
+    paddingVertical: isTvUi() ? 12 : 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },

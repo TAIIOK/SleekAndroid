@@ -1,6 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { fetchCollections } from '@/api/collections';
 import {
@@ -28,6 +34,7 @@ import { buildContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
 import { resolveEnabledContentTypes } from '@/lib/homeSettings';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   resolveAvailableTvHomeFeedTabs,
   resolveAvailableTvHomeTypeFilters,
@@ -36,7 +43,7 @@ import {
   type TvHomeTypeFilter,
 } from '@/lib/tvHomeFeeds';
 
-const isTv = Platform.isTV;
+const isTv = isTvUi();
 
 export default function HomeScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -203,7 +210,7 @@ export default function HomeScreen() {
     <>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, Platform.isTV && styles.contentTv]}
+        contentContainerStyle={[styles.content, isTvUi() && styles.contentTv]}
         {...tvVerticalCatalogScrollProps}
       >
         <ContinueWatchingRow items={continueItems} />
@@ -302,7 +309,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   content: {
-    paddingTop: Platform.isTV ? spacing.md : spacing.md,
+    paddingTop: isTvUi() ? spacing.md : spacing.md,
     paddingBottom: spacing.xl,
   },
   contentTv: {
@@ -310,7 +317,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   group: {
-    marginBottom: Platform.isTV ? spacing.md : 0,
+    marginBottom: isTvUi() ? spacing.md : 0,
   },
   loader: {
     marginTop: spacing.xxl,

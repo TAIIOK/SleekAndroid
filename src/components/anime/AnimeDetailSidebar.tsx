@@ -1,5 +1,9 @@
 import { useRouter } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { AnimeDetail } from '@/api/catalog';
 import { PosterRail } from '@/components/catalog/PosterRail';
@@ -12,6 +16,7 @@ import {
 } from '@/lib/animeDetail';
 import { mapAnimeToRailItem } from '@/lib/poster';
 import type { AnimeListItem } from '@aniverse/types';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface AnimeDetailSidebarProps {
   detail: AnimeDetail;
@@ -90,30 +95,30 @@ export function AnimeDetailSidebar({
 const styles = StyleSheet.create({
   sidebar: {
     alignSelf: 'stretch',
-    gap: Platform.isTV ? spacing.md : spacing.md,
+    gap: isTvUi() ? spacing.md : spacing.md,
   },
   block: {
-    padding: Platform.isTV ? spacing.md : spacing.sm + 4,
+    padding: isTvUi() ? spacing.md : spacing.sm + 4,
     gap: spacing.sm,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.md,
-    paddingVertical: Platform.isTV ? 8 : 7,
+    paddingVertical: isTvUi() ? 8 : 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   metaLabel: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 11 : 11,
+    fontSize: isTvUi() ? 11 : 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   metaValue: {
     color: colors.text,
-    fontSize: Platform.isTV ? 14 : 14,
+    fontSize: isTvUi() ? 14 : 14,
     fontWeight: '600',
     textAlign: 'right',
     flexShrink: 1,

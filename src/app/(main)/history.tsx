@@ -1,7 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { fetchSavedAnimeLibrary, fetchSavedLampaLibrary } from '@/api/library';
 import { fetchAnimeProgress, fetchLampaProgress } from '@/api/progress';
@@ -23,6 +28,7 @@ import {
 } from '@/lib/history';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { useAuth } from '@/providers/AuthProvider';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -105,7 +111,7 @@ export default function HistoryScreen() {
     },
   });
 
-  const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
+  const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
 
   return (
     <>
@@ -160,7 +166,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     gap: spacing.lg,
     // Room so the last rail can snap fully into view on TV.
-    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xl,
+    paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xl,
   },
   header: {
     flexDirection: 'row',
@@ -169,7 +175,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 24,
+    fontSize: isTvUi() ? 26 : 24,
     fontWeight: '700',
   },
   clearBtn: {

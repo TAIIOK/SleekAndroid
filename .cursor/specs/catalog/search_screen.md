@@ -18,6 +18,7 @@ TV search screen: query field, on-screen keyboard, media filters, recent search 
 10. [x] Recent search history is stored locally (AsyncStorage), shown as chips above popular queries when non-empty, capped (most recent first, case-insensitive dedupe).
 11. [x] A successful search (query length ≥ 2) prepends the query to history.
 12. [x] User can clear the entire search history from the search screen; chips re-run that query when pressed.
+13. [x] On TV, on-screen keyboard key presses append a single character even after results have loaded (no double letters from remount/re-render mid-press).
 
 ## Acceptance Criteria
 
@@ -29,9 +30,10 @@ TV search screen: query field, on-screen keyboard, media filters, recent search 
 - Focused «Смотреть все» is visually distinct.
 - After searching, the query appears in «Недавние»; pressing a history chip runs that search again.
 - «Очистить» removes all history chips from the screen.
+- After a search, reopening the keyboard and typing does not insert duplicate characters per remote select.
 
 ## Notes
 
-- Keyboard shared with login: `OnScreenKeyboard`.
+- Keyboard shared with login: `OnScreenKeyboard` (memoized + short press lock for Android TV double `onPress`).
 - Vertical snap helpers: `src/lib/tvCatalogScroll.ts`.
 - History module: `src/lib/searchHistory.ts`.

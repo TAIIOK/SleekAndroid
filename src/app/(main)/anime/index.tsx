@@ -1,7 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Platform, ScrollView, StyleSheet } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
 
 import { fetchAnimeList } from '@/api/catalog';
 import { AnimeCatalogRails } from '@/components/catalog/AnimeCatalogRails';
@@ -14,6 +17,7 @@ import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
 import { mapAnimeToRailItem } from '@/lib/poster';
 import { currentSeasonalShowcase } from '@/lib/seasonal';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function AnimeBrowseScreen() {
   const router = useRouter();
@@ -48,8 +52,8 @@ export default function AnimeBrowseScreen() {
       contentContainerStyle={styles.content}
       {...tvVerticalCatalogScrollProps}
     >
-      {Platform.isTV ? <SectionHeader title="Аниме" showAccent tvFocusEntry /> : null}
-      <LazyCatalogRail eager={Platform.isTV}>
+      {isTvUi() ? <SectionHeader title="Аниме" showAccent tvFocusEntry /> : null}
+      <LazyCatalogRail eager={isTvUi()}>
         <PosterRail
           title={`Сезон · ${seasonal.name}`}
           items={seasonalItems}

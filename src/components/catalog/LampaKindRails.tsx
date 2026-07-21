@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Platform, type ScrollView } from 'react-native';
+import {
+  type ScrollView,
+} from 'react-native';
 
 import {
   fetchLampaSectionItems,
@@ -20,6 +22,7 @@ import {
 import type { ContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
 import type { CatalogHomeConfig } from '@/types/homeConfig';
+import { isTvUi } from '@/lib/isTvUi';
 
 /** Minimum skeleton time so cached data does not flash unfinished rails. */
 const TV_BROWSE_MIN_SKELETON_MS = 400;
@@ -131,7 +134,7 @@ export function LampaKindRails({
   continueWatchingDedupe,
 }: LampaKindRailsProps) {
   const router = useRouter();
-  const browseGate = Platform.isTV && !home;
+  const browseGate = isTvUi() && !home;
   const pageTitle = kind === 'movie' ? 'Фильмы' : 'Сериалы';
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
 

@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import { forwardRef, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +20,7 @@ import {
 import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
+import { isTvUi } from '@/lib/isTvUi';
 
 const CARD_WIDTH = layout.continueCardWidth;
 
@@ -32,8 +32,8 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   const router = useRouter();
   const { bindItem } = useTvRailFocusRestore(items.length);
   const [resumingId, setResumingId] = useState<string | null>(null);
-  const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
-  const rowCount = Platform.isTV ? 1 : items.length <= 4 ? 1 : 2;
+  const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
+  const rowCount = isTvUi() ? 1 : items.length <= 4 ? 1 : 2;
   const columns =
     rowCount > 1
       ? Array.from({ length: Math.ceil(items.length / rowCount) }, (_, columnIndex) =>
@@ -179,8 +179,8 @@ const ContinueCard = forwardRef<
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<View | null>(null);
-  const exitLeft = Platform.isTV && Boolean(railStart || isContentEntry);
-  const exitUp = Platform.isTV && Boolean(isContentEntry);
+  const exitLeft = isTvUi() && Boolean(railStart || isContentEntry);
+  const exitUp = isTvUi() && Boolean(isContentEntry);
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   const setRefs = (node: View | null) => {
@@ -194,7 +194,7 @@ const ContinueCard = forwardRef<
       ref={setRefs}
       onFocus={() => {
         setFocused(true);
-        if (Platform.isTV && nodeRef.current) {
+        if (isTvUi() && nodeRef.current) {
           shellFocus?.registerContentAnchor(nodeRef.current);
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
@@ -215,7 +215,7 @@ const ContinueCard = forwardRef<
         { width: CARD_WIDTH },
         focused && styles.cardFocused,
       ]}
-      {...(isContentEntry && Platform.isTV ? { hasTVPreferredFocus: true } : {})}
+      {...(isContentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
       {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
@@ -263,19 +263,19 @@ const ContinueCard = forwardRef<
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: Platform.isTV ? spacing.md : 32,
+    marginBottom: isTvUi() ? spacing.md : 32,
   },
   scroll: {
-    paddingTop: Platform.isTV ? 8 : 0,
-    paddingBottom: Platform.isTV ? 10 : spacing.sm,
-    gap: Platform.isTV ? 10 : 12,
+    paddingTop: isTvUi() ? 8 : 0,
+    paddingBottom: isTvUi() ? 10 : spacing.sm,
+    gap: isTvUi() ? 10 : 12,
   },
   twoRowGrid: {
     flexDirection: 'row',
-    gap: Platform.isTV ? 10 : 12,
+    gap: isTvUi() ? 10 : 12,
   },
   twoRowColumn: {
-    gap: Platform.isTV ? 10 : 12,
+    gap: isTvUi() ? 10 : 12,
   },
   card: {
     marginRight: 0,
@@ -286,23 +286,23 @@ const styles = StyleSheet.create({
   },
   cardFocused: {
     zIndex: 2,
-    ...(Platform.isTV ? {} : { transform: [{ scale: 1.02 }] }),
+    ...(isTvUi() ? {} : { transform: [{ scale: 1.02 }] }),
   },
   posterFrame: {
     borderRadius: radii.lg,
-    borderWidth: Platform.isTV ? tvFocus.borderWidth : 0,
+    borderWidth: isTvUi() ? tvFocus.borderWidth : 0,
     borderColor: 'transparent',
   },
   posterFrameFocused: {
-    borderColor: Platform.isTV ? tvFocus.borderColor : 'transparent',
-    backgroundColor: Platform.isTV ? tvFocus.wash : 'transparent',
+    borderColor: isTvUi() ? tvFocus.borderColor : 'transparent',
+    backgroundColor: isTvUi() ? tvFocus.wash : 'transparent',
   },
   posterWrap: {
-    borderRadius: Platform.isTV ? radii.md : radii.lg,
+    borderRadius: isTvUi() ? radii.md : radii.lg,
     overflow: 'hidden',
     aspectRatio: 16 / 9,
     backgroundColor: colors.bgCard,
-    borderWidth: Platform.isTV ? 0 : 1,
+    borderWidth: isTvUi() ? 0 : 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   focusWash: {

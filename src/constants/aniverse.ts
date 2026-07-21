@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { isTvUi } from '@/lib/isTvUi';
 
 export const fonts = {
   regular: Platform.select({ web: 'Inter, system-ui, sans-serif', default: 'System' }),
@@ -44,17 +45,17 @@ export const layout = {
   mobileTabHeight: 84,
   mobileTabMaxWidth: 512,
   gutterMobile: 16,
-  /** Used as the TV content gutter (`Platform.isTV ? gutterDesktop : gutterMobile`). */
-  gutterDesktop: Platform.isTV ? 20 : 48,
+  /** Used as the TV content gutter (`isTvUi() ? gutterDesktop : gutterMobile`). */
+  gutterDesktop: isTvUi() ? 20 : 48,
   posterAspect: 120 / 170,
-  posterWidthRail: Platform.isTV ? 120 : 120,
+  posterWidthRail: isTvUi() ? 120 : 120,
   /** Similar / recommendations rails on detail screens (phone denser than home). */
-  posterWidthDetail: Platform.isTV ? 120 : 100,
-  posterWidthShowcase: Platform.isTV ? 120 : 140,
+  posterWidthDetail: isTvUi() ? 120 : 100,
+  posterWidthShowcase: isTvUi() ? 120 : 140,
   maxContentWidth: 1440,
-  continueCardWidth: Platform.isTV ? 190 : 260,
-  quickActionCardWidth: Platform.isTV ? 200 : 168,
-  quickActionCardHeight: Platform.isTV ? 96 : 88,
+  continueCardWidth: isTvUi() ? 190 : 260,
+  quickActionCardWidth: isTvUi() ? 200 : 168,
+  quickActionCardHeight: isTvUi() ? 96 : 88,
 };
 
 export function mobileTopChromeInset(safeTop: number): number {
@@ -67,46 +68,46 @@ export function mobileBottomChromeInset(safeBottom: number): number {
 
 export const typography = {
   headlineLg: {
-    fontSize: Platform.isTV ? 26 : 24,
-    lineHeight: Platform.isTV ? 32 : 32,
+    fontSize: isTvUi() ? 26 : 24,
+    lineHeight: isTvUi() ? 32 : 32,
     fontWeight: '700' as const,
     letterSpacing: -0.3,
   },
   titleMd: {
-    fontSize: Platform.isTV ? 18 : 20,
-    lineHeight: Platform.isTV ? 24 : 28,
+    fontSize: isTvUi() ? 18 : 20,
+    lineHeight: isTvUi() ? 24 : 28,
     fontWeight: '600' as const,
   },
   homeContinueTitle: {
-    fontSize: Platform.isTV ? 18 : 20,
-    lineHeight: Platform.isTV ? 24 : 28,
+    fontSize: isTvUi() ? 18 : 20,
+    lineHeight: isTvUi() ? 24 : 28,
     fontWeight: '600' as const,
   },
   homeQuickTitle: {
-    fontSize: Platform.isTV ? 18 : 18,
-    lineHeight: Platform.isTV ? 24 : 24,
+    fontSize: isTvUi() ? 18 : 18,
+    lineHeight: isTvUi() ? 24 : 24,
     fontWeight: '600' as const,
   },
   homeGroupTitle: {
-    fontSize: Platform.isTV ? 18 : 18,
-    lineHeight: Platform.isTV ? 24 : 24,
+    fontSize: isTvUi() ? 18 : 18,
+    lineHeight: isTvUi() ? 24 : 24,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   railTitle: {
-    fontSize: Platform.isTV ? 18 : 18,
-    lineHeight: Platform.isTV ? 24 : 24,
+    fontSize: isTvUi() ? 18 : 18,
+    lineHeight: isTvUi() ? 24 : 24,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
   cardTitle: {
-    fontSize: Platform.isTV ? 12 : 13,
-    lineHeight: Platform.isTV ? 16 : 18,
+    fontSize: isTvUi() ? 12 : 13,
+    lineHeight: isTvUi() ? 16 : 18,
     fontWeight: '600' as const,
   },
   cardSubtitle: {
-    fontSize: Platform.isTV ? 10 : 12,
-    lineHeight: Platform.isTV ? 13 : 16,
+    fontSize: isTvUi() ? 10 : 12,
+    lineHeight: isTvUi() ? 13 : 16,
     fontWeight: '400' as const,
   },
   labelCaps: {

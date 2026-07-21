@@ -1,4 +1,7 @@
+import type { PlaybackErrorInfo } from '@/lib/playbackErrors';
 import type { PlayerSkipSegment } from '@/lib/playerSkip';
+
+export type { PlaybackErrorInfo };
 
 export interface PlayerMenuOption {
   id: string;
@@ -35,6 +38,8 @@ export interface VideoPlayerProps {
   onProgress?: (current: number, duration: number) => void;
   onEnded?: () => void;
   onAutoPlayNext?: () => void;
+  /** Return true to suppress the error UI (caller is recovering, e.g. proxy fallback). */
+  onPlaybackError?: (info: PlaybackErrorInfo) => boolean | void;
   skipSegments?: PlayerSkipSegment[];
   episodeNav?: PlayerEpisodeNav;
   onBack?: () => void;

@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { lampaDetailPath } from '@/lib/lampaDetail';
 import { animePoster } from '@/lib/poster';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   SEARCH_POPULAR_QUERIES,
   lampaKindForMediaFilter,
@@ -40,6 +40,8 @@ export default function SearchScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(0);
   const [query, setQuery] = useState('');
+  const queryRef = useRef(query);
+  queryRef.current = query;
   const [media, setMedia] = useState<SearchMediaFilter>('all');
   const [genre, setGenre] = useState('');
   const [year, setYear] = useState('');
@@ -62,14 +64,14 @@ export default function SearchScreen() {
 
   /** Only when returning from results — never on filter focus (causes bounce). */
   const revealHeader = useCallback(() => {
-    if (!Platform.isTV || scrollYRef.current < 48) return;
+    if (!isTvUi() || scrollYRef.current < 48) return;
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, []);
 
-  const runSearch = async (q: string) => {
+  const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
     if (trimmed.length < 2) return;
-    if (Platform.isTV) setShowKeyboard(false);
+    if (isTvUi()) setShowKeyboard(false);
     setLoading(true);
     setError(null);
     try {
@@ -126,18 +128,23 @@ export default function SearchScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [media, genre, year]);
 
   const clearHistory = useCallback(() => {
     void clearSearchHistory().then(() => setHistory([]));
   }, []);
 
-  const handleKey = (key: string) => {
-    if (key === 'BACK') setQuery((v) => v.slice(0, -1));
-    else if (key === 'SPACE') setQuery((v) => `${v} `);
-    else if (key === 'SUBMIT') void runSearch(query);
-    else setQuery((v) => v + key);
-  };
+  // Stable identity so memoized OnScreenKeyboard does not rebuild mid-press when
+  // results/query re-render (Android TV can otherwise double-fire onPress).
+  const handleKey = useCallback(
+    (key: string) => {
+      if (key === 'BACK') setQuery((v) => v.slice(0, -1));
+      else if (key === 'SPACE') setQuery((v) => `${v} `);
+      else if (key === 'SUBMIT') void runSearch(queryRef.current);
+      else setQuery((v) => v + key);
+    },
+    [runSearch],
+  );
 
   const showAnime = media === 'all' || media === 'anime';
   const showLampa = media === 'all' || media === 'movie' || media === 'tv';
@@ -158,7 +165,7 @@ export default function SearchScreen() {
       <View style={styles.topBar}>
         <Text style={styles.title}>Поиск</Text>
         <View style={styles.searchRow}>
-          {Platform.isTV ? (
+          {isTvUi() ? (
             <TvFocusable
               onPress={() => {
                 revealHeader();
@@ -192,7 +199,7 @@ export default function SearchScreen() {
           </TvFocusable>
         </View>
 
-        {Platform.isTV && showKeyboard ? <OnScreenKeyboard onKey={handleKey} /> : null}
+        {isTvUi() && showKeyboard ? <OnScreenKeyboard onKey={handleKey} /> : null}
       </View>
 
       <SearchFilters
@@ -332,16 +339,16 @@ function FilterChip({
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
-    padding: Platform.isTV ? spacing.lg : spacing.xxl,
-    gap: Platform.isTV ? spacing.md : spacing.lg,
-    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xxl,
+    padding: isTvUi() ? spacing.lg : spacing.xxl,
+    gap: isTvUi() ? spacing.md : spacing.lg,
+    paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xxl,
   },
   topBar: {
-    gap: Platform.isTV ? spacing.md : spacing.lg,
+    gap: isTvUi() ? spacing.md : spacing.lg,
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 24,
+    fontSize: isTvUi() ? 26 : 24,
     fontWeight: '700',
   },
   searchRow: {
@@ -412,7 +419,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 14,
+    fontSize: isTvUi() ? 15 : 14,
     fontWeight: '600',
   },
   popular: { gap: spacing.sm },
@@ -440,7 +447,7 @@ const styles = StyleSheet.create({
   },
   clearHistoryLabel: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 14 : 13,
+    fontSize: isTvUi() ? 14 : 13,
     fontWeight: '600',
   },
   popularRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -19,6 +18,7 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
 import type { CollectionItemInput } from '@/types/collection';
+import { isTvUi } from '@/lib/isTvUi';
 
 type FocusTarget = number | 'create' | 'close';
 
@@ -118,7 +118,7 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
   }, [item.mediaType, item.mediaId]);
 
   useTvEventHandlerSafe((evt) => {
-    if (!open || !Platform.isTV) return;
+    if (!open || !isTvUi()) return;
     if (evt.eventKeyAction != null && evt.eventKeyAction !== 1) return;
     if (evt.eventType !== 'select' && evt.eventType !== 'playPause') return;
 
@@ -175,7 +175,7 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
               <View style={styles.errorBlock}>
                 <Text style={styles.errorText}>Не удалось загрузить коллекции</Text>
                 <TvFocusable
-                  hasTVPreferredFocus={Platform.isTV}
+                  hasTVPreferredFocus={isTvUi()}
                   onPress={() => {
                     void refetch();
                   }}
@@ -191,7 +191,7 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
                   <TvFocusable
                     key={col.id}
                     disabled={busy}
-                    hasTVPreferredFocus={Platform.isTV && index === 0}
+                    hasTVPreferredFocus={isTvUi() && index === 0}
                     onFocus={() => {
                       focusedRef.current = col.id;
                     }}
@@ -216,7 +216,7 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
             {!isLoading && !isError ? (
               <TvFocusable
                 disabled={busy}
-                hasTVPreferredFocus={Platform.isTV && collections.length === 0}
+                hasTVPreferredFocus={isTvUi() && collections.length === 0}
                 onFocus={() => {
                   focusedRef.current = 'create';
                 }}
@@ -256,7 +256,7 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
 const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: Platform.isTV ? 14 : 12,
+    paddingVertical: isTvUi() ? 14 : 12,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 16 : 14,
+    fontSize: isTvUi() ? 16 : 14,
     fontWeight: '600',
   },
   backdrop: {
@@ -315,8 +315,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: Platform.isTV ? spacing.lg : spacing.md,
-    minHeight: Platform.isTV ? 52 : undefined,
+    paddingVertical: isTvUi() ? spacing.lg : spacing.md,
+    minHeight: isTvUi() ? 52 : undefined,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },

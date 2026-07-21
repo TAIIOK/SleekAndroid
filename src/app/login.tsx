@@ -2,7 +2,6 @@ import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +17,7 @@ import { SleekLogo } from '@/components/brand/SleekLogo';
 import { GlassSurface } from '@/components/ui/GlassSurface';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { useAuth } from '@/providers/AuthProvider';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -31,7 +31,7 @@ export default function LoginScreen() {
   const [activeField, setActiveField] = useState<'login' | 'password'>('login');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<'qr' | 'keyboard'>(Platform.isTV ? 'qr' : 'keyboard');
+  const [mode, setMode] = useState<'qr' | 'keyboard'>(isTvUi() ? 'qr' : 'keyboard');
 
   const onAuthenticated = useCallback(() => {
     void refreshUser().then(() => router.replace(redirectPath as '/'));
@@ -81,7 +81,7 @@ export default function LoginScreen() {
     return <Redirect href="/" />;
   }
 
-  const isTv = Platform.isTV;
+  const isTv = isTvUi();
 
   return (
     <SafeAreaView style={styles.safe}>

@@ -1,6 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   type StyleProp,
@@ -10,6 +9,7 @@ import {
 
 import { radii, tvFocus } from '@/constants/aniverse';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface TvFocusableProps {
   children: ReactNode;
@@ -43,8 +43,8 @@ export function TvFocusable({
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
   const pressableRef = useRef<View | null>(null);
-  const exitLeft = Platform.isTV && railStart;
-  const exitUp = Platform.isTV && contentEntry;
+  const exitLeft = isTvUi() && railStart;
+  const exitUp = isTvUi() && contentEntry;
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   return (
@@ -58,7 +58,7 @@ export function TvFocusable({
       onFocus={() => {
         setFocused(true);
         // Return target for Right from the overlay menu.
-        if (Platform.isTV && pressableRef.current) {
+        if (isTvUi() && pressableRef.current) {
           shellFocus?.registerContentAnchor(pressableRef.current);
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);

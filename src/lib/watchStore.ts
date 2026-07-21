@@ -1,4 +1,4 @@
-import type { WatchHubVideoLink } from '@/services/watchHub';
+import type { WatchHubSeasonEpisodes, WatchHubVideoLink } from '@/services/watchHub';
 
 export interface LampaWatchPayload {
   lampaLinks: WatchHubVideoLink[];
@@ -8,6 +8,22 @@ export interface LampaWatchPayload {
   season?: number;
   episode?: number;
   startProgress?: number;
+  /** WatchHub session — required for in-player episode switching on serials. */
+  taskId?: string;
+  sourceId?: string;
+  translatorId?: number;
+  seasons?: WatchHubSeasonEpisodes[];
+}
+
+/** Encode season+episode into a single id for PlayerEpisodeNav. */
+export function lampaEpisodeNavId(season: number, episode: number): number {
+  return season * 10_000 + episode;
+}
+
+export function parseLampaEpisodeNavId(id: number): { season: number; episode: number } {
+  const season = Math.floor(id / 10_000);
+  const episode = id % 10_000;
+  return { season, episode };
 }
 
 let pendingLampaWatch: LampaWatchPayload | null = null;

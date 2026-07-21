@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { isTvUi } from '@/lib/isTvUi';
 
 /** Initial / page fetch size for horizontal catalog rails. */
-export const CATALOG_RAIL_PAGE_SIZE = Platform.isTV ? 12 : 24;
+export const CATALOG_RAIL_PAGE_SIZE = isTvUi() ? 12 : 24;

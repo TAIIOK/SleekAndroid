@@ -1,4 +1,9 @@
-import { ImageBackground, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  ImageBackground,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { LampaDetail } from '@/api/catalog';
@@ -19,6 +24,7 @@ import {
 } from '@/lib/lampaDetail';
 import { lampaPosterPath } from '@/lib/poster';
 import type { CollectionItemInput } from '@/types/collection';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface LampaDetailHeroProps {
   detail: LampaDetail;
@@ -119,9 +125,9 @@ export function LampaDetailHero({
         <View style={styles.actions}>
           <TvFocusable
             onPress={onWatch}
-            hasTVPreferredFocus={Platform.isTV}
-            contentEntry={Platform.isTV}
-            railStart={Platform.isTV}
+            hasTVPreferredFocus={isTvUi()}
+            contentEntry={isTvUi()}
+            railStart={isTvUi()}
             style={styles.playBtn}
           >
             <Text style={styles.playLabel}>▶ {playLabel}</Text>
@@ -184,7 +190,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     width: '100%',
-    minHeight: Platform.isTV ? 260 : 240,
+    minHeight: isTvUi() ? 260 : 240,
     justifyContent: 'flex-end',
     backgroundColor: colors.bgElevated,
   },
@@ -192,54 +198,54 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   content: {
-    padding: Platform.isTV ? spacing.lg : spacing.md,
-    gap: Platform.isTV ? spacing.sm : 6,
-    maxWidth: Platform.isTV ? 720 : undefined,
+    padding: isTvUi() ? spacing.lg : spacing.md,
+    gap: isTvUi() ? spacing.sm : 6,
+    maxWidth: isTvUi() ? 720 : undefined,
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 28 : 22,
+    fontSize: isTvUi() ? 28 : 22,
     fontWeight: '700',
     letterSpacing: -0.4,
   },
   alt: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 15 : 13,
+    fontSize: isTvUi() ? 15 : 13,
   },
   pills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Platform.isTV ? spacing.sm : 6,
+    gap: isTvUi() ? spacing.sm : 6,
     marginTop: spacing.xs,
   },
   pill: {
     borderRadius: radii.pill,
-    paddingHorizontal: Platform.isTV ? 12 : 10,
-    paddingVertical: Platform.isTV ? 5 : 4,
+    paddingHorizontal: isTvUi() ? 12 : 10,
+    paddingVertical: isTvUi() ? 5 : 4,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   pillText: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 12 : 11,
+    fontSize: isTvUi() ? 12 : 11,
     fontWeight: '600',
   },
   actions: {
-    marginTop: Platform.isTV ? spacing.sm : 6,
-    gap: Platform.isTV ? spacing.sm : 6,
+    marginTop: isTvUi() ? spacing.sm : 6,
+    gap: isTvUi() ? spacing.sm : 6,
   },
   playBtn: {
     alignSelf: 'flex-start',
     backgroundColor: colors.brandAccent,
     borderRadius: radii.md,
-    paddingHorizontal: Platform.isTV ? spacing.xl : spacing.lg,
-    paddingVertical: Platform.isTV ? 12 : 11,
+    paddingHorizontal: isTvUi() ? spacing.xl : spacing.lg,
+    paddingVertical: isTvUi() ? 12 : 11,
     gap: 2,
   },
   playLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 17 : 15,
+    fontSize: isTvUi() ? 17 : 15,
     fontWeight: '700',
   },
   playHint: {
@@ -247,8 +253,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   sourcesBtn: {
-    paddingHorizontal: Platform.isTV ? spacing.lg : spacing.md,
-    paddingVertical: Platform.isTV ? 12 : 10,
+    paddingHorizontal: isTvUi() ? spacing.lg : spacing.md,
+    paddingVertical: isTvUi() ? 12 : 10,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
@@ -256,7 +262,7 @@ const styles = StyleSheet.create({
   },
   sourcesLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 13,
+    fontSize: isTvUi() ? 15 : 13,
     fontWeight: '600',
   },
 });

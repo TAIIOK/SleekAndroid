@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Dimensions, Platform, type View } from 'react-native';
+import {
+  AppState,
+  Dimensions,
+  type View,
+} from 'react-native';
+import { isTvUi } from '@/lib/isTvUi';
 
 type UseNearViewportOptions = {
   /** Treat as visible immediately (skip gating). */
@@ -12,7 +17,7 @@ type UseNearViewportOptions = {
 
 function defaultRootMargin(screenH: number): number {
   // TV: prefetch ~2 screens so the next D-pad rail is already mounting.
-  return Math.round(screenH * (Platform.isTV ? 2 : 1.25));
+  return Math.round(screenH * (isTvUi() ? 2 : 1.25));
 }
 
 /**
@@ -21,7 +26,7 @@ function defaultRootMargin(screenH: number): number {
  * without a shared scroll context.
  */
 export function useNearViewport(options: UseNearViewportOptions = {}) {
-  const { eager = false, rootMargin, intervalMs = Platform.isTV ? 450 : 200 } = options;
+  const { eager = false, rootMargin, intervalMs = isTvUi() ? 450 : 200 } = options;
   const ref = useRef<View>(null);
   const [active, setActive] = useState(eager);
 

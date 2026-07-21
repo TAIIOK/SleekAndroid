@@ -1,8 +1,13 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import type { HistoryMediaFilter } from '@/lib/history';
+import { isTvUi } from '@/lib/isTvUi';
 
 const OPTIONS: { id: HistoryMediaFilter; label: string }[] = [
   { id: 'all', label: 'Все' },
@@ -44,7 +49,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     paddingBottom: spacing.sm,
-    paddingTop: Platform.isTV ? 4 : 0,
+    paddingTop: isTvUi() ? 4 : 0,
   },
   chip: {
     paddingHorizontal: spacing.md,
@@ -68,7 +73,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 16 : 14,
+    fontSize: isTvUi() ? 16 : 14,
     fontWeight: '600',
   },
   chipLabelActive: {

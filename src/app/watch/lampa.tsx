@@ -1,10 +1,11 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { fetchLampaProgress } from '@/api/progress';
+import { fetchLampaProgress, putLampaProgress } from '@/api/progress';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
+import type { PlaybackErrorInfo, PlayerEpisodeNav } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
 import { useThrottledLampaProgress } from '@/hooks/useThrottledLampaProgress';
 import {
@@ -25,9 +26,18 @@ import {
   type LampaConnectionMode,
   type LampaDeliveryMode,
 } from '@/lib/lampaPlaybackOptions';
-import { lampaResumeProgress } from '@/lib/progressUtils';
-import { consumeLampaWatchPayload } from '@/lib/watchStore';
+import {
+  isEpisodeCompleted,
+  lampaResumeProgress,
+  lampaSeasonEpisodeForWatch,
+} from '@/lib/progressUtils';
+import {
+  consumeLampaWatchPayload,
+  lampaEpisodeNavId,
+  parseLampaEpisodeNavId,
+} from '@/lib/watchStore';
 import { useAuth } from '@/providers/AuthProvider';
+import { fetchVideoLinks, type WatchHubVideoLink } from '@/services/watchHub';
 
 export default function WatchLampaScreen() {
   const router = useRouter();
@@ -35,6 +45,14 @@ export default function WatchLampaScreen() {
   const [payload] = useState(() => consumeLampaWatchPayload());
 
   const downloadPrefs = getDownloadPreferencesSync();
+  const [lampaLinks, setLampaLinks] = useState<WatchHubVideoLink[]>(
+    () => payload?.lampaLinks ?? [],
+  );
+  const [season, setSeason] = useState<number | undefined>(() => payload?.season);
+  const [episode, setEpisode] = useState<number | undefined>(() => payload?.episode);
+  const [switchingEpisode, setSwitchingEpisode] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
   const [lampaQuality, setLampaQuality] = useState('');
   const [lampaConnection, setLampaConnection] = useState<LampaConnectionMode>(
     downloadPrefs.directFirst ? 'direct' : 'proxy',
@@ -43,6 +61,9 @@ export default function WatchLampaScreen() {
     downloadPrefs.preferStreamOverFile ? 'stream' : 'file',
   );
   const playbackTimeRef = useRef(0);
+  const durationRef = useRef(0);
+  const httpFallbackTriedRef = useRef(false);
+  const hasSwitchedEpisodeRef = useRef(false);
   const [resumeTime, setResumeTime] = useState<number | undefined>();
   const [resumeFraction, setResumeFraction] = useState<number | undefined>();
 
@@ -53,9 +74,19 @@ export default function WatchLampaScreen() {
     });
   }, []);
 
-  const lampaLinks = payload?.lampaLinks ?? [];
   const lampaId = payload?.lampaId?.trim() ?? '';
   const isSerial = payload?.lampaKind === 'tv';
+  const canNavigateEpisodes = Boolean(
+    isSerial &&
+      payload?.taskId &&
+      payload?.sourceId &&
+      payload?.translatorId != null &&
+      (payload.seasons?.length ?? 0) > 0,
+  );
+
+  useEffect(() => {
+    httpFallbackTriedRef.current = false;
+  }, [lampaId, season, episode, lampaLinks]);
 
   const { data: progressRows = [] } = useQuery({
     queryKey: ['lampa-progress', lampaId || undefined],
@@ -108,33 +139,40 @@ export default function WatchLampaScreen() {
   ]);
 
   const syncedProgress = useMemo(
-    () =>
-      lampaResumeProgress(
-        progressRows,
-        lampaId,
-        payload?.season,
-        payload?.episode,
-        isSerial,
-      ),
-    [progressRows, lampaId, payload?.season, payload?.episode, isSerial],
+    () => lampaResumeProgress(progressRows, lampaId, season, episode, isSerial),
+    [progressRows, lampaId, season, episode, isSerial],
   );
 
   useEffect(() => {
     playbackTimeRef.current = 0;
-    const fraction =
-      payload?.startProgress != null && payload.startProgress > 0.01
-        ? payload.startProgress
-        : syncedProgress;
+    durationRef.current = 0;
 
-    if (fraction == null || fraction <= 0.01) {
+    const usePayloadStart =
+      !hasSwitchedEpisodeRef.current &&
+      payload?.startProgress != null &&
+      payload.startProgress > 0.01 &&
+      season === payload.season &&
+      episode === payload.episode;
+    const fraction = usePayloadStart ? payload.startProgress : syncedProgress;
+
+    if (fraction != null && fraction > 0.01) {
       setResumeTime(undefined);
-      setResumeFraction(undefined);
+      setResumeFraction(fraction);
       return;
     }
 
-    setResumeTime(undefined);
-    setResumeFraction(fraction);
-  }, [payload?.startProgress, syncedProgress, payload?.lampaId, payload?.season, payload?.episode]);
+    // After an in-player episode switch, force start from the beginning when no progress.
+    setResumeTime(hasSwitchedEpisodeRef.current ? 0 : undefined);
+    setResumeFraction(undefined);
+  }, [
+    payload?.startProgress,
+    payload?.season,
+    payload?.episode,
+    syncedProgress,
+    lampaId,
+    season,
+    episode,
+  ]);
 
   const title = useMemo(() => {
     if (!payload) return 'Воспроизведение';
@@ -144,8 +182,8 @@ export default function WatchLampaScreen() {
   const subtitle = useMemo(() => {
     if (!payload) return undefined;
     const parts: string[] = [];
-    if (payload.season != null && payload.episode != null) {
-      parts.push(`Сезон ${payload.season} · Эпизод ${payload.episode}`);
+    if (season != null && episode != null) {
+      parts.push(`Сезон ${season} · Эпизод ${episode}`);
     }
     if (qualityOptionsList.length > 0) {
       parts.push(lampaQuality || pickDefaultLampaQuality(qualityOptionsList));
@@ -153,15 +191,126 @@ export default function WatchLampaScreen() {
     parts.push(lampaConnectionLabel(lampaConnection));
     parts.push(lampaDeliveryLabel(lampaDelivery));
     return parts.join(' · ');
-  }, [payload, qualityOptionsList, lampaQuality, lampaConnection, lampaDelivery]);
+  }, [payload, season, episode, qualityOptionsList, lampaQuality, lampaConnection, lampaDelivery]);
 
   const syncProgress = useThrottledLampaProgress(
     isAuthenticated && !!lampaId,
     lampaId,
     isSerial,
-    payload?.season,
-    payload?.episode,
+    season,
+    episode,
   );
+
+  const flushProgress = useCallback(() => {
+    if (!isAuthenticated || !lampaId.trim()) return;
+    const coords = lampaSeasonEpisodeForWatch(isSerial, season, episode);
+    if (!coords) return;
+    const current = playbackTimeRef.current;
+    const duration = durationRef.current;
+    if (current <= 0) return;
+    const progress =
+      duration > 1 ? Math.min(1, Math.max(0, current / duration)) : Math.min(0.95, current / 1440);
+    void putLampaProgress({
+      lampaId: lampaId.trim(),
+      seasonOrdinal: coords.seasonOrdinal,
+      episodeOrdinal: coords.episodeOrdinal,
+      progress,
+      completed: isEpisodeCompleted(progress),
+    });
+  }, [isAuthenticated, lampaId, isSerial, season, episode]);
+
+  const episodeItems = useMemo(() => {
+    if (!canNavigateEpisodes || !payload?.seasons) return [];
+    return payload.seasons.flatMap((seasonRow) =>
+      seasonRow.episodes.map((ep) => ({
+        id: lampaEpisodeNavId(ep.season, ep.episode),
+        season: ep.season,
+        episode: ep.episode,
+        label:
+          payload.seasons!.length > 1
+            ? `S${ep.season}E${ep.episode} · ${ep.title}`
+            : ep.title?.trim()
+              ? `Эп. ${ep.episode} · ${ep.title}`
+              : `Эпизод ${ep.episode}`,
+      })),
+    );
+  }, [canNavigateEpisodes, payload?.seasons]);
+
+  const currentEpisodeIndex = useMemo(() => {
+    if (season == null || episode == null) return -1;
+    const id = lampaEpisodeNavId(season, episode);
+    return episodeItems.findIndex((item) => item.id === id);
+  }, [episodeItems, season, episode]);
+
+  const previousEpisode =
+    currentEpisodeIndex > 0 ? episodeItems[currentEpisodeIndex - 1] : undefined;
+  const nextEpisode =
+    currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeItems.length - 1
+      ? episodeItems[currentEpisodeIndex + 1]
+      : undefined;
+
+  const navigateToEpisode = useCallback(
+    async (nextSeason: number, nextEpisodeNum: number) => {
+      if (!payload?.taskId || !payload.sourceId || payload.translatorId == null) return;
+      if (nextSeason === season && nextEpisodeNum === episode) return;
+      if (switchingEpisode) return;
+
+      flushProgress();
+      setSwitchingEpisode(true);
+      setSwitchError(null);
+      try {
+        const links = await fetchVideoLinks({
+          taskId: payload.taskId,
+          sourceId: payload.sourceId,
+          translatorId: payload.translatorId,
+          season: nextSeason,
+          episode: nextEpisodeNum,
+        });
+        if (!links.length) {
+          setSwitchError('Не удалось получить ссылку на серию');
+          return;
+        }
+        hasSwitchedEpisodeRef.current = true;
+        setLampaLinks(links);
+        setSeason(nextSeason);
+        setEpisode(nextEpisodeNum);
+      } catch (e) {
+        setSwitchError(e instanceof Error ? e.message : 'Ошибка смены серии');
+      } finally {
+        setSwitchingEpisode(false);
+      }
+    },
+    [payload, season, episode, switchingEpisode, flushProgress],
+  );
+
+  const episodeNav: PlayerEpisodeNav | undefined = useMemo(() => {
+    if (!canNavigateEpisodes || episodeItems.length < 2) return undefined;
+    return {
+      items: episodeItems.map(({ id, label }) => ({ id, label })),
+      currentEpisodeId:
+        season != null && episode != null ? lampaEpisodeNavId(season, episode) : undefined,
+      hasPrevious: Boolean(previousEpisode),
+      hasNext: Boolean(nextEpisode),
+      onPrevious: previousEpisode
+        ? () => void navigateToEpisode(previousEpisode.season, previousEpisode.episode)
+        : undefined,
+      onNext: nextEpisode
+        ? () => void navigateToEpisode(nextEpisode.season, nextEpisode.episode)
+        : undefined,
+      onSelect: (id) => {
+        const parsed = parseLampaEpisodeNavId(id);
+        void navigateToEpisode(parsed.season, parsed.episode);
+      },
+    };
+  }, [
+    canNavigateEpisodes,
+    episodeItems,
+    season,
+    episode,
+    previousEpisode,
+    nextEpisode,
+    navigateToEpisode,
+  ]);
 
   const switchWithResume = (apply: () => void) => {
     if (playbackTimeRef.current > 0) {
@@ -170,6 +319,22 @@ export default function WatchLampaScreen() {
     }
     apply();
   };
+
+  const handlePlaybackError = useCallback(
+    (info: PlaybackErrorInfo) => {
+      if (!info.isBadHttpStatus || httpFallbackTriedRef.current) return false;
+      if (lampaConnection !== 'direct' || !activeLampaLink) return false;
+      if (!linkSupportsConnection(activeLampaLink, 'proxy')) return false;
+
+      httpFallbackTriedRef.current = true;
+      switchWithResume(() => {
+        setLampaConnection('proxy');
+        void saveDownloadPreferences({ directFirst: false });
+      });
+      return true;
+    },
+    [activeLampaLink, lampaConnection],
+  );
 
   if (authLoading) {
     return (
@@ -237,25 +402,50 @@ export default function WatchLampaScreen() {
       : undefined;
 
   return (
-    <VideoPlayer
-      src={src}
-      title={title}
-      subtitle={subtitle}
-      startTime={resumeTime}
-      startProgressFraction={resumeFraction}
-      onBack={() => router.back()}
-      qualityOptions={qualityOptions}
-      connectionOptions={connectionOptions}
-      deliveryOptions={deliveryOptions}
-      onProgress={(current, duration) => {
-        playbackTimeRef.current = current;
-        syncProgress(current, duration);
-      }}
-    />
+    <View style={styles.root}>
+      <VideoPlayer
+        src={src}
+        title={title}
+        subtitle={subtitle}
+        startTime={resumeTime}
+        startProgressFraction={resumeFraction}
+        onBack={() => router.back()}
+        qualityOptions={qualityOptions}
+        connectionOptions={connectionOptions}
+        deliveryOptions={deliveryOptions}
+        episodeNav={episodeNav}
+        onAutoPlayNext={
+          nextEpisode
+            ? () => void navigateToEpisode(nextEpisode.season, nextEpisode.episode)
+            : undefined
+        }
+        onPlaybackError={handlePlaybackError}
+        onProgress={(current, duration) => {
+          playbackTimeRef.current = current;
+          durationRef.current = duration;
+          syncProgress(current, duration);
+        }}
+      />
+      {switchingEpisode ? (
+        <View style={styles.switchOverlay} pointerEvents="none">
+          <ActivityIndicator color={colors.brand} size="large" />
+          <Text style={styles.switchText}>Загрузка серии…</Text>
+        </View>
+      ) : null}
+      {switchError ? (
+        <View style={styles.switchErrorBanner}>
+          <Text style={styles.switchErrorText}>{switchError}</Text>
+          <Pressable onPress={() => setSwitchError(null)} style={styles.switchErrorDismiss}>
+            <Text style={styles.switchErrorDismissText}>OK</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000' },
   loader: {
     flex: 1,
     alignItems: 'center',
@@ -273,4 +463,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgElevated,
   },
   backText: { color: colors.text, fontSize: 18, fontWeight: '600' },
+  switchOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+  },
+  switchText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  switchErrorBanner: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.xxl,
+    backgroundColor: colors.bgElevated,
+    borderRadius: 12,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  switchErrorText: { color: colors.text, flex: 1, fontSize: 15 },
+  switchErrorDismiss: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  switchErrorDismissText: { color: colors.brand, fontWeight: '700', fontSize: 15 },
 });

@@ -1,10 +1,25 @@
-import * as IntentLauncher from 'expo-intent-launcher';
 import { Linking, Platform } from 'react-native';
 
 import {
   getPlayerPreferencesSync,
   savePlayerPreferences,
 } from '@/lib/playerPreferences';
+
+type IntentLauncherModule = typeof import('expo-intent-launcher');
+
+let cachedIntentLauncher: IntentLauncherModule | null | undefined;
+
+function getIntentLauncher(): IntentLauncherModule | null {
+  if (cachedIntentLauncher !== undefined) return cachedIntentLauncher;
+  try {
+    // String literal required so Metro includes the module.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    cachedIntentLauncher = require('expo-intent-launcher') as IntentLauncherModule;
+  } catch {
+    cachedIntentLauncher = null;
+  }
+  return cachedIntentLauncher;
+}
 
 export type ExternalPlayerId = 'just' | 'vlc' | 'mpv' | 'system';
 
@@ -35,6 +50,8 @@ export const SYSTEM_PLAYER_TARGET: ExternalPlayerTarget = {
 };
 
 async function isPackageInstalled(packageName: string): Promise<boolean> {
+  const IntentLauncher = getIntentLauncher();
+  if (!IntentLauncher) return false;
   try {
     const icon = await IntentLauncher.getApplicationIconAsync(packageName);
     return Boolean(icon && icon.length > 0);
@@ -45,6 +62,7 @@ async function isPackageInstalled(packageName: string): Promise<boolean> {
 
 export async function listInstalledExternalPlayers(): Promise<ExternalPlayerTarget[]> {
   if (Platform.OS !== 'android') return [SYSTEM_PLAYER_TARGET];
+  if (!getIntentLauncher()) return [];
 
   const installed: ExternalPlayerTarget[] = [];
   for (const player of KNOWN_PLAYERS) {
@@ -99,6 +117,20 @@ export async function launchExternalPlayer(
   const url = options.url?.trim();
   if (!url) {
     return { ok: false, message: 'Нет URL видео' };
+  }
+
+  const IntentLauncher = getIntentLauncher();
+  if (!IntentLauncher) {
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (!can) {
+        return { ok: false, message: 'Внешний плеер недоступен в этой сборке' };
+      }
+      await Linking.openURL(url);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: 'Внешний плеер недоступен в этой сборке' };
+    }
   }
 
   const title = options.title?.trim() || 'Sleek';

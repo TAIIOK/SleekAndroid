@@ -1,9 +1,15 @@
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
 import { historyContentKey, type WatchHistoryItem } from '@/lib/history';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   tvHorizontalCatalogScrollProps,
   tvRailSectionSnapProps,
@@ -24,7 +30,7 @@ export function HistoryDateRail({
   contentEntryRail = false,
 }: HistoryDateRailProps) {
   const { bindItem } = useTvRailFocusRestore(items.length);
-  const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
+  const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
 
   if (!items.length) return null;
 
@@ -66,7 +72,7 @@ export function HistoryDateRail({
 const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
-    marginBottom: Platform.isTV ? spacing.md : 0,
+    marginBottom: isTvUi() ? spacing.md : 0,
   },
   title: {
     color: colors.textSecondary,
@@ -77,8 +83,8 @@ const styles = StyleSheet.create({
   },
   rail: {
     // Extra vertical room so TV focus rings are not clipped by ScrollView.
-    paddingTop: Platform.isTV ? 8 : 0,
-    paddingBottom: Platform.isTV ? 10 : spacing.xs,
-    gap: Platform.isTV ? 10 : 0,
+    paddingTop: isTvUi() ? 8 : 0,
+    paddingBottom: isTvUi() ? 10 : spacing.xs,
+    gap: isTvUi() ? 10 : 0,
   },
 });

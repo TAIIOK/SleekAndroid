@@ -1,12 +1,19 @@
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { getSavedAccounts, removeSavedAccount } from '@/lib/savedAccounts';
 import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { useAuth } from '@/providers/AuthProvider';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function AccountsScreen() {
   const router = useRouter();
@@ -57,14 +64,14 @@ export default function AccountsScreen() {
           key={account.id}
           label={account.nickname ?? account.email ?? account.id}
           isCurrent={String(user?.id) === account.id}
-          preferredFocus={Platform.isTV && index === 0}
+          preferredFocus={isTvUi() && index === 0}
           onPress={() => void onSwitch(account.id)}
           onRemove={() => onRemove(account.id, account.nickname ?? account.email ?? account.id)}
         />
       ))}
       <AccountRow
         label="Добавить аккаунт"
-        preferredFocus={Platform.isTV && accounts.length === 0}
+        preferredFocus={isTvUi() && accounts.length === 0}
         onPress={() => router.push({ pathname: '/login', params: { addAccount: '1' } })}
       />
     </ScrollView>
@@ -112,7 +119,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xxl, gap: spacing.md },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 24,
+    fontSize: isTvUi() ? 26 : 24,
     fontWeight: '700',
   },
   error: { color: colors.danger },
@@ -135,7 +142,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 20 : 16,
+    fontSize: isTvUi() ? 20 : 16,
     fontWeight: '600',
   },
   removeBtn: {
@@ -153,6 +160,6 @@ const styles = StyleSheet.create({
   removeLabel: {
     color: colors.danger,
     fontWeight: '600',
-    fontSize: Platform.isTV ? 16 : 14,
+    fontSize: isTvUi() ? 16 : 14,
   },
 });

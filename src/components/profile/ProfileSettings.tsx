@@ -1,9 +1,13 @@
 import { useRouter } from 'expo-router';
-import { Platform, StyleSheet, Text } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+} from 'react-native';
 
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface ProfileSettingsProps {
   onLogout: () => void;
@@ -14,7 +18,7 @@ export function ProfileSettings({ onLogout }: ProfileSettingsProps) {
 
   return (
     <ProfileSection title="Настройки">
-      {!Platform.isTV ? (
+      {!isTvUi() ? (
         <TvFocusable
           style={styles.row}
           focusedStyle={styles.rowFocused}
@@ -48,7 +52,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 18 : 15,
+    fontSize: isTvUi() ? 18 : 15,
     fontWeight: '600',
   },
   logoutRow: {
@@ -61,7 +65,7 @@ const styles = StyleSheet.create({
   },
   logoutLabel: {
     color: colors.danger,
-    fontSize: Platform.isTV ? 18 : 15,
+    fontSize: isTvUi() ? 18 : 15,
     fontWeight: '600',
     textAlign: 'center',
   },

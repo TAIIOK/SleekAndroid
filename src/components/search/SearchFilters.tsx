@@ -1,7 +1,14 @@
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   SEARCH_YEAR_OPTIONS,
   usesAnimeFilters,
@@ -120,7 +127,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    flexWrap: Platform.isTV ? 'nowrap' : 'wrap',
+    flexWrap: isTvUi() ? 'nowrap' : 'wrap',
     gap: spacing.sm,
   },
   chip: {
@@ -141,7 +148,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 14,
+    fontSize: isTvUi() ? 15 : 14,
     fontWeight: '600',
   },
 });

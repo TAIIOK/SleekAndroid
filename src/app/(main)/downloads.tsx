@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +20,7 @@ import {
   type DownloadRecord,
 } from '@/services/download/types';
 import { setLampaWatchPayload } from '@/lib/watchStore';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function DownloadsScreen() {
   const router = useRouter();
@@ -87,7 +87,7 @@ export default function DownloadsScreen() {
     ]);
   };
 
-  if (Platform.isTV) {
+  if (isTvUi()) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Загрузки</Text>

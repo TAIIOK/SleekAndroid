@@ -1,5 +1,9 @@
 import { useRouter } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PosterGrid } from '@/components/catalog/PosterGrid';
@@ -22,6 +26,7 @@ import {
 } from '@/lib/myLists';
 import { animePoster, lampaPosterPath } from '@/lib/poster';
 import type { SavedAnimeItem } from '@/types/progress';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface MyListsContentProps {
   media: MyListsMediaFilter;
@@ -133,7 +138,7 @@ export function MyListsContent({
                     : 'Аниме'
               }
               subtitle={countLabel(group.items.length)}
-              showAccent={Platform.isTV}
+              showAccent={isTvUi()}
             />
             <PosterGrid>
               {group.items.map((item) => {
@@ -169,7 +174,7 @@ export function MyListsContent({
                       : 'Фильмы и сериалы'
               }
               subtitle={countLabel(group.items.length)}
-              showAccent={Platform.isTV}
+              showAccent={isTvUi()}
             />
             <PosterGrid>
               {group.items.map((row) => {

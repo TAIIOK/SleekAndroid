@@ -216,12 +216,15 @@ export function useLampaWatchHub({ detail, isSerial, routeId = '' }: UseLampaWat
     [resolveVideoLinks],
   );
 
+  const getTaskId = useCallback(() => taskIdRef.current, []);
+
   return {
     sources,
     loadingSources,
     sourcesSearch,
     error,
     setError,
+    getTaskId,
     loadSources,
     loadTranslators,
     loadEpisodes,

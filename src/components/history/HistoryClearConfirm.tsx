@@ -1,7 +1,13 @@
-import { Modal, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  Modal,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 export function HistoryClearConfirm({
   visible,
@@ -59,7 +65,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 24 : 20,
+    fontSize: isTvUi() ? 24 : 20,
     fontWeight: '700',
   },
   body: {

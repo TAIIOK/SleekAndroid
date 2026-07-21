@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -34,6 +33,7 @@ import { buildAnimePlaybackState } from '@/lib/progressUtils';
 import { useAuth } from '@/providers/AuthProvider';
 import { pickPlaybackUrl } from '@aniverse/playback';
 import type { AnimeEpisode } from '@aniverse/types';
+import { isTvUi } from '@/lib/isTvUi';
 
 const DEFAULT_QUALITY = '720p' as const;
 
@@ -42,7 +42,7 @@ export default function AnimeDetailScreen() {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   // TV: stacked full-width (episodes need space + reliable D-pad). Phone wide tablets keep 2-col.
-  const useWideLayout = !Platform.isTV && width >= 960;
+  const useWideLayout = !isTvUi() && width >= 960;
   const { id } = useLocalSearchParams<{ id: string }>();
   const animeId = Number(id);
   const { isAuthenticated } = useAuth();
@@ -166,7 +166,7 @@ export default function AnimeDetailScreen() {
         <Text style={styles.errorTitle}>Не удалось загрузить</Text>
         <Text style={styles.errorBody}>Проверьте подключение или попробуйте позже</Text>
         <TvFocusable
-          hasTVPreferredFocus={Platform.isTV}
+          hasTVPreferredFocus={isTvUi()}
           onPress={() => {
             void refetch();
           }}
@@ -261,9 +261,9 @@ const styles = StyleSheet.create({
   content: {
     // flexGrow:0 — never stretch ScrollView children to the viewport (pushes body down).
     flexGrow: 0,
-    padding: Platform.isTV ? spacing.lg : spacing.md,
+    padding: isTvUi() ? spacing.lg : spacing.md,
     gap: spacing.md,
-    paddingBottom: Platform.isTV ? spacing.xl : spacing.xxl,
+    paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
   },
   stack: {
     width: '100%',
@@ -317,6 +317,6 @@ const styles = StyleSheet.create({
   retryLabel: {
     color: colors.text,
     fontWeight: '700',
-    fontSize: Platform.isTV ? 18 : 15,
+    fontSize: isTvUi() ? 18 : 15,
   },
 });

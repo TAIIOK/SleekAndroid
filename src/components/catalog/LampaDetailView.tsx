@@ -1,7 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { fetchLampaDetail, mapLampaToRailItem } from '@/api/catalog';
 import {
@@ -36,6 +41,7 @@ import type { UserListStatus } from '@/lib/libraryStatus';
 import { lampaPosterPath } from '@/lib/poster';
 import { buildLampaPlaybackState } from '@/lib/progressUtils';
 import { useAuth } from '@/providers/AuthProvider';
+import { isTvUi } from '@/lib/isTvUi';
 
 export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const router = useRouter();
@@ -295,9 +301,9 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
     flexGrow: 0,
-    padding: Platform.isTV ? spacing.lg : spacing.md,
+    padding: isTvUi() ? spacing.lg : spacing.md,
     gap: spacing.md,
-    paddingBottom: Platform.isTV ? spacing.xl : spacing.xxl,
+    paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
   },
   stack: {
     width: '100%',

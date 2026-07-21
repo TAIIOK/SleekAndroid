@@ -1,8 +1,14 @@
 import { useRouter } from 'expo-router';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { colors, radii, spacing } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 const LINKS = [
   {
@@ -28,7 +34,7 @@ const LINKS = [
 export function ProfileQuickLinks() {
   const router = useRouter();
 
-  if (Platform.isTV) return null;
+  if (isTvUi()) return null;
 
   return (
     <ProfileSection title="Быстрые ссылки">

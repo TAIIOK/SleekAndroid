@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
+import { isTvUi } from '@/lib/isTvUi';
 
 export interface QuickActionCounts {
   bookmarks: number;
@@ -74,9 +75,9 @@ export function QuickActionsSection({ counts, contentEntry = false }: QuickActio
     (typeof actions)[number]['key'],
     (typeof actions)[number]
   >;
-  const horizontalPad = Platform.isTV ? layout.gutterDesktop : layout.gutterMobile;
+  const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
 
-  if (Platform.isTV) {
+  if (isTvUi()) {
     return (
       <View style={styles.wrap} {...tvRailSectionSnapProps}>
         <SectionHeader title="Быстрые действия" variant="quick" />
@@ -151,15 +152,15 @@ function QuickActionCard({
   const shellFocus = useTvShellFocus();
   const enabled =
     alwaysEnabled || action.key === 'history' || action.key === 'lists' || (count ?? 0) > 0;
-  const exitLeft = Platform.isTV && railStart;
-  const exitUp = Platform.isTV && contentEntry;
+  const exitLeft = isTvUi() && railStart;
+  const exitUp = isTvUi() && contentEntry;
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   const inner = (
     <>
       <View style={styles.cardHeader}>
         <View style={[styles.iconWrap, focused && styles.iconWrapFocused]}>
-          <Ionicons name={action.icon} size={Platform.isTV ? 18 : 14} color={colors.brand} />
+          <Ionicons name={action.icon} size={isTvUi() ? 18 : 14} color={colors.brand} />
         </View>
         <Text style={[styles.cardTitle, focused && styles.cardTitleFocused]}>{action.title}</Text>
       </View>
@@ -203,7 +204,7 @@ function QuickActionCard({
         !enabled && styles.cardDisabled,
         focused && styles.cardFocused,
       ]}
-      {...(contentEntry && Platform.isTV ? { hasTVPreferredFocus: true } : {})}
+      {...(contentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
       {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
     >
       <LinearGradient
@@ -220,13 +221,13 @@ function QuickActionCard({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: Platform.isTV ? spacing.md : 32,
+    marginBottom: isTvUi() ? spacing.md : 32,
   },
   rail: {
-    paddingHorizontal: Platform.isTV ? 0 : spacing.md,
-    paddingTop: Platform.isTV ? 8 : 0,
-    paddingBottom: Platform.isTV ? 10 : spacing.sm,
-    gap: Platform.isTV ? 10 : 0,
+    paddingHorizontal: isTvUi() ? 0 : spacing.md,
+    paddingTop: isTvUi() ? 8 : 0,
+    paddingBottom: isTvUi() ? 10 : spacing.sm,
+    gap: isTvUi() ? 10 : 0,
   },
   grid: {
     flexDirection: 'row',
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
     height: layout.quickActionCardHeight,
     borderRadius: radii.quickAction,
     overflow: 'hidden',
-    borderWidth: Platform.isTV ? tvFocus.borderWidth : 0,
+    borderWidth: isTvUi() ? tvFocus.borderWidth : 0,
     borderColor: 'transparent',
   },
   cardSpaced: {
@@ -258,7 +259,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.quickAction,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
-    padding: Platform.isTV ? 14 : 10,
+    padding: isTvUi() ? 14 : 10,
     justifyContent: 'space-between',
   },
   cardInnerFocused: {
@@ -273,8 +274,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   iconWrap: {
-    width: Platform.isTV ? 32 : 28,
-    height: Platform.isTV ? 32 : 28,
+    width: isTvUi() ? 32 : 28,
+    height: isTvUi() ? 32 : 28,
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
@@ -285,8 +286,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 16 : 14,
-    lineHeight: Platform.isTV ? 22 : 18,
+    fontSize: isTvUi() ? 16 : 14,
+    lineHeight: isTvUi() ? 22 : 18,
     fontWeight: '600',
     flex: 1,
     backgroundColor: 'transparent',
@@ -297,8 +298,8 @@ const styles = StyleSheet.create({
   },
   cardSubtitle: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 13 : 11,
-    lineHeight: Platform.isTV ? 18 : 15,
+    fontSize: isTvUi() ? 13 : 11,
+    lineHeight: isTvUi() ? 18 : 15,
     backgroundColor: 'transparent',
   },
   cardSubtitleFocused: {

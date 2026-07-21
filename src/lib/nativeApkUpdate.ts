@@ -1,7 +1,8 @@
 import Constants from 'expo-constants';
-import { Linking, Platform } from 'react-native';
+import { Linking } from 'react-native';
 
 import { SITE_PUBLIC_URL } from '@/lib/config';
+import { isTvUi } from '@/lib/isTvUi';
 
 export interface AppReleaseManifest {
   versionName: string;
@@ -59,7 +60,7 @@ export function isBinaryUpdateAvailable(manifest: AppReleaseManifest): boolean {
 export function pickApkDownloadUrl(manifest: AppReleaseManifest): string | null {
   const tv = manifest.tvApkUrl?.trim();
   const phone = manifest.phoneApkUrl?.trim();
-  if (Platform.isTV) return tv || phone || null;
+  if (isTvUi()) return tv || phone || null;
   return phone || tv || null;
 }
 

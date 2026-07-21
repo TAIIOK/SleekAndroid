@@ -1,7 +1,13 @@
-import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useRef, useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { colors, spacing, tvFocus } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 type LayoutId = 'en' | 'ru';
 
@@ -19,6 +25,9 @@ const ROWS_RU = [
   ['я', 'ч', 'с', 'м', 'и', 'т', 'ь', 'б', 'ю', 'ъ', 'ё'],
 ];
 
+/** Android TV can deliver select twice when the parent re-renders mid-press. */
+const PRESS_LOCK_MS = 140;
+
 interface OnScreenKeyboardProps {
   onKey: (key: string) => void;
   /** Initial layout. Defaults to Russian for the RU-first product. */
@@ -26,11 +35,14 @@ interface OnScreenKeyboardProps {
 }
 
 const KEY_SIZE = 40;
-const KEY_WIDE = Platform.isTV ? 96 : 100;
+const KEY_WIDE = isTvUi() ? 96 : 100;
 
-export function OnScreenKeyboard({ onKey, initialLayout = 'ru' }: OnScreenKeyboardProps) {
+function OnScreenKeyboardComponent({ onKey, initialLayout = 'ru' }: OnScreenKeyboardProps) {
   const [layout, setLayout] = useState<LayoutId>(initialLayout);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const lastPressAtRef = useRef(0);
+  const onKeyRef = useRef(onKey);
+  onKeyRef.current = onKey;
 
   const rows = layout === 'ru' ? ROWS_RU : ROWS_EN;
   const langToggleLabel = layout === 'ru' ? 'EN' : 'RU';
@@ -45,18 +57,24 @@ export function OnScreenKeyboard({ onKey, initialLayout = 'ru' }: OnScreenKeyboa
   };
 
   const handlePress = (key: string) => {
+    const now = Date.now();
+    if (now - lastPressAtRef.current < PRESS_LOCK_MS) return;
+    lastPressAtRef.current = now;
+
     if (key === 'LANG') {
       setLayout((current) => (current === 'ru' ? 'en' : 'ru'));
       return;
     }
-    onKey(key);
+    onKeyRef.current(key);
   };
 
   const renderKey = (key: string, wide?: boolean) => (
     <Pressable
       key={key}
       onFocus={() => setFocusedKey(key)}
-      onBlur={() => setFocusedKey(null)}
+      onBlur={() => {
+        setFocusedKey((current) => (current === key ? null : current));
+      }}
       onPress={() => handlePress(key)}
       style={[styles.key, wide && styles.keyWide, focusedKey === key && styles.keyFocused]}
     >
@@ -80,6 +98,9 @@ export function OnScreenKeyboard({ onKey, initialLayout = 'ru' }: OnScreenKeyboa
     </View>
   );
 }
+
+/** Memoized so search-result re-renders do not rebuild keys mid-press on TV. */
+export const OnScreenKeyboard = memo(OnScreenKeyboardComponent);
 
 const styles = StyleSheet.create({
   container: {
@@ -113,7 +134,7 @@ const styles = StyleSheet.create({
   },
   keyLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 16 : 16,
+    fontSize: isTvUi() ? 16 : 16,
     fontWeight: '600',
   },
   langLabel: {

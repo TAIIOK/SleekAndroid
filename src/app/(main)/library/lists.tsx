@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { MyListsContent } from '@/components/library/MyListsContent';
 import { MyListsFilters } from '@/components/library/MyListsFilters';
@@ -14,6 +20,7 @@ import {
   type MyListsStatusFilter,
 } from '@/lib/myLists';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function MyListsScreen() {
   const [media, setMedia] = useState<MyListsMediaFilter>('all');
@@ -86,7 +93,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xl,
+    paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xl,
     gap: spacing.lg,
     flexGrow: 1,
   },

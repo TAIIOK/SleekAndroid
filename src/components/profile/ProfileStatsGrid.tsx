@@ -1,9 +1,14 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { UserStats } from '@/api/user';
 import { colors, radii, spacing } from '@/constants/aniverse';
 
 import { formatNumber, formatWatchTime } from '@/lib/format';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface ProfileStatsGridProps {
   stats: UserStats | null | undefined;
@@ -68,7 +73,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   card: {
-    width: Platform.isTV ? '30%' : '47%',
+    width: isTvUi() ? '30%' : '47%',
     minWidth: 140,
     backgroundColor: colors.bgCard,
     borderRadius: radii.lg,
@@ -79,7 +84,7 @@ const styles = StyleSheet.create({
   },
   value: {
     color: colors.text,
-    fontSize: Platform.isTV ? 28 : 22,
+    fontSize: isTvUi() ? 28 : 22,
     fontWeight: '700',
   },
   label: {

@@ -1,9 +1,14 @@
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { LampaDetail } from '@/api/catalog';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface LampaDetailPlotProps {
   detail: LampaDetail;
@@ -42,14 +47,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 16,
+    fontSize: isTvUi() ? 22 : 16,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
   body: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 16 : 13,
-    lineHeight: Platform.isTV ? 26 : 20,
+    fontSize: isTvUi() ? 16 : 13,
+    lineHeight: isTvUi() ? 26 : 20,
   },
   more: {
     alignSelf: 'flex-start',

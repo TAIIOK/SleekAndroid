@@ -1,10 +1,14 @@
-import { Platform, StyleSheet, View } from 'react-native';
+import {
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, spacing } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 export function LampaDetailSkeleton() {
-  const wide = Platform.isTV;
+  const wide = isTvUi();
 
   return (
     <View style={styles.root}>
@@ -28,15 +32,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    padding: Platform.isTV ? spacing.xxl : spacing.md,
-    gap: Platform.isTV ? spacing.xl : spacing.md,
+    padding: isTvUi() ? spacing.xxl : spacing.md,
+    gap: isTvUi() ? spacing.xl : spacing.md,
   },
   grid: {
     flexDirection: 'row',
-    gap: Platform.isTV ? spacing.xl : spacing.md,
+    gap: isTvUi() ? spacing.xl : spacing.md,
     alignItems: 'flex-start',
   },
   stacked: { flexDirection: 'column' },
   main: { flex: 1 },
-  side: { width: Platform.isTV ? 280 : '100%' },
+  side: { width: isTvUi() ? 280 : '100%' },
 });

@@ -1,12 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { fetchFavoriteBookmarks } from '@/api/library';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PosterGrid } from '@/components/catalog/PosterGrid';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function BookmarksScreen() {
   const router = useRouter();
@@ -47,7 +54,7 @@ export default function BookmarksScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xl },
+  content: { paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xl },
   loader: { marginTop: spacing.xxl },
   empty: {
     color: colors.textSecondary,

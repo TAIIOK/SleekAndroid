@@ -29,7 +29,7 @@
       "env": {
         "EXPO_TV": "1"
       },
-      "channel": "development"
+      "channel": "development-tv"
     },
     "preview": {
       "extends": "base",
@@ -40,7 +40,7 @@
       "env": {
         "EXPO_TV": "1"
       },
-      "channel": "preview"
+      "channel": "preview-tv"
     },
     "production_android": {
       "extends": "base",
@@ -48,10 +48,14 @@
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
       },
+      "channel": "production"
+    },
+    "production_android_tv": {
+      "extends": "production_android",
       "env": {
         "EXPO_TV": "1"
       },
-      "channel": "production"
+      "channel": "production-tv"
     }
   },
   "submit": {}

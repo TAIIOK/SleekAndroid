@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -18,6 +17,7 @@ import {
   type UserListStatus,
 } from '@/lib/libraryStatus';
 import type { CollectionItemInput } from '@/types/collection';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface DetailLibraryActionsProps {
   userStatus?: string;
@@ -73,7 +73,7 @@ export function DetailLibraryActions({
   }, [menuOpen]);
 
   useTvEventHandlerSafe((evt) => {
-    if (!menuOpen || !Platform.isTV) return;
+    if (!menuOpen || !isTvUi()) return;
     // rn-tvos Android delivers HW events on key-up (action === 1).
     if (evt.eventKeyAction != null && evt.eventKeyAction !== 1) return;
     if (evt.eventType !== 'select' && evt.eventType !== 'playPause') return;
@@ -96,7 +96,7 @@ export function DetailLibraryActions({
         return (
           <TvFocusable
             key={option.value}
-            hasTVPreferredFocus={Platform.isTV && index === 0}
+            hasTVPreferredFocus={isTvUi() && index === 0}
             onFocus={() => {
               focusedStatusRef.current = option.value;
             }}
@@ -183,8 +183,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    paddingHorizontal: Platform.isTV ? spacing.lg : spacing.md,
-    paddingVertical: Platform.isTV ? 14 : 9,
+    paddingHorizontal: isTvUi() ? spacing.lg : spacing.md,
+    paddingVertical: isTvUi() ? 14 : 9,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
@@ -196,12 +196,12 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 16 : 13,
+    fontSize: isTvUi() ? 16 : 13,
     fontWeight: '600',
   },
   iconBtn: {
-    width: Platform.isTV ? 52 : 38,
-    height: Platform.isTV ? 52 : 38,
+    width: isTvUi() ? 52 : 38,
+    height: isTvUi() ? 52 : 38,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   iconLabel: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: isTvUi() ? 22 : 18,
   },
   backdrop: {
     flex: 1,
@@ -247,8 +247,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: Platform.isTV ? spacing.lg : spacing.md,
-    minHeight: Platform.isTV ? 52 : undefined,
+    paddingVertical: isTvUi() ? spacing.lg : spacing.md,
+    minHeight: isTvUi() ? 52 : undefined,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },

@@ -1,13 +1,12 @@
-import { Platform } from 'react-native';
-
 import { spacing } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 /**
  * Vertical catalog ScrollView props for Android TV.
  * With `snapToAlignment="item"`, focus scrolls to the nearest ancestor that sets
  * `scrollSnapAlign` (rail section = header + posters) instead of only the card.
  */
-export const tvVerticalCatalogScrollProps = Platform.isTV
+export const tvVerticalCatalogScrollProps = isTvUi()
   ? ({
       snapToAlignment: 'item' as const,
       snapToItemPadding: spacing.md,
@@ -21,7 +20,7 @@ export const tvVerticalCatalogScrollProps = Platform.isTV
  * Instant focus scrolling — animated paging + snapToInterval often clears focus
  * when the rail shifts to keep the focused poster on screen.
  */
-export const tvHorizontalCatalogScrollProps = Platform.isTV
+export const tvHorizontalCatalogScrollProps = isTvUi()
   ? ({
       scrollAnimationEnabled: false,
       // ScrollView must not compete with poster Pressables for D-pad focus.
@@ -30,7 +29,7 @@ export const tvHorizontalCatalogScrollProps = Platform.isTV
   : ({} as const);
 
 /** Put on rail/continue section wrappers so the title stays visible when a card is focused. */
-export const tvRailSectionSnapProps = Platform.isTV
+export const tvRailSectionSnapProps = isTvUi()
   ? ({
       scrollSnapAlign: 'start' as const,
       collapsable: false,

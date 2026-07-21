@@ -1,5 +1,10 @@
 import { Image } from 'expo-image';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
@@ -12,8 +17,9 @@ import {
 } from '@/lib/animeDetail';
 import { resolveAnimePosterUrl } from '@/lib/config';
 import type { AnimeEpisode } from '@aniverse/types';
+import { isTvUi } from '@/lib/isTvUi';
 
-const CARD_WIDTH = Platform.isTV ? 200 : 136;
+const CARD_WIDTH = isTvUi() ? 200 : 136;
 
 interface AnimeDetailEpisodesProps {
   episodes: AnimeEpisode[];
@@ -66,11 +72,11 @@ export function AnimeDetailEpisodes({
         onPress={() => onPlay(episode)}
         railStart={index === 0}
         style={[
-          Platform.isTV ? styles.cardTv : styles.card,
+          isTvUi() ? styles.cardTv : styles.card,
           !playable && styles.cardDisabled,
         ]}
       >
-        <View style={Platform.isTV ? styles.thumbWrapTv : styles.thumbWrap}>
+        <View style={isTvUi() ? styles.thumbWrapTv : styles.thumbWrap}>
           {thumb ? (
             <Image
               source={{ uri: thumb }}
@@ -108,7 +114,7 @@ export function AnimeDetailEpisodes({
     <TvFocusable
       disabled={isFetchingMore}
       onPress={onLoadMore}
-      style={Platform.isTV ? styles.loadMoreTv : styles.loadMore}
+      style={isTvUi() ? styles.loadMoreTv : styles.loadMore}
     >
       <Text style={styles.loadMoreLabel}>
         {isFetchingMore ? 'Загрузка…' : 'Ещё эпизоды'}
@@ -119,7 +125,7 @@ export function AnimeDetailEpisodes({
   return (
     <View style={styles.section}>
       <Text style={styles.title}>Сезоны и серии</Text>
-      {Platform.isTV ? (
+      {isTvUi() ? (
         // Plain column — nested ScrollView inside the page ScrollView was overlapping
         // sibling rails ("Похожее") on Android TV when the hero had no poster.
         <View style={styles.listShell}>
@@ -146,15 +152,15 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 20 : 16,
+    fontSize: isTvUi() ? 20 : 16,
     fontWeight: '700',
   },
   meta: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 14 : 13,
+    fontSize: isTvUi() ? 14 : 13,
   },
   rail: {
-    gap: Platform.isTV ? spacing.md : spacing.sm,
+    gap: isTvUi() ? spacing.md : spacing.sm,
     paddingVertical: spacing.xs,
     alignItems: 'flex-start',
   },
@@ -220,29 +226,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   playBadge: {
-    width: Platform.isTV ? 32 : 28,
-    height: Platform.isTV ? 32 : 28,
-    borderRadius: Platform.isTV ? 16 : 14,
+    width: isTvUi() ? 32 : 28,
+    height: isTvUi() ? 32 : 28,
+    borderRadius: isTvUi() ? 16 : 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   playBadgeText: {
     color: colors.text,
-    fontSize: Platform.isTV ? 12 : 11,
+    fontSize: isTvUi() ? 12 : 11,
   },
   cardBody: {
     flex: 1,
-    paddingHorizontal: Platform.isTV ? spacing.md : 10,
-    paddingVertical: Platform.isTV ? spacing.sm : 8,
+    paddingHorizontal: isTvUi() ? spacing.md : 10,
+    paddingVertical: isTvUi() ? spacing.sm : 8,
     justifyContent: 'center',
-    minHeight: Platform.isTV ? undefined : 40,
+    minHeight: isTvUi() ? undefined : 40,
   },
   epTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 12,
+    fontSize: isTvUi() ? 15 : 12,
     fontWeight: '600',
-    lineHeight: Platform.isTV ? 20 : 16,
+    lineHeight: isTvUi() ? 20 : 16,
   },
   progressTrack: {
     position: 'absolute',
@@ -278,6 +284,6 @@ const styles = StyleSheet.create({
   loadMoreLabel: {
     color: colors.text,
     fontWeight: '700',
-    fontSize: Platform.isTV ? 14 : 14,
+    fontSize: isTvUi() ? 14 : 14,
   },
 });

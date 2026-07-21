@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,6 +29,7 @@ import {
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import { getDownloadService } from '@/services/download';
 import { isHlsSourceUrl } from '@/services/download/types';
+import { isTvUi } from '@/lib/isTvUi';
 import {
   listWatchHubQualityOptions,
   watchHubSourceLabel,
@@ -312,6 +312,7 @@ export function LampaSourceSheet({
       const startProgress = progressKey
         ? episodeProgressByKey[progressKey]
         : Object.values(episodeProgressByKey)[0];
+      const taskId = watchHub.getTaskId() ?? undefined;
       setLampaWatchPayload({
         lampaLinks: links,
         // Prefer numeric route id so continue-watching can open /movies|/series/:id
@@ -325,6 +326,10 @@ export function LampaSourceSheet({
           startProgress != null && startProgress > 0.01 && startProgress < 0.98
             ? startProgress
             : undefined,
+        taskId,
+        sourceId: selectedSource,
+        translatorId: selectedTranslator.id,
+        seasons: isSerial && seasons.length ? seasons : undefined,
       });
       onClose();
       router.push('/watch/lampa');
@@ -336,7 +341,7 @@ export function LampaSourceSheet({
   };
 
   const downloadSelection = async (season?: number, episode?: number) => {
-    if (Platform.isTV || !selectedSource || !selectedTranslator) return;
+    if (isTvUi() || !selectedSource || !selectedTranslator) return;
     setPlaying(true);
     setStepError(null);
     try {
@@ -502,7 +507,7 @@ export function LampaSourceSheet({
                     label="Источник"
                     value={sourceLabel}
                     onOpen={() => setActivePicker('source')}
-                    hasTVPreferredFocus={Platform.isTV}
+                    hasTVPreferredFocus={isTvUi()}
                   />
                   <SelectorRow
                     label="Озвучка"
@@ -570,14 +575,14 @@ export function LampaSourceSheet({
                   <TvFocusable
                     onPress={() => void playSelection()}
                     style={styles.moviePlay}
-                    hasTVPreferredFocus={Platform.isTV}
+                    hasTVPreferredFocus={isTvUi()}
                   >
                     <Text style={styles.moviePlayLabel} numberOfLines={1}>
                       {selectedTranslator.name}
                     </Text>
                     <Text style={styles.moviePlayIcon}>▶</Text>
                   </TvFocusable>
-                  {!Platform.isTV ? (
+                  {!isTvUi() ? (
                     <TvFocusable
                       onPress={() => void downloadSelection()}
                       style={styles.movieDownload}
@@ -867,7 +872,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: Platform.isTV ? spacing.xxl : spacing.lg,
+    paddingHorizontal: isTvUi() ? spacing.xxl : spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.stroke,
@@ -875,7 +880,7 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, minWidth: 0, gap: 2 },
   headerTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 26 : 20,
+    fontSize: isTvUi() ? 26 : 20,
     fontWeight: '700',
   },
   headerSubtitle: {
@@ -900,7 +905,7 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: {
-    padding: Platform.isTV ? spacing.xxl : spacing.lg,
+    padding: isTvUi() ? spacing.xxl : spacing.lg,
     gap: spacing.lg,
     paddingBottom: spacing.xxl,
   },
@@ -916,7 +921,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: spacing.lg,
-    paddingVertical: Platform.isTV ? 16 : 14,
+    paddingVertical: isTvUi() ? 16 : 14,
   },
   selectorDisabled: {
     opacity: 0.55,
@@ -931,7 +936,7 @@ const styles = StyleSheet.create({
   },
   selectorValue: {
     color: colors.text,
-    fontSize: Platform.isTV ? 18 : 16,
+    fontSize: isTvUi() ? 18 : 16,
     fontWeight: '600',
   },
   selectorValueMuted: {
@@ -967,7 +972,7 @@ const styles = StyleSheet.create({
   },
   searchBannerTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 17 : 15,
+    fontSize: isTvUi() ? 17 : 15,
     fontWeight: '600',
   },
   searchBannerHint: {
@@ -1024,8 +1029,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(195,192,255,0.08)',
   },
   stillWrap: {
-    width: Platform.isTV ? 160 : 120,
-    height: Platform.isTV ? 90 : 68,
+    width: isTvUi() ? 160 : 120,
+    height: isTvUi() ? 90 : 68,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: colors.bgElevated,
@@ -1082,9 +1087,9 @@ const styles = StyleSheet.create({
   },
   epTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 15 : 14,
+    fontSize: isTvUi() ? 15 : 14,
     fontWeight: '600',
-    lineHeight: Platform.isTV ? 20 : 18,
+    lineHeight: isTvUi() ? 20 : 18,
   },
   epOverview: {
     color: colors.textSecondary,
@@ -1121,7 +1126,7 @@ const styles = StyleSheet.create({
   moviePlayLabel: {
     flex: 1,
     color: colors.text,
-    fontSize: Platform.isTV ? 18 : 16,
+    fontSize: isTvUi() ? 18 : 16,
     fontWeight: '600',
   },
   moviePlayIcon: {
@@ -1145,7 +1150,7 @@ const styles = StyleSheet.create({
   },
   pickerPane: {
     flex: 1,
-    padding: Platform.isTV ? spacing.xxl : spacing.lg,
+    padding: isTvUi() ? spacing.xxl : spacing.lg,
     gap: spacing.lg,
   },
   pickerHeader: {
@@ -1155,7 +1160,7 @@ const styles = StyleSheet.create({
   },
   pickerTitle: {
     color: colors.text,
-    fontSize: Platform.isTV ? 24 : 20,
+    fontSize: isTvUi() ? 24 : 20,
     fontWeight: '700',
   },
   optionList: {
@@ -1179,7 +1184,7 @@ const styles = StyleSheet.create({
   },
   optionRowLabel: {
     color: colors.text,
-    fontSize: Platform.isTV ? 18 : 16,
+    fontSize: isTvUi() ? 18 : 16,
     fontWeight: '600',
     flex: 1,
   },

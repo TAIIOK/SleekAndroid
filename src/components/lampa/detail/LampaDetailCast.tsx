@@ -1,10 +1,17 @@
-import { Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { LampaCastMember } from '@/api/lampaExtras';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { resolveLampaPosterUrl } from '@/lib/config';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface LampaDetailCastProps {
   cast: LampaCastMember[];
@@ -62,11 +69,11 @@ function CastTile({ member }: { member: LampaCastMember }) {
   );
 }
 
-const TILE = Platform.isTV ? 88 : 72;
+const TILE = isTvUi() ? 88 : 72;
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  row: { gap: Platform.isTV ? spacing.md : spacing.sm, paddingRight: spacing.lg },
+  row: { gap: isTvUi() ? spacing.md : spacing.sm, paddingRight: spacing.lg },
   tile: { width: TILE, gap: 4 },
   avatar: {
     width: TILE,
@@ -84,12 +91,12 @@ const styles = StyleSheet.create({
   },
   fallbackLetter: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: isTvUi() ? 22 : 18,
     fontWeight: '700',
   },
   name: {
     color: colors.text,
-    fontSize: Platform.isTV ? 12 : 11,
+    fontSize: isTvUi() ? 12 : 11,
     fontWeight: '700',
     textAlign: 'center',
   },

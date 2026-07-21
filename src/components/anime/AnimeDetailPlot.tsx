@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { AnimeDetail } from '@/api/catalog';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { animeGenreNames } from '@/lib/animeDetail';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface AnimeDetailPlotProps {
   detail: AnimeDetail;
@@ -13,7 +18,7 @@ interface AnimeDetailPlotProps {
 export function AnimeDetailPlot({ detail }: AnimeDetailPlotProps) {
   const [expanded, setExpanded] = useState(false);
   const desc = detail.description?.trim() ?? '';
-  const limit = Platform.isTV ? 320 : 420;
+  const limit = isTvUi() ? 320 : 420;
   const needsExpand = desc.length > limit;
   const cut = desc.lastIndexOf(' ', limit);
   const displayText =
@@ -55,20 +60,20 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 20 : 16,
+    fontSize: isTvUi() ? 20 : 16,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
   body: {
     color: colors.textSecondary,
-    fontSize: Platform.isTV ? 14 : 13,
-    lineHeight: Platform.isTV ? 22 : 20,
+    fontSize: isTvUi() ? 14 : 13,
+    lineHeight: isTvUi() ? 22 : 20,
   },
   more: {
     alignSelf: 'flex-start',
     marginTop: spacing.xs,
-    paddingVertical: Platform.isTV ? 8 : 6,
-    paddingHorizontal: Platform.isTV ? 8 : 4,
+    paddingVertical: isTvUi() ? 8 : 6,
+    paddingHorizontal: isTvUi() ? 8 : 4,
     justifyContent: 'center',
   },
   moreLabel: {

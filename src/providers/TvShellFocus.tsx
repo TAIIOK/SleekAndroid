@@ -7,9 +7,10 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { findNodeHandle, Platform } from 'react-native';
+import { findNodeHandle } from 'react-native';
 
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
+import { isTvUi } from '@/lib/isTvUi';
 
 type FocusHost = {
   requestTVFocus?: () => void;
@@ -233,7 +234,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  if (!Platform.isTV) {
+  if (!isTvUi()) {
     return <>{children}</>;
   }
 

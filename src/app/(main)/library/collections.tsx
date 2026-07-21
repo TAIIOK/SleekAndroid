@@ -4,7 +4,6 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +28,7 @@ import {
 } from '@/lib/collectionItems';
 import { colors, layout, radii, spacing } from '@/constants/aniverse';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 
 export default function CollectionsScreen() {
   const router = useRouter();
@@ -240,7 +240,7 @@ export default function CollectionsScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: {
-    paddingBottom: Platform.isTV ? spacing.xxl * 2 : spacing.xxl,
+    paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xxl,
     gap: spacing.lg,
     paddingHorizontal: spacing.lg,
   },

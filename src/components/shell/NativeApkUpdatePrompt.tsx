@@ -1,9 +1,15 @@
-import { Modal, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  Modal,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { useNativeApkUpdate } from '@/hooks/useNativeApkUpdate';
 import { getLocalVersionName } from '@/lib/nativeApkUpdate';
+import { isTvUi } from '@/lib/isTvUi';
 
 /** Prompt when a newer APK is published in releases/latest.json. */
 export function NativeApkUpdatePrompt() {
@@ -62,7 +68,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 24 : 20,
+    fontSize: isTvUi() ? 24 : 20,
     fontWeight: '700',
   },
   body: {

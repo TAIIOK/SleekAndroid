@@ -148,9 +148,10 @@ export async function resumeLampaFromLastSelection(
 
     let season: number | undefined;
     let episode: number | undefined;
+    let seasons: Awaited<ReturnType<typeof fetchWatchHubEpisodes>> | undefined;
 
     if (params.kind === 'tv') {
-      const seasons = await fetchWatchHubEpisodes({
+      seasons = await fetchWatchHubEpisodes({
         taskId: session.taskId,
         sourceId: source.source_id,
         translatorId: translator.id,
@@ -190,6 +191,10 @@ export async function resumeLampaFromLastSelection(
         startProgress != null && startProgress > 0.01 && startProgress < 0.98
           ? startProgress
           : undefined,
+      taskId: session.taskId,
+      sourceId: source.source_id,
+      translatorId: translator.id,
+      seasons,
     });
     return true;
   } catch {

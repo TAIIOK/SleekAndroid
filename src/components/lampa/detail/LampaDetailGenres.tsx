@@ -1,8 +1,13 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { LampaDetail } from '@/api/catalog';
 import { colors, spacing } from '@/constants/aniverse';
 import { lampaGenreNames } from '@/lib/lampaDetail';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface LampaDetailGenresProps {
   detail: LampaDetail;
@@ -33,7 +38,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: Platform.isTV ? 22 : 18,
+    fontSize: isTvUi() ? 22 : 18,
     fontWeight: '700',
   },
   genres: {

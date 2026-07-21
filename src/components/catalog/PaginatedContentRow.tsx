@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -12,6 +11,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { PosterSkeleton } from '@/components/ui/Skeleton';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface PaginatedContentRowProps<T> {
   title: string;
@@ -63,10 +63,10 @@ export function PaginatedContentRow<T>({
 }: PaginatedContentRowProps<T>) {
   const horizontalPad = flush
     ? 0
-    : Platform.isTV
+    : isTvUi()
       ? layout.gutterDesktop
       : layout.gutterMobile;
-  const skeletonCount = Platform.isTV ? 4 : 6;
+  const skeletonCount = isTvUi() ? 4 : 6;
 
   if (!isLoading && (isError || items.length === 0)) {
     return null;
@@ -80,7 +80,7 @@ export function PaginatedContentRow<T>({
           subtitle={subtitle}
           onSeeAll={onSeeAll}
           variant={onSeeAll ? 'rail-featured' : 'rail'}
-          showAccent={Platform.isTV || Boolean(onSeeAll)}
+          showAccent={isTvUi() || Boolean(onSeeAll)}
           flush={flush}
         />
       ) : null}
@@ -126,13 +126,13 @@ export function PaginatedContentRow<T>({
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: Platform.isTV ? spacing.md : 32,
+    marginBottom: isTvUi() ? spacing.md : 32,
   },
   scroll: {
     // Extra vertical room so TV focus rings are not clipped by ScrollView.
-    paddingTop: Platform.isTV ? 8 : 0,
-    paddingBottom: Platform.isTV ? 10 : spacing.sm,
-    gap: Platform.isTV ? 10 : 12,
+    paddingTop: isTvUi() ? 8 : 0,
+    paddingBottom: isTvUi() ? 10 : spacing.sm,
+    gap: isTvUi() ? 10 : 12,
   },
   hint: {
     color: colors.textSecondary,

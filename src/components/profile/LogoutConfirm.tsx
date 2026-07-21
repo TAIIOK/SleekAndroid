@@ -1,7 +1,13 @@
-import { Modal, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  Modal,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 interface LogoutConfirmProps {
   visible: boolean;
@@ -19,7 +25,7 @@ export function LogoutConfirm({ visible, loading, onConfirm, onCancel }: LogoutC
           <Text style={styles.body}>Сессия на этом устройстве будет завершена.</Text>
           <View style={styles.actions}>
             <TvFocusable
-              hasTVPreferredFocus={Platform.isTV}
+              hasTVPreferredFocus={isTvUi()}
               style={styles.cancel}
               focusedStyle={styles.cancelFocused}
               onPress={onCancel}
@@ -62,7 +68,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: Platform.isTV ? 24 : 20,
+    fontSize: isTvUi() ? 24 : 20,
     fontWeight: '700',
   },
   body: {
@@ -89,7 +95,7 @@ const styles = StyleSheet.create({
   cancelLabel: {
     color: colors.text,
     fontWeight: '600',
-    fontSize: Platform.isTV ? 18 : 15,
+    fontSize: isTvUi() ? 18 : 15,
   },
   confirm: {
     flex: 1,
@@ -105,6 +111,6 @@ const styles = StyleSheet.create({
   confirmLabel: {
     color: '#fecaca',
     fontWeight: '700',
-    fontSize: Platform.isTV ? 18 : 15,
+    fontSize: isTvUi() ? 18 : 15,
   },
 });

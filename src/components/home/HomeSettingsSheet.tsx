@@ -33,6 +33,7 @@ import {
   toggleLampaSection,
 } from '@/lib/homeSettingsEditor';
 import type { CatalogHomeConfig } from '@/lib/homeSettings';
+import { isTvUi } from '@/lib/isTvUi';
 
 const LAMPA_SECTIONS_PREVIEW = 6;
 
@@ -141,7 +142,7 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>Настройки главной</Text>
-            {Platform.isTV ? (
+            {isTvUi() ? (
               <TvFocusable onPress={onClose} style={styles.closeTv} hasTVPreferredFocus>
                 <Text style={styles.closeTvLabel}>Закрыть</Text>
               </TvFocusable>
@@ -275,7 +276,7 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
           </ScrollView>
 
           <View style={styles.footer}>
-            {Platform.isTV ? (
+            {isTvUi() ? (
               <TvFocusable
                 style={styles.saveBtn}
                 focusedStyle={styles.saveBtnFocused}
@@ -316,7 +317,7 @@ function ToggleRow({
   value: boolean;
   onValueChange: (enabled: boolean) => void;
 }) {
-  if (Platform.isTV) {
+  if (isTvUi()) {
     return (
       <TvFocusable
         onPress={() => onValueChange(!value)}
