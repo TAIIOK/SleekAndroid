@@ -111,6 +111,22 @@ function run(command, args, env = {}) {
   }
 }
 
+/** Prebuild resets gradle.properties — bump heap/metaspace for KSP + lint on large graphs. */
+function boostGradleMemory() {
+  const propsPath = path.join(ROOT, 'android/gradle.properties');
+  if (!fs.existsSync(propsPath)) return;
+  let text = fs.readFileSync(propsPath, 'utf8');
+  const next =
+    'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8';
+  if (/^org\.gradle\.jvmargs=/m.test(text)) {
+    text = text.replace(/^org\.gradle\.jvmargs=.*$/m, next);
+  } else {
+    text = `${next}\n${text}`;
+  }
+  fs.writeFileSync(propsPath, text);
+  console.log('Boosted org.gradle.jvmargs (4g heap / 1g metaspace)');
+}
+
 function copyApk(fileName) {
   if (!fs.existsSync(GRADLE_APK)) {
     console.error(`\nAPK not found: ${GRADLE_APK}`);
@@ -124,25 +140,50 @@ function copyApk(fileName) {
   return dest;
 }
 
-function buildPhone() {
-  console.log('\n=== Phone (sleek.apk) ===\n');
-  run('node', ['./scripts/with-expo-path.js', 'expo', 'prebuild', '--clean']);
+function assembleRelease(env = {}) {
+  boostGradleMemory();
   run(
     'node',
-    ['./scripts/with-expo-path.js', './android/gradlew', '-p', 'android', 'assembleRelease'],
-    { NODE_ENV: 'production' },
+    ['./scripts/with-expo-path.js', './android/gradlew', '-p', 'android', '--stop'],
+    env,
   );
+  run(
+    'node',
+    [
+      './scripts/with-expo-path.js',
+      './android/gradlew',
+      '-p',
+      'android',
+      'assembleRelease',
+      '-x',
+      'lintVitalAnalyzeRelease',
+    ],
+    { NODE_ENV: 'production', ...env },
+  );
+}
+
+function buildPhone() {
+  console.log('\n=== Phone (sleek.apk) ===\n');
+  run('node', [
+    './scripts/with-expo-path.js',
+    'expo',
+    'prebuild',
+    '--clean',
+    '--platform',
+    'android',
+  ]);
+  assembleRelease();
   return copyApk('sleek.apk');
 }
 
 function buildTv() {
   console.log('\n=== TV (sleek-tv.apk) ===\n');
-  run('node', ['./scripts/with-expo-path.js', 'expo', 'prebuild', '--clean'], { EXPO_TV: '1' });
   run(
     'node',
-    ['./scripts/with-expo-path.js', './android/gradlew', '-p', 'android', 'assembleRelease'],
-    { NODE_ENV: 'production', EXPO_TV: '1' },
+    ['./scripts/with-expo-path.js', 'expo', 'prebuild', '--clean', '--platform', 'android'],
+    { EXPO_TV: '1' },
   );
+  assembleRelease({ EXPO_TV: '1' });
   return copyApk('sleek-tv.apk');
 }
 
