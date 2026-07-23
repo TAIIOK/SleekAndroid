@@ -16,7 +16,12 @@ import {
   type PlayerPreferences,
   type VideoFitMode,
 } from '@/lib/playerPreferences';
-import { findActiveSkipPrompt, type PlayerSkipSegment } from '@/lib/playerSkip';
+import {
+  findActiveSkipPrompt,
+  isEndingLikeSkip,
+  isOpeningLikeSkip,
+  type PlayerSkipSegment,
+} from '@/lib/playerSkip';
 import { toPlaybackErrorInfo, type PlaybackErrorInfo } from '@/lib/playbackErrors';
 import {
   findPreferredSubtitleTrack,
@@ -79,17 +84,27 @@ export function useRNVideoEngine({
   const [playing, setPlaying] = useState(true);
   const [volume, setVolumeState] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
+  /** Skip CTA only after loader is gone and we have a trusted playback position. */
+  const [skipUiUnlocked, setSkipUiUnlocked] = useState(false);
 
   const videoRef = useRef<VideoRef>(null);
   const dismissedSkipsRef = useRef(new Set<string>());
   const autoHandledSkipsRef = useRef(new Set<string>());
-  const didSeekRef = useRef(false);
   const wantPlayingRef = useRef(true);
   const hasBeenReadyRef = useRef(false);
+  const showBufferingRef = useRef(true);
   const bufferSpinnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastUiTickRef = useRef(0);
+  /** Last applied resume key (`src|time|fraction`). */
   const resumeKeyRef = useRef('');
+  /** True after resume intent for current key was handled (seek or confirmed start-from-zero). */
+  const resumeSettledRef = useRef(false);
+  /** After resume seek, ignore stale progress timestamps until playback catches up. */
+  const resumeTargetRef = useRef<number | null>(null);
   const durationRef = useRef(0);
+  const currentTimeRef = useRef(0);
+  /** True once onLoad reported a positive media duration (not HLS buffer window). */
+  const durationFromLoadRef = useRef(false);
   const prefsRef = useRef(prefs);
   const skipSegmentsRef = useRef(skipSegments);
   const onProgressRef = useRef(onProgress);
@@ -98,6 +113,7 @@ export function useRNVideoEngine({
   const onPlaybackErrorRef = useRef(onPlaybackError);
   const startTimeRef = useRef(startTime);
   const startProgressFractionRef = useRef(startProgressFraction);
+  const srcRef = useRef(src);
 
   prefsRef.current = prefs;
   skipSegmentsRef.current = skipSegments;
@@ -107,19 +123,108 @@ export function useRNVideoEngine({
   onPlaybackErrorRef.current = onPlaybackError;
   startTimeRef.current = startTime;
   startProgressFractionRef.current = startProgressFraction;
+  srcRef.current = src;
+
+  const resumeIntentTarget = useCallback((durSec: number): number | null => {
+    if (typeof startTimeRef.current === 'number' && startTimeRef.current > 1) {
+      return startTimeRef.current;
+    }
+    if (
+      typeof startProgressFractionRef.current === 'number' &&
+      startProgressFractionRef.current > 0.01 &&
+      startProgressFractionRef.current < 0.95 &&
+      durSec > 1
+    ) {
+      return durSec * startProgressFractionRef.current;
+    }
+    return null;
+  }, []);
+
+  const positionReadyForSkip = useCallback((timeSec: number): boolean => {
+    if (!resumeSettledRef.current) return false;
+    if (!hasBeenReadyRef.current) return false;
+    if (showBufferingRef.current) return false;
+    const resumeTarget = resumeTargetRef.current;
+    // Exo may keep emitting pre-seek timestamps briefly after seek().
+    // Do not trust optimistic UI time — only real progress past the resume point.
+    if (resumeTarget != null && timeSec + 1.5 < resumeTarget) return false;
+    return true;
+  }, []);
+
+  const refreshSkipPrompt = useCallback(
+    (timeSec: number) => {
+      if (!positionReadyForSkip(timeSec)) {
+        setVisibleSkip(undefined);
+        setSkipUiUnlocked(false);
+        return;
+      }
+
+      const resumeTarget = resumeTargetRef.current;
+      if (resumeTarget != null && timeSec + 1.5 >= resumeTarget) {
+        resumeTargetRef.current = null;
+      }
+
+      setSkipUiUnlocked(true);
+      const active = findActiveSkipPrompt(
+        skipSegmentsRef.current,
+        timeSec,
+        dismissedSkipsRef.current,
+      );
+      setVisibleSkip(active);
+    },
+    [positionReadyForSkip],
+  );
+
+  const applyResume = useCallback(
+    (durSec: number) => {
+      if (!(durSec > 1)) return;
+
+      const key = `${srcRef.current}|${startTimeRef.current ?? ''}|${startProgressFractionRef.current ?? ''}`;
+      if (resumeKeyRef.current === key && resumeSettledRef.current) return;
+
+      const target = resumeIntentTarget(durSec);
+      if (target != null && target > 1 && target < durSec - 1) {
+        resumeTargetRef.current = target;
+        videoRef.current?.seek(target);
+        // Keep UI near target, but leave currentTimeRef until onProgress confirms
+        // so skip is not unlocked on a synthetic clock.
+        setCurrentTime(target);
+      } else {
+        resumeTargetRef.current = null;
+      }
+
+      resumeKeyRef.current = key;
+      resumeSettledRef.current = true;
+      // Never evaluate skip here — wait for real progress after loader/position settle.
+      setVisibleSkip(undefined);
+      setSkipUiUnlocked(false);
+    },
+    [resumeIntentTarget],
+  );
 
   useEffect(() => {
     void loadPlayerPreferences().then(setPrefs);
   }, []);
 
   useEffect(() => {
-    didSeekRef.current = false;
+    dismissedSkipsRef.current = new Set();
+    autoHandledSkipsRef.current = new Set();
+    refreshSkipPrompt(currentTimeRef.current);
+  }, [skipSegments, refreshSkipPrompt]);
+
+  useEffect(() => {
     wantPlayingRef.current = true;
     hasBeenReadyRef.current = false;
     dismissedSkipsRef.current = new Set();
     autoHandledSkipsRef.current = new Set();
     resumeKeyRef.current = '';
+    resumeSettledRef.current = false;
+    resumeTargetRef.current = null;
     durationRef.current = 0;
+    durationFromLoadRef.current = false;
+    currentTimeRef.current = 0;
+    showBufferingRef.current = true;
+    setSkipUiUnlocked(false);
     setVisibleSkip(undefined);
     setPlaybackError(null);
     setCurrentTime(0);
@@ -134,48 +239,44 @@ export function useRNVideoEngine({
     }
   }, [src, reloadKey]);
 
-  const setBufferingUi = useCallback((isBuffering: boolean) => {
-    if (bufferSpinnerTimerRef.current) {
-      clearTimeout(bufferSpinnerTimerRef.current);
-      bufferSpinnerTimerRef.current = null;
-    }
-    if (!isBuffering) {
-      setShowBuffering(false);
-      return;
-    }
-    if (!hasBeenReadyRef.current) {
-      setShowBuffering(true);
-      return;
-    }
-    bufferSpinnerTimerRef.current = setTimeout(() => {
-      setShowBuffering(true);
-      bufferSpinnerTimerRef.current = null;
-    }, REBUFFER_SPINNER_DELAY_MS);
-  }, []);
+  // Resume props often arrive after onLoad — re-apply when intent changes.
+  useEffect(() => {
+    const key = `${src}|${startTime ?? ''}|${startProgressFraction ?? ''}`;
+    if (resumeKeyRef.current === key && resumeSettledRef.current) return;
+    resumeSettledRef.current = false;
+    setSkipUiUnlocked(false);
+    setVisibleSkip(undefined);
+    if (durationRef.current > 1) applyResume(durationRef.current);
+  }, [startTime, startProgressFraction, src, applyResume]);
 
-  const applyResume = useCallback((durSec: number) => {
-    if (didSeekRef.current || durSec <= 0) return;
-    const key = `${src}|${startTimeRef.current ?? ''}|${startProgressFractionRef.current ?? ''}`;
-    if (resumeKeyRef.current === key) return;
-
-    let target = 0;
-    if (typeof startTimeRef.current === 'number' && startTimeRef.current > 0) {
-      target = startTimeRef.current;
-    } else if (
-      typeof startProgressFractionRef.current === 'number' &&
-      startProgressFractionRef.current > 0 &&
-      startProgressFractionRef.current < 0.95
-    ) {
-      target = durSec * startProgressFractionRef.current;
-    }
-
-    if (target > 1 && target < durSec - 1) {
-      videoRef.current?.seek(target);
-      setCurrentTime(target);
-    }
-    didSeekRef.current = true;
-    resumeKeyRef.current = key;
-  }, [src]);
+  const setBufferingUi = useCallback(
+    (isBuffering: boolean) => {
+      if (bufferSpinnerTimerRef.current) {
+        clearTimeout(bufferSpinnerTimerRef.current);
+        bufferSpinnerTimerRef.current = null;
+      }
+      if (!isBuffering) {
+        showBufferingRef.current = false;
+        setShowBuffering(false);
+        return;
+      }
+      if (!hasBeenReadyRef.current) {
+        showBufferingRef.current = true;
+        setShowBuffering(true);
+        setVisibleSkip(undefined);
+        setSkipUiUnlocked(false);
+        return;
+      }
+      bufferSpinnerTimerRef.current = setTimeout(() => {
+        showBufferingRef.current = true;
+        setShowBuffering(true);
+        setVisibleSkip(undefined);
+        setSkipUiUnlocked(false);
+        bufferSpinnerTimerRef.current = null;
+      }, REBUFFER_SPINNER_DELAY_MS);
+    },
+    [],
+  );
 
   const source = useMemo(() => {
     const uri = src?.trim();
@@ -196,8 +297,11 @@ export function useRNVideoEngine({
   const onLoad = useCallback(
     (data: OnLoadData) => {
       const durSec = data.duration > 0 ? data.duration : 0;
-      durationRef.current = durSec;
-      setDuration(durSec);
+      if (durSec > 0) {
+        durationRef.current = durSec;
+        durationFromLoadRef.current = true;
+        setDuration(durSec);
+      }
       hasBeenReadyRef.current = true;
       setBufferingUi(false);
       setPlaybackError(null);
@@ -227,7 +331,22 @@ export function useRNVideoEngine({
   const onProgressEvent = useCallback(
     (data: OnProgressData) => {
       const timeSec = data.currentTime;
-      const durSec = durationRef.current > 0 ? durationRef.current : data.seekableDuration || 0;
+      const seekable = data.seekableDuration || 0;
+      currentTimeRef.current = timeSec;
+
+      // Prefer onLoad duration. For HLS without it, adopt seekableDuration only while
+      // playback is clearly inside the range — never treat the buffer edge as episode end.
+      if (!durationFromLoadRef.current && seekable > durationRef.current && timeSec + 45 < seekable) {
+        durationRef.current = seekable;
+      }
+
+      const durSec = durationRef.current > 0 ? durationRef.current : 0;
+      // Duration may arrive after onLoad (HLS) — apply pending resume then.
+      if (!resumeSettledRef.current && durSec > 1) {
+        applyResume(durSec);
+      }
+
+      // Progress sync must not use raw seekableDuration (partial windows inflate %).
       onProgressRef.current?.(timeSec, durSec);
 
       const now = Date.now();
@@ -239,27 +358,29 @@ export function useRNVideoEngine({
         }
       }
 
-      const segments = skipSegmentsRef.current;
-      const active = findActiveSkipPrompt(segments, timeSec, dismissedSkipsRef.current);
-      setVisibleSkip((prev) => (prev?.id === active?.id ? prev : active));
+      refreshSkipPrompt(timeSec);
 
+      if (!positionReadyForSkip(timeSec)) return;
+
+      const segments = skipSegmentsRef.current;
       const currentPrefs = prefsRef.current;
       for (const segment of segments) {
         if (timeSec < segment.start || timeSec >= segment.end) continue;
         if (autoHandledSkipsRef.current.has(segment.id)) continue;
         const shouldAuto =
-          (segment.type === 'opening' && currentPrefs.autoSkipOpening) ||
-          (segment.type === 'ending' && currentPrefs.autoSkipEnding);
+          (isOpeningLikeSkip(segment.type) && currentPrefs.autoSkipOpening) ||
+          (isEndingLikeSkip(segment.type) && currentPrefs.autoSkipEnding);
         if (!shouldAuto) continue;
         autoHandledSkipsRef.current.add(segment.id);
         dismissedSkipsRef.current.add(segment.id);
         videoRef.current?.seek(segment.end);
+        currentTimeRef.current = segment.end;
         setCurrentTime(segment.end);
         setVisibleSkip(undefined);
         break;
       }
     },
-    [],
+    [applyResume, positionReadyForSkip, refreshSkipPrompt],
   );
 
   const onEnd = useCallback(() => {
@@ -328,29 +449,33 @@ export function useRNVideoEngine({
     if (!dur) return;
     const next = Math.max(0, Math.min(time, dur));
     videoRef.current?.seek(next);
+    currentTimeRef.current = next;
     setCurrentTime(next);
+    refreshSkipPrompt(next);
     if (wantPlayingRef.current) setPlaying(true);
-  }, [duration]);
+  }, [duration, refreshSkipPrompt]);
 
   const seekBy = useCallback(
     (delta: number) => {
-      seekTo(currentTime + delta);
+      seekTo(currentTimeRef.current + delta);
     },
-    [seekTo, currentTime],
+    [seekTo],
   );
 
   const applySkip = useCallback(
     (segment: PlayerSkipSegment) => {
       dismissedSkipsRef.current.add(segment.id);
-      seekTo(segment.end);
       setVisibleSkip(undefined);
+      seekTo(segment.end);
     },
     [seekTo],
   );
 
   const retryPlayback = useCallback(() => {
     setPlaybackError(null);
-    didSeekRef.current = false;
+    resumeKeyRef.current = '';
+    resumeSettledRef.current = false;
+    resumeTargetRef.current = null;
     wantPlayingRef.current = true;
     hasBeenReadyRef.current = false;
     setShowBuffering(true);
@@ -412,7 +537,7 @@ export function useRNVideoEngine({
     isLoading: showBuffering && !playbackError,
     isReady: hasBeenReadyRef.current && duration > 0,
     playbackError,
-    visibleSkip,
+    visibleSkip: skipUiUnlocked && !showBuffering ? visibleSkip : undefined,
     contentFit: prefs.videoFit,
     subtitleTracks,
     activeSubtitle,

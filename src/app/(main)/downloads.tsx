@@ -67,6 +67,7 @@ export default function DownloadsScreen() {
     const url = await svc.getLocalPlaybackUrl(record.id);
     if (!url || record.contentType === 'manga') return;
     const lampaKind = record.lampaKind === 'tv' ? 'tv' : 'movie';
+    const numericLampaId = Number(record.lampaId);
     setLampaWatchPayload({
       lampaLinks: [{ quality: record.quality ?? 'auto', urls: [url] }],
       lampaId: record.lampaId ?? '',
@@ -74,6 +75,8 @@ export default function DownloadsScreen() {
       lampaTitle: record.title,
       season: record.season,
       episode: record.episode,
+      tmdbId:
+        Number.isFinite(numericLampaId) && numericLampaId > 0 ? numericLampaId : undefined,
     });
     router.push('/watch/lampa');
   };

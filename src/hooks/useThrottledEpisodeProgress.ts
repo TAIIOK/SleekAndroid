@@ -36,7 +36,8 @@ export function useThrottledEpisodeProgress(
 
   return useCallback(
     (current: number, duration: number) => {
-      if (!enabled || !duration) return;
+      // Require real media duration — never sync against buffer/seekable guesses.
+      if (!enabled || !(duration > 1) || !(current >= 0)) return;
 
       const progress = Math.min(1, Math.max(0, current / duration));
       const completed = isEpisodeCompleted(progress);

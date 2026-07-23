@@ -18,7 +18,13 @@ import {
   pickPlaybackUrl,
   type PlaybackQuality,
 } from '@/lib/animePlaybackOptions';
-import { buildSkipSegments, parseSkipInterval } from '@/lib/playerSkip';
+import { episodeNumber } from '@/lib/animeDetail';
+import {
+  buildSkipSegments,
+  parseSkipInterval,
+  skipSegmentsFromEpisode,
+  skipSegmentsFromVideos,
+} from '@/lib/playerSkip';
 import { animeResumeProgress } from '@/lib/progressUtils';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -73,7 +79,7 @@ export default function WatchAnimeScreen() {
     numericEpisodeId,
     progressByEpisodeId,
   );
-  const episodeOrdinal = episode?.ordinal ?? episode?.id;
+  const episodeOrdinal = episode ? episodeNumber(episode) : undefined;
 
   const dubbingOptionsList = useMemo(() => getUniqueDubbingOptions(videos), [videos]);
   const [selectedDubbing, setSelectedDubbing] = useState('');
@@ -82,8 +88,8 @@ export default function WatchAnimeScreen() {
   const [selectedQuality, setSelectedQuality] = useState<PlaybackQuality>('720p');
   const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
   const playbackTimeRef = useRef(0);
-  const [resumeTime, setResumeTime] = useState<number | undefined>();
-  const [resumeFraction, setResumeFraction] = useState<number | undefined>();
+  /** Preserve position across dubbing/quality URL switches. */
+  const [resumeOverrideSec, setResumeOverrideSec] = useState<number | undefined>();
 
   const qualityOptionsList = useMemo(
     () => getQualityOptionsForDubbing(videos, selectedDubbing),
@@ -110,28 +116,28 @@ export default function WatchAnimeScreen() {
     [progressRows, numericEpisodeId],
   );
 
-  useEffect(() => {
-    playbackTimeRef.current = 0;
+  // Derive resume on render (not useEffect) so the player gets the target before onLoad.
+  const { resumeTime, resumeFraction } = useMemo(() => {
+    if (resumeOverrideSec != null && resumeOverrideSec > 0) {
+      return { resumeTime: resumeOverrideSec, resumeFraction: undefined };
+    }
     const fraction =
       routeProgress != null && Number.isFinite(routeProgress) && routeProgress > 0.01
         ? routeProgress
         : syncedProgress;
-
     if (fraction == null || fraction <= 0.01) {
-      setResumeTime(undefined);
-      setResumeFraction(undefined);
-      return;
+      return { resumeTime: undefined, resumeFraction: undefined };
     }
-
     if (episode?.duration && episode.duration > 0) {
-      setResumeTime(fraction * episode.duration);
-      setResumeFraction(undefined);
-      return;
+      return { resumeTime: fraction * episode.duration, resumeFraction: undefined };
     }
+    return { resumeTime: undefined, resumeFraction: fraction };
+  }, [resumeOverrideSec, routeProgress, syncedProgress, episode?.duration]);
 
-    setResumeTime(undefined);
-    setResumeFraction(fraction);
-  }, [numericEpisodeId, routeProgress, syncedProgress, episode?.duration]);
+  useEffect(() => {
+    playbackTimeRef.current = 0;
+    setResumeOverrideSec(undefined);
+  }, [numericEpisodeId]);
 
   useEffect(() => {
     if (!Number.isFinite(numericAnimeId)) {
@@ -173,20 +179,34 @@ export default function WatchAnimeScreen() {
   }, [qualityOptionsList, selectedQuality]);
 
   useEffect(() => {
-    if (!episodeOrdinal || !Number.isFinite(numericAnimeId)) return;
+    if (!episodeOrdinal || !Number.isFinite(numericAnimeId)) {
+      setSkipSegments(buildSkipSegments());
+      return;
+    }
+
+    const fromVideos = skipSegmentsFromVideos(videos);
+    const fromEpisode = skipSegmentsFromEpisode(episode);
+    const local = fromVideos.length ? fromVideos : fromEpisode;
+    setSkipSegments(local);
+
+    let cancelled = false;
     void (async () => {
       const [openingRes, endingRes] = await Promise.all([
         fetchAnimeSkip(numericAnimeId, episodeOrdinal, 'opening'),
         fetchAnimeSkip(numericAnimeId, episodeOrdinal, 'ending'),
       ]);
-      setSkipSegments(
-        buildSkipSegments(
-          parseSkipInterval(openingRes, 'opening'),
-          parseSkipInterval(endingRes, 'ending'),
-        ),
+      if (cancelled) return;
+      const fromApi = buildSkipSegments(
+        parseSkipInterval(openingRes, 'opening'),
+        parseSkipInterval(endingRes, 'ending'),
       );
+      setSkipSegments(fromApi.length ? fromApi : local);
     })();
-  }, [numericAnimeId, episodeOrdinal]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [numericAnimeId, episodeOrdinal, episode, videos]);
 
   const syncProgress = useThrottledEpisodeProgress(
     isAuthenticated,
@@ -197,8 +217,7 @@ export default function WatchAnimeScreen() {
 
   const switchWithResume = (apply: () => void) => {
     if (playbackTimeRef.current > 0) {
-      setResumeTime(playbackTimeRef.current);
-      setResumeFraction(undefined);
+      setResumeOverrideSec(playbackTimeRef.current);
     }
     apply();
   };

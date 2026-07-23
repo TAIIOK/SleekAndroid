@@ -4,8 +4,8 @@ import { BackHandler } from 'react-native';
 import type { PlayerEpisodeNav, PlayerMenuOption } from '@/components/player/types';
 import {
   TV_PANEL_HIDE_MS,
+  TV_PLAYER_CENTER_ORDER,
   TV_PLAYER_OPTIONS_ORDER,
-  TV_PLAYER_TRANSPORT_ORDER,
   type TvPlayerButtonId,
   type TvPlayerOverlay,
   type TvPlayerPanelFocus,
@@ -38,12 +38,15 @@ interface UseTvPlayerRemoteOptions {
   hasExternal: boolean;
   hasPrevEpisode: boolean;
   hasNextEpisode: boolean;
+  /** Skip OP/ED/intro CTA is visible — OK activates it instead of play/pause. */
+  hasSkipPrompt?: boolean;
   onBack: () => void;
   onTogglePlay: () => void;
   onSeekBack: () => void;
   onSeekForward: () => void;
   onPrevEpisode?: () => void;
   onNextEpisode?: () => void;
+  onApplySkip?: () => void;
   onSelectMenuOption: (option: PlayerMenuOption) => void;
   onSelectEpisode: (episodeId: number) => void;
   onSelectSubtitle: (track: SubtitleTrackInfo | null) => void;
@@ -51,17 +54,23 @@ interface UseTvPlayerRemoteOptions {
   onPrefsChange: (patch: Partial<PlayerPreferences>) => void;
 }
 
-function isTransportButton(id: TvPlayerButtonId): boolean {
-  return TV_PLAYER_TRANSPORT_ORDER.includes(id);
+function isCenterButton(id: TvPlayerButtonId, enabled: Set<TvPlayerButtonId>): boolean {
+  return centerOrder(enabled).includes(id);
 }
 
 function isOptionsButton(id: TvPlayerButtonId): boolean {
   return TV_PLAYER_OPTIONS_ORDER.includes(id);
 }
 
+function centerOrder(enabled: Set<TvPlayerButtonId>): TvPlayerButtonId[] {
+  return TV_PLAYER_CENTER_ORDER.filter((id) => id === 'play' || enabled.has(id));
+}
+
 function rowOrder(id: TvPlayerButtonId, enabled: Set<TvPlayerButtonId>): TvPlayerButtonId[] {
-  const source = isOptionsButton(id) ? TV_PLAYER_OPTIONS_ORDER : TV_PLAYER_TRANSPORT_ORDER;
-  return source.filter((item) => enabled.has(item));
+  if (isOptionsButton(id)) {
+    return TV_PLAYER_OPTIONS_ORDER.filter((item) => enabled.has(item));
+  }
+  return centerOrder(enabled);
 }
 
 function nextInRow(
@@ -80,12 +89,13 @@ function firstEnabledOption(enabled: Set<TvPlayerButtonId>): TvPlayerButtonId | 
   return TV_PLAYER_OPTIONS_ORDER.find((id) => enabled.has(id)) ?? null;
 }
 
-function firstEnabledTransport(enabled: Set<TvPlayerButtonId>): TvPlayerButtonId {
-  return TV_PLAYER_TRANSPORT_ORDER.find((id) => enabled.has(id)) ?? 'play';
+function firstEnabledCenter(enabled: Set<TvPlayerButtonId>): TvPlayerButtonId {
+  const order = centerOrder(enabled);
+  return order.includes('play') ? 'play' : (order[0] ?? 'play');
 }
 
 function buildEnabledButtons(options: UseTvPlayerRemoteOptions): Set<TvPlayerButtonId> {
-  const enabled = new Set<TvPlayerButtonId>(['rprev', 'play', 'rnext']);
+  const enabled = new Set<TvPlayerButtonId>(['play']);
   if (options.hasPrevEpisode) enabled.add('prev_episode');
   if (options.hasNextEpisode) enabled.add('next_episode');
   if (options.hasDubbing) enabled.add('dubbing');
@@ -362,7 +372,7 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
           return;
         }
         if (key === 'down') {
-          setPanelFocus(firstEnabledTransport(enabled));
+          setPanelFocus(firstEnabledCenter(enabled));
           scheduleHide();
           return;
         }
@@ -377,8 +387,8 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
 
       if (key === 'up') {
         if (isOptionsButton(focused)) {
-          setPanelFocus('play');
-        } else if (isTransportButton(focused)) {
+          setPanelFocus(firstEnabledCenter(enabled));
+        } else if (isCenterButton(focused, enabled)) {
           setPanelFocus('timeline');
         }
         scheduleHide();
@@ -386,7 +396,7 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
       }
 
       if (key === 'down') {
-        if (isTransportButton(focused)) {
+        if (isCenterButton(focused, enabled)) {
           const next = firstEnabledOption(enabled);
           if (next) setPanelFocus(next);
         }
@@ -408,6 +418,15 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
       clearHideTimer();
     }
   }, [clearHideTimer, options.playing]);
+
+  // When skip first appears, drop chrome focus so OK maps to skip (not stuck next_episode).
+  const hadSkipPromptRef = useRef(false);
+  useEffect(() => {
+    const hasSkip = Boolean(options.hasSkipPrompt);
+    const appeared = hasSkip && !hadSkipPromptRef.current;
+    hadSkipPromptRef.current = hasSkip;
+    if (appeared && !overlay) hidePanel();
+  }, [hidePanel, options.hasSkipPrompt, overlay]);
 
   useTvEventHandlerSafe((event) => {
     if (event.eventType === 'focus' || event.eventType === 'blur') return;
@@ -450,12 +469,30 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
     }
 
     if (type === 'select' || type === 'playPause') {
+      // Bottom option pills still activate when explicitly focused.
+      if (panelVisible && isOptionsButton(panelFocus)) {
+        activateButton(panelFocus);
+        return;
+      }
+      // Skip beats center dock (play/prev/next) — otherwise OK after "next" stays on next.
+      if (opts.hasSkipPrompt && opts.onApplySkip) {
+        opts.onApplySkip();
+        hidePanel();
+        return;
+      }
       if (panelVisible && panelFocus !== 'timeline') {
         activateButton(panelFocus);
         return;
       }
+      const enabled = buildEnabledButtons(opts);
+      const wasPlaying = opts.playing;
       opts.onTogglePlay();
-      scheduleHide();
+      // After pause, open chrome focused on the center play dock.
+      if (wasPlaying) {
+        showPanel(firstEnabledCenter(enabled));
+      } else {
+        scheduleHide();
+      }
       return;
     }
 
@@ -468,7 +505,11 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
 
     if (type === 'left') opts.onSeekBack();
     else if (type === 'right') opts.onSeekForward();
-    else if (type === 'up' || type === 'down') showPanel('timeline');
+    else if (type === 'up') showPanel('timeline');
+    else if (type === 'down') {
+      const enabled = buildEnabledButtons(opts);
+      showPanel(firstEnabledCenter(enabled));
+    }
   });
 
   useEffect(() => () => clearHideTimer(), [clearHideTimer]);

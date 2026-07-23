@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View, type DimensionValue } from 'react-na
 
 import { colors } from '@/constants/aniverse';
 import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
-import type { PlayerSkipSegment } from '@/lib/playerSkip';
+import { isOpeningLikeSkip, type PlayerSkipSegment } from '@/lib/playerSkip';
 
 function pct(value: number): DimensionValue {
   return `${Math.min(100, Math.max(0, value))}%`;
@@ -42,7 +42,7 @@ export function PhoneScrubBar({
                     key={segment.id}
                     style={[
                       styles.skipMark,
-                      segment.type === 'opening' ? styles.skipOpen : styles.skipEnd,
+                      isOpeningLikeSkip(segment.type) ? styles.skipOpen : styles.skipEnd,
                       { left: pct(left), width: pct(Math.max(segWidth, 0.5)) },
                     ]}
                   />

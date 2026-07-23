@@ -585,11 +585,11 @@ export function TvPlayerOverlays({
       },
       {
         id: 'skip_open' as const,
-        label: `Авто OP · ${prefs.autoSkipOpening ? 'Вкл' : 'Выкл'}`,
+        label: `Автопропуск интро · ${prefs.autoSkipOpening ? 'Вкл' : 'Выкл'}`,
       },
       {
         id: 'skip_end' as const,
-        label: `Авто ED · ${prefs.autoSkipEnding ? 'Вкл' : 'Выкл'}`,
+        label: `Автопропуск титров · ${prefs.autoSkipEnding ? 'Вкл' : 'Выкл'}`,
       },
     ];
 

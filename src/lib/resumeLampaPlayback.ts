@@ -1,4 +1,5 @@
 import { fetchLampaDetail, type LampaDetail } from '@/api/catalog';
+import { resolveLampaTmdbId } from '@/lib/lampaDetail';
 import { loadLampaLastSelection } from '@/lib/lampaLastSelection';
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import {
@@ -180,6 +181,8 @@ export async function resumeLampaFromLastSelection(
 
     const title = detailTitle(detail);
     const startProgress = params.startProgress;
+    const detailRecord = detail as unknown as Record<string, unknown>;
+    const imdbRaw = detailRecord.imdbId ?? detailRecord.imdb_id;
     setLampaWatchPayload({
       lampaLinks: links,
       lampaId: /^\d+$/.test(routeId) ? routeId : (params.lampaObjectId ?? routeId),
@@ -187,6 +190,8 @@ export async function resumeLampaFromLastSelection(
       lampaTitle: title,
       season,
       episode,
+      tmdbId: resolveLampaTmdbId(detail, routeId),
+      imdbId: typeof imdbRaw === 'string' && imdbRaw.trim() ? imdbRaw.trim() : undefined,
       startProgress:
         startProgress != null && startProgress > 0.01 && startProgress < 0.98
           ? startProgress

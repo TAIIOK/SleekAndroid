@@ -237,12 +237,12 @@ export function PhoneVideoPlayer({
     },
     {
       id: 'skip_open',
-      label: `Авто OP · ${engine.prefs.autoSkipOpening ? 'Вкл' : 'Выкл'}`,
+      label: `Автопропуск интро · ${engine.prefs.autoSkipOpening ? 'Вкл' : 'Выкл'}`,
       onPress: () => engine.updatePrefs({ autoSkipOpening: !engine.prefs.autoSkipOpening }),
     },
     {
       id: 'skip_end',
-      label: `Авто ED · ${engine.prefs.autoSkipEnding ? 'Вкл' : 'Выкл'}`,
+      label: `Автопропуск титров · ${engine.prefs.autoSkipEnding ? 'Вкл' : 'Выкл'}`,
       onPress: () => engine.updatePrefs({ autoSkipEnding: !engine.prefs.autoSkipEnding }),
     },
     {
@@ -417,6 +417,29 @@ export function PhoneVideoPlayer({
         </View>
       ) : null}
 
+      {/* Always on top of chrome — skip must stay tappable after controls auto-hide. */}
+      {engine.visibleSkip && !engine.playbackError && !externalError && !pipActive ? (
+        <View
+          style={[
+            styles.skipFloat,
+            padH,
+            {
+              bottom: showChrome
+                ? Math.max(insets.bottom, 14) + 118
+                : Math.max(insets.bottom, 24) + 12,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            onPress={() => engine.applySkip(engine.visibleSkip!)}
+            style={styles.skipBtn}
+          >
+            <Text style={styles.chipText}>{engine.visibleSkip.title}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {engine.playbackError || externalError ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorTitle}>Ошибка воспроизведения</Text>
@@ -561,15 +584,6 @@ export function PhoneVideoPlayer({
           style={[styles.bottomBar, padH, { paddingBottom: Math.max(insets.bottom, 14) }]}
           pointerEvents="box-none"
         >
-          {engine.visibleSkip ? (
-            <Pressable
-              onPress={() => engine.applySkip(engine.visibleSkip!)}
-              style={styles.skipBtn}
-            >
-              <Text style={styles.chipText}>{engine.visibleSkip.title}</Text>
-            </Pressable>
-          ) : null}
-
           <PhoneScrubBar
             progress={engine.progress}
             currentTime={engine.currentTime}
@@ -818,6 +832,13 @@ const styles = StyleSheet.create({
   topFade: { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
   bottomFade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 180 },
   chrome: { ...StyleSheet.absoluteFill, zIndex: 20 },
+  skipFloat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    alignItems: 'flex-end',
+  },
   center: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',

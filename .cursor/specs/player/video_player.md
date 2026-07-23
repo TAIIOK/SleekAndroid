@@ -16,7 +16,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] High-bitrate / 4K-friendly ExoPlayer `bufferConfig` (avoid oversized forward buffers that thrash TV heap)
 - [x] Long-session stability: no React Query invalidate on mid-watch progress PUT; debounce rebuffer spinner; quieter timeUpdate state updates
 - [x] Player preferences persist in AsyncStorage (`aniverse-player-prefs`), including last external player package
-- [x] Throttled anime and Lampa progress PUT with flush on unmount; Lampa uses 1440s fallback duration when unknown
+- [x] Throttled anime and Lampa progress PUT with flush on unmount; sync only when real media duration is known (no 1440s / seekable-buffer fallback that inflates %)
 - [x] `react-native-video` Expo plugin registered; THEOplayer / `expo-video` removed after cutover
 - [x] `android:largeHeap` via config plugin for 4K heap headroom
 
@@ -29,9 +29,10 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 ### TV UI and remote
 
-- [x] Panel: timeline → transport → options; auto-hide 3s while playing; hint ~2.5s
-- [x] TV panel visual: bottom fade, circular transport, labeled option pills, timeline thumb (site-like HUD)
-- [x] TV panel density: compact HUD — times + timeline on one row; transport ≤ 52px play / 44px sides; tight pills/padding so more video stays visible
+- [x] Panel: timeline → center dock (prev/play/next) → options; auto-hide 3s while playing; hint ~2.5s
+- [x] TV panel visual: compact site-like bottom card — meta, white timeline, times, option pills (no ±seek transport)
+- [x] Seek ±N via D-pad ←/→ only (hidden chrome or timeline focus), not bottom-bar buttons
+- [x] Mid-screen circular prev/play/next dock (site TV style); pause or ↓ focuses the dock
 - [x] Hidden panel: ←/→ seek (prefs seconds), ↑/↓ show panel, OK play/pause, Back exit
 - [x] Visible panel: D-pad focus; Back hides panel or closes overlay before exit
 - [x] Overlays: dubbing, quality, connection, delivery, episodes, subtitles (when tracks exist), settings, external player
@@ -39,8 +40,9 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Long overlay lists scroll only when the focused row leaves the viewport; ↑/↓ navigation is rate-limited (~150ms)
 - [x] Panel options chip cycles video framing (`contain` → `cover` → `fill`) without opening settings
 - [x] Paused center badge; loading indicator; skip prompt button
+- [x] Skip CTA is software-focused while visible: OK/`select` applies skip (native focus stays on sink); focused visual + hint «OK — пропустить»
 - [x] Invisible focusable sink (`hasTVPreferredFocus`) so Android TV delivers HW keys to `useTVEventHandler` when the HUD is software-focus only
-- [x] Overlay / skip / error `Pressable`s use `focusable={false}` so they do not steal focus from the sink
+- [x] Overlay / skip / error controls do not take native TV focus away from the sink
 - [x] Remote handler ignores `eventKeyAction === 0` (key-down) to avoid double seek/play
 
 ### Phone UI
@@ -51,6 +53,16 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Gestures (RNGH): tap shows chrome immediately when hidden, hides after double-tap window when visible; double-tap L/R seeks; vertical left third brightness; vertical right third volume; horizontal scrub; gesture lock in top bar
 - [x] Sheets for dubbing/quality/connection/delivery/episodes/subtitles/settings/external player (shared prefs)
 - [x] Phone PiP: top-bar button calls `enterPictureInPicture`; Android `supportsPictureInPicture` via RNV Expo plugin; chrome hidden while PiP active
+
+### Skip OP/ED (anime + Lampa)
+
+- [x] Shared skip model: `opening` / `ending` / `intro` / `credits` via `playerSkip.ts`
+- [x] Auto-skip prefs: `autoSkipOpening` covers opening+intro; `autoSkipEnding` covers ending+credits
+- [x] Skip CTA prompt window: first 8s of active segment; manual seek to `segment.end`
+- [x] TV timeline markers (orange opening-like, purple ending-like) on `TvPlayerPanel`
+- [x] Phone scrub markers on `PhoneScrubBar`; skip chip + settings toggles on phone HUD
+- [x] Anime: skip segments from `fetchAnimeSkip` API
+- [x] Lampa TV serials: skip segments from `fetchLampaSkipSegments` (`intro`/`credits`); movies skip fetch cleared
 
 ### Anime watch
 
@@ -69,6 +81,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Serial episode nav: prev/next + episodes overlay; WatchHub session (`taskId` / source / translator / seasons) in watch payload; switch reloads links in-place; auto-next on ended
 - [x] Episodes overlay groups by season with «Сейчас» marker (see `episode_picker_and_lampa_dubbing.md`)
 - [x] Local download playback without WatchHub session does not show episode nav
+- [x] Watch payload carries `tmdbId` / `imdbId` for skip-segments API
 
 ## Acceptance Criteria
 
@@ -81,6 +94,9 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 7. Playback error shows Retry; empty source shows «Нет источника видео».
 8. HLS and progressive play on Android TV via react-native-video (ExoPlayer).
 9. External player opens installed Just Player / VLC / mpv (or system chooser) with stream URL and position.
+10. TV + phone: anime OP/ED skip CTA, auto-skip prefs, and timeline/scrub markers work.
+11. TV + phone: Lampa TV serials show intro/credits skip CTA, auto-skip, and markers; movies do not fetch skip segments.
+12. TV: while skip CTA is visible, OK applies skip (software focus); button shows focused state.
 
 ## QA (from site/docs/TV_QA.md Watch)
 

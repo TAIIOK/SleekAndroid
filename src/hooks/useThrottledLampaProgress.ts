@@ -38,12 +38,13 @@ export function useThrottledLampaProgress(
   return useCallback(
     (current: number, duration: number) => {
       if (!enabled || !lampaId.trim()) return;
+      // Never invent duration (old 1440s fallback inflated continue-watching %).
+      if (!(duration > 1) || !(current >= 0)) return;
 
       const coords = lampaSeasonEpisodeForWatch(isSerial, season, episode);
       if (!coords) return;
 
-      const progress =
-        duration > 1 ? Math.min(1, Math.max(0, current / duration)) : Math.min(0.95, current / 1440);
+      const progress = Math.min(1, Math.max(0, current / duration));
       const completed = isEpisodeCompleted(progress);
       const payload: LampaProgressPut = {
         lampaId: lampaId.trim(),

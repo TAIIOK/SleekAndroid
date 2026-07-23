@@ -8,6 +8,10 @@ export interface LampaWatchPayload {
   season?: number;
   episode?: number;
   startProgress?: number;
+  /** TMDB id for skip-segments API (TV serials). */
+  tmdbId?: number;
+  /** Optional IMDB id for skip-segments resolution. */
+  imdbId?: string;
   /** WatchHub session — required for in-player episode switching on serials. */
   taskId?: string;
   sourceId?: string;

@@ -27,11 +27,10 @@ export type TvPlayerButtonId =
   | 'external'
   | 'settings';
 
-export const TV_PLAYER_TRANSPORT_ORDER: TvPlayerButtonId[] = [
+/** Mid-screen dock: prev / play / next. Seek ±N lives on the D-pad, not in the HUD. */
+export const TV_PLAYER_CENTER_ORDER: TvPlayerButtonId[] = [
   'prev_episode',
-  'rprev',
   'play',
-  'rnext',
   'next_episode',
 ];
 

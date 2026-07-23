@@ -10,9 +10,13 @@ import {
 import Video from 'react-native-video';
 
 import type { VideoPlayerProps } from '@/components/player/types';
+import { TvEpisodeDock } from '@/components/player/tv/TvEpisodeDock';
 import { TvPlayerOverlays } from '@/components/player/tv/TvPlayerOverlays';
 import { TvPlayerPanel } from '@/components/player/tv/TvPlayerPanel';
-import { TV_PLAYER_HINT_HIDE_MS } from '@/components/player/tv/tvPlayerTypes';
+import {
+  TV_PLAYER_HINT_HIDE_MS,
+  TV_PLAYER_OPTIONS_ORDER,
+} from '@/components/player/tv/tvPlayerTypes';
 import { colors, spacing } from '@/constants/aniverse';
 import { useRNVideoEngine } from '@/hooks/useRNVideoEngine';
 import { useTvPlayerRemote } from '@/hooks/useTvPlayerRemote';
@@ -109,12 +113,16 @@ export function TvVideoPlayer({
     hasExternal,
     hasPrevEpisode: Boolean(episodeNav?.hasPrevious),
     hasNextEpisode: Boolean(episodeNav?.hasNext),
+    hasSkipPrompt: Boolean(engine.visibleSkip),
     onBack: handleBack,
     onTogglePlay: engine.togglePlay,
     onSeekBack: () => engine.seekBy(-engine.prefs.skipBackwardSeconds),
     onSeekForward: () => engine.seekBy(engine.prefs.skipForwardSeconds),
     onPrevEpisode: episodeNav?.onPrevious,
     onNextEpisode: episodeNav?.onNext,
+    onApplySkip: () => {
+      if (engine.visibleSkip) engine.applySkip(engine.visibleSkip);
+    },
     onSelectMenuOption: (option) => option.onSelect(),
     onSelectEpisode: (id) => episodeNav?.onSelect?.(id),
     onSelectSubtitle: engine.setSubtitleTrack,
@@ -149,7 +157,19 @@ export function TvVideoPlayer({
   const selectedSubtitle = engine.activeSubtitle
     ? subtitleTrackLabel(engine.activeSubtitle)
     : undefined;
-  const showPausedBadge = !engine.playing && !remote.panelVisible && !remote.overlay;
+  const showCenterDock =
+    !remote.overlay &&
+    !engine.playbackError &&
+    !engine.isLoading &&
+    (remote.panelVisible || !engine.playing);
+  // Skip owns OK unless a bottom options pill (or overlay) is focused.
+  const skipActionable =
+    Boolean(engine.visibleSkip) &&
+    !remote.overlay &&
+    !(
+      remote.panelVisible &&
+      TV_PLAYER_OPTIONS_ORDER.includes(remote.panelFocus as (typeof TV_PLAYER_OPTIONS_ORDER)[number])
+    );
 
   const [hintVisible, setHintVisible] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -208,13 +228,13 @@ export function TvVideoPlayer({
         </View>
       ) : null}
 
-      {showPausedBadge && !engine.isLoading && !engine.playbackError ? (
-        <View style={styles.center} pointerEvents="none">
-          <View style={styles.pausedBadge}>
-            <Text style={styles.pausedIcon}>▶</Text>
-          </View>
-        </View>
-      ) : null}
+      <TvEpisodeDock
+        visible={showCenterDock}
+        playing={engine.playing}
+        panelFocus={remote.panelFocus}
+        hasPrev={remote.enabledButtons.has('prev_episode')}
+        hasNext={remote.enabledButtons.has('next_episode')}
+      />
 
       {engine.playbackError || externalError ? (
         <View style={styles.errorBox}>
@@ -238,22 +258,27 @@ export function TvVideoPlayer({
         </View>
       ) : null}
 
-      {engine.visibleSkip && !remote.overlay ? (
-        <View style={styles.skipWrap}>
-          <Pressable
-            focusable={false}
-            onPress={() => engine.applySkip(engine.visibleSkip!)}
-            style={styles.skipBtn}
-          >
-            <Text style={styles.skipText}>{engine.visibleSkip.title}</Text>
-          </Pressable>
+      {engine.visibleSkip && !remote.overlay && !engine.isLoading ? (
+        <View style={styles.skipWrap} pointerEvents="none">
+          <View style={[styles.skipBtn, skipActionable && styles.skipBtnFocused]}>
+            <Text style={[styles.skipText, skipActionable && styles.skipTextFocused]}>
+              {engine.visibleSkip.title}
+            </Text>
+            {skipActionable ? <Text style={styles.skipHint}>OK</Text> : null}
+          </View>
         </View>
       ) : null}
 
-      {hintVisible && !remote.panelVisible && !remote.overlay && !engine.playbackError ? (
+      {hintVisible &&
+      !remote.panelVisible &&
+      !remote.overlay &&
+      !engine.playbackError &&
+      !engine.isLoading ? (
         <View style={styles.hint} pointerEvents="none">
           <Text style={styles.hintText}>
-            OK — пауза · ← → — перемотка · ↑ ↓ — панель · Back — выход
+            {engine.visibleSkip
+              ? 'OK — пропустить · ← → — перемотка · ↑ ↓ — панель · Back — выход'
+              : 'OK — пауза · ↓ — серии / плей · ← → — перемотка · Back — выход'}
           </Text>
         </View>
       ) : null}
@@ -261,13 +286,13 @@ export function TvVideoPlayer({
       <TvPlayerPanel
         visible={remote.panelVisible && !remote.overlay}
         panelFocus={remote.panelFocus}
-        playing={engine.playing}
         title={title}
         subtitle={subtitle}
         currentTime={engine.currentTime}
         duration={engine.duration}
         progress={engine.progress}
         prefs={engine.prefs}
+        skipSegments={skipSegments}
         enabledButtons={remote.enabledButtons}
         hasDubbing={hasDubbing}
         hasQuality={hasQuality}
@@ -320,15 +345,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pausedBadge: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pausedIcon: { color: '#fff', fontSize: 48, marginLeft: 6 },
   errorBox: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
@@ -357,14 +373,28 @@ const styles = StyleSheet.create({
     bottom: 180,
   },
   skipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    borderWidth: 1,
-    borderColor: colors.brand,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  skipBtnFocused: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
   },
   skipText: { color: colors.text, fontSize: 18, fontWeight: '600' },
+  skipTextFocused: { color: '#111' },
+  skipHint: {
+    color: 'rgba(17,17,17,0.55)',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
   hint: {
     position: 'absolute',
     left: spacing.xxl,

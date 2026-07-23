@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { fetchLampaSkipSegments } from '@/api/catalog';
 import { fetchLampaProgress, putLampaProgress } from '@/api/progress';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import type { PlaybackErrorInfo, PlayerEpisodeNav } from '@/components/player/types';
@@ -27,6 +28,7 @@ import {
   type LampaDeliveryMode,
 } from '@/lib/lampaPlaybackOptions';
 import { saveLampaLastSelection } from '@/lib/lampaLastSelection';
+import { buildLampaSkipSegments, buildSkipSegments } from '@/lib/playerSkip';
 import {
   isEpisodeCompleted,
   lampaResumeProgress,
@@ -73,8 +75,9 @@ export default function WatchLampaScreen() {
   const durationRef = useRef(0);
   const httpFallbackTriedRef = useRef(false);
   const hasSwitchedEpisodeRef = useRef(false);
-  const [resumeTime, setResumeTime] = useState<number | undefined>();
-  const [resumeFraction, setResumeFraction] = useState<number | undefined>();
+  const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
+  /** Preserve position across quality/translator URL switches. */
+  const [resumeOverrideSec, setResumeOverrideSec] = useState<number | undefined>();
 
   useEffect(() => {
     void loadDownloadPreferences().then((prefs) => {
@@ -85,6 +88,14 @@ export default function WatchLampaScreen() {
 
   const lampaId = payload?.lampaId?.trim() ?? '';
   const isSerial = payload?.lampaKind === 'tv';
+  const tmdbId = useMemo(() => {
+    if (payload?.tmdbId != null && Number.isFinite(payload.tmdbId) && payload.tmdbId > 0) {
+      return payload.tmdbId;
+    }
+    const fromLampaId = Number(lampaId);
+    if (Number.isFinite(fromLampaId) && fromLampaId > 0) return fromLampaId;
+    return undefined;
+  }, [payload?.tmdbId, lampaId]);
   const taskId = payload?.taskId?.trim() ?? '';
   const sourceId = payload?.sourceId?.trim() ?? '';
   const canLoadTranslators = Boolean(taskId && sourceId);
@@ -106,6 +117,33 @@ export default function WatchLampaScreen() {
   useEffect(() => {
     httpFallbackTriedRef.current = false;
   }, [lampaId, season, episode, lampaLinks]);
+
+  useEffect(() => {
+    if (!isSerial) {
+      setSkipSegments(buildSkipSegments());
+      return;
+    }
+    if (tmdbId == null || season == null || episode == null) {
+      setSkipSegments(buildSkipSegments());
+      return;
+    }
+
+    setSkipSegments(buildSkipSegments());
+    let cancelled = false;
+    void (async () => {
+      const segments = await fetchLampaSkipSegments({
+        tmdbId,
+        imdbId: payload?.imdbId,
+        season,
+        episode,
+      });
+      if (!cancelled) setSkipSegments(buildLampaSkipSegments(segments));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSerial, tmdbId, payload?.imdbId, season, episode]);
 
   const { data: progressRows = [] } = useQuery({
     queryKey: ['lampa-progress', lampaId || undefined],
@@ -162,10 +200,11 @@ export default function WatchLampaScreen() {
     [progressRows, lampaId, season, episode, isSerial],
   );
 
-  useEffect(() => {
-    playbackTimeRef.current = 0;
-    durationRef.current = 0;
-
+  // Derive resume on render so continue-watching position is available before onLoad.
+  const { resumeTime, resumeFraction } = useMemo(() => {
+    if (resumeOverrideSec != null && resumeOverrideSec > 0) {
+      return { resumeTime: resumeOverrideSec, resumeFraction: undefined };
+    }
     const usePayloadStart =
       !hasSwitchedEpisodeRef.current &&
       payload?.startProgress != null &&
@@ -173,25 +212,29 @@ export default function WatchLampaScreen() {
       season === payload.season &&
       episode === payload.episode;
     const fraction = usePayloadStart ? payload.startProgress : syncedProgress;
-
     if (fraction != null && fraction > 0.01) {
-      setResumeTime(undefined);
-      setResumeFraction(fraction);
-      return;
+      return { resumeTime: undefined, resumeFraction: fraction };
     }
-
-    // After an in-player episode switch, force start from the beginning when no progress.
-    setResumeTime(hasSwitchedEpisodeRef.current ? 0 : undefined);
-    setResumeFraction(undefined);
+    // After an in-player episode switch with no saved progress, start from 0.
+    return {
+      resumeTime: hasSwitchedEpisodeRef.current ? 0 : undefined,
+      resumeFraction: undefined,
+    };
   }, [
+    resumeOverrideSec,
     payload?.startProgress,
     payload?.season,
     payload?.episode,
     syncedProgress,
-    lampaId,
     season,
     episode,
   ]);
+
+  useEffect(() => {
+    playbackTimeRef.current = 0;
+    durationRef.current = 0;
+    setResumeOverrideSec(undefined);
+  }, [lampaId, season, episode]);
 
   const title = useMemo(() => {
     if (!payload) return 'Воспроизведение';
@@ -226,9 +269,8 @@ export default function WatchLampaScreen() {
     if (!coords) return;
     const current = playbackTimeRef.current;
     const duration = durationRef.current;
-    if (current <= 0) return;
-    const progress =
-      duration > 1 ? Math.min(1, Math.max(0, current / duration)) : Math.min(0.95, current / 1440);
+    if (!(duration > 1) || !(current > 0)) return;
+    const progress = Math.min(1, Math.max(0, current / duration));
     void putLampaProgress({
       lampaId: lampaId.trim(),
       seasonOrdinal: coords.seasonOrdinal,
@@ -294,8 +336,7 @@ export default function WatchLampaScreen() {
       if (switchingEpisode) return;
 
       if (playbackTimeRef.current > 0) {
-        setResumeTime(playbackTimeRef.current);
-        setResumeFraction(undefined);
+        setResumeOverrideSec(playbackTimeRef.current);
       }
 
       setSwitchingEpisode(true);
@@ -396,8 +437,7 @@ export default function WatchLampaScreen() {
 
   const switchWithResume = (apply: () => void) => {
     if (playbackTimeRef.current > 0) {
-      setResumeTime(playbackTimeRef.current);
-      setResumeFraction(undefined);
+      setResumeOverrideSec(playbackTimeRef.current);
     }
     apply();
   };
@@ -506,6 +546,7 @@ export default function WatchLampaScreen() {
         subtitle={subtitle}
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
+        skipSegments={skipSegments}
         onBack={() => router.back()}
         dubbingOptions={dubbingOptions}
         qualityOptions={qualityOptions}

@@ -313,6 +313,8 @@ export function LampaSourceSheet({
         ? episodeProgressByKey[progressKey]
         : Object.values(episodeProgressByKey)[0];
       const taskId = watchHub.getTaskId() ?? undefined;
+      const detailRecord = detail as unknown as Record<string, unknown>;
+      const imdbRaw = detailRecord.imdbId ?? detailRecord.imdb_id;
       setLampaWatchPayload({
         lampaLinks: links,
         // Prefer numeric route id so continue-watching can open /movies|/series/:id
@@ -322,6 +324,8 @@ export function LampaSourceSheet({
         lampaTitle: title,
         season,
         episode,
+        tmdbId: tmdbId ?? undefined,
+        imdbId: typeof imdbRaw === 'string' && imdbRaw.trim() ? imdbRaw.trim() : undefined,
         startProgress:
           startProgress != null && startProgress > 0.01 && startProgress < 0.98
             ? startProgress

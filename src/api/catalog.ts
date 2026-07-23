@@ -34,7 +34,7 @@ import {
   mergeLampaWithTmdb,
   resolveLampaTmdbId,
 } from '@/lib/lampaDetail';
-import type { SkipResponse } from '@/lib/playerSkip';
+import type { LampaSkipSegment, LampaSkipSegmentsData, SkipResponse } from '@/lib/playerSkip';
 
 import { ApiError, request, requestData, unwrapData } from './client';
 import { fetchTmdbLampaDetail } from './lampaExtras';
@@ -385,13 +385,45 @@ export async function fetchAnimeSkip(
   episode: number,
   type: 'opening' | 'ending' = 'opening',
 ): Promise<SkipResponse | null> {
+  // Sleek / AniSkip proxy expects `op` | `ed`, not `opening` | `ending`.
+  const apiType = type === 'opening' ? 'op' : 'ed';
   try {
     const json = await request<SkipResponse>(
-      `/api/animes/get/opening?id=${animeId}&episode=${episode}&type=${type}`,
+      `/api/animes/get/opening?id=${animeId}&episode=${episode}&type=${apiType}`,
+      { skipAuth: true },
     );
     return json ?? null;
   } catch {
     return null;
+  }
+}
+
+export async function fetchLampaSkipSegments(params: {
+  tmdbId: number;
+  imdbId?: string;
+  season: number;
+  episode: number;
+}): Promise<LampaSkipSegment[]> {
+  const { tmdbId, imdbId, season, episode } = params;
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) return [];
+  if (!Number.isFinite(season) || season < 0) return [];
+  if (!Number.isFinite(episode) || episode < 1) return [];
+
+  try {
+    const qs = new URLSearchParams({
+      tmdbId: String(tmdbId),
+      season: String(season),
+      episode: String(episode),
+    });
+    const trimmedImdb = imdbId?.trim();
+    if (trimmedImdb) qs.set('imdbId', trimmedImdb);
+
+    const data = await requestData<LampaSkipSegmentsData>(`/api/lampa/skip-segments?${qs}`, {
+      skipAuth: true,
+    });
+    return Array.isArray(data?.segments) ? data.segments : [];
+  } catch {
+    return [];
   }
 }
 

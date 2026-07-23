@@ -25,8 +25,19 @@ export function normalizeEpisode(raw: unknown): AnimeEpisode {
     ordinal: Number.isFinite(ordinal) && (ordinal as number) > 0 ? ordinal : undefined,
     title: typeof base.title === 'string' ? base.title : undefined,
     duration: typeof base.duration === 'number' ? base.duration : undefined,
+    openingStart: readOptionalNumber(base.openingStart),
+    openingEnd: readOptionalNumber(base.openingEnd),
+    endingStart: readOptionalNumber(base.endingStart),
+    endingEnd: readOptionalNumber(base.endingEnd),
     video: readEpisodeVideos(row, base),
-  } as AnimeEpisode & { poster?: unknown; screenshot?: unknown };
+  } as AnimeEpisode & {
+    poster?: unknown;
+    screenshot?: unknown;
+    openingStart?: number;
+    openingEnd?: number;
+    endingStart?: number;
+    endingEnd?: number;
+  };
 
   const poster = readEpisodeMediaField(base.poster);
   const screenshot = readEpisodeMediaField(base.screenshot ?? base.image ?? base.thumbnail);
@@ -34,6 +45,15 @@ export function normalizeEpisode(raw: unknown): AnimeEpisode {
   if (screenshot !== undefined) episode.screenshot = screenshot;
 
   return episode;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return undefined;
 }
 
 function readEpisodeVideos(
