@@ -91,8 +91,10 @@ export function AnimeDubbingSelector({
 
 const styles = StyleSheet.create({
   wrap: {
-    minWidth: isTvUi() ? 200 : 160,
-    maxWidth: 280,
+    flexShrink: 0,
+    minWidth: isTvUi() ? 200 : 132,
+    maxWidth: isTvUi() ? 280 : 168,
+    marginLeft: 'auto',
   },
   trigger: {
     flexDirection: 'row',
@@ -102,8 +104,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: spacing.md,
-    paddingVertical: isTvUi() ? 12 : 10,
+    paddingHorizontal: isTvUi() ? spacing.md : 10,
+    paddingVertical: isTvUi() ? 12 : 8,
   },
   triggerText: {
     flex: 1,
@@ -119,7 +121,7 @@ const styles = StyleSheet.create({
   },
   triggerValue: {
     color: colors.text,
-    fontSize: isTvUi() ? 15 : 14,
+    fontSize: isTvUi() ? 15 : 13,
     fontWeight: '600',
   },
   watchedInline: {

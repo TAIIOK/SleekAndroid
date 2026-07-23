@@ -21,11 +21,15 @@ import {
 } from '@/lib/myLists';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function MyListsScreen() {
   const [media, setMedia] = useState<MyListsMediaFilter>('all');
   const [status, setStatus] = useState<MyListsStatusFilter>('all');
   const { savedAnime, savedLampa, isLoading, isError } = useSavedLibrary();
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content, {
+    padTop: false,
+  });
 
   const stats = useMemo(
     () => ({
@@ -54,8 +58,8 @@ export default function MyListsScreen() {
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
       <MyListsStats

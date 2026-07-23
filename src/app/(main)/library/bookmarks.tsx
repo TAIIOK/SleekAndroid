@@ -14,9 +14,13 @@ import { PosterGrid } from '@/components/catalog/PosterGrid';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function BookmarksScreen() {
   const router = useRouter();
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content, {
+    padTop: false,
+  });
   const { data: bookmarks = [], isLoading } = useQuery({
     queryKey: ['library-favorites'],
     queryFn: fetchFavoriteBookmarks,
@@ -25,7 +29,7 @@ export default function BookmarksScreen() {
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
+      {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
       {isLoading ? (

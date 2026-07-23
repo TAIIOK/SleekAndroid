@@ -10,18 +10,18 @@ import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
 import { useTvCatalogScrollRestore } from '@/hooks/useTvCatalogScrollRestore';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function SeriesBrowseScreen() {
   const { config, ready } = useHomeCatalogConfig();
   const catalogScroll = useTvCatalogScrollRestore('/series');
+  const chromeScrollProps = useMobileChromeScrollProps(catalogScroll.onScroll, styles.content);
 
   return (
     <ScrollView
       ref={catalogScroll.scrollRef}
       style={styles.scroll}
-      contentContainerStyle={styles.content}
-      onScroll={catalogScroll.onScroll}
-      scrollEventThrottle={16}
+      {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
       {isTvUi() ? <SectionHeader title="Сериалы" showAccent tvFocusEntry /> : null}

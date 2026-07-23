@@ -19,4 +19,5 @@
 | [TV Density](.cursor/specs/shell/tv_density.md) | shell | Implemented |
 | [TV Focus Navigation](.cursor/specs/shell/tv_focus_navigation.md) | shell | Implemented |
 | [TV Catalog Focus and Scroll](.cursor/specs/shell/tv_catalog_focus_and_scroll.md) | shell | Implemented |
+| [Mobile Chrome Scroll](.cursor/specs/shell/mobile_chrome_scroll.md) | shell | Implemented |
 | [OTA Updates (EAS Update)](.cursor/specs/infra/ota_updates.md) | infra | Partial (ship OTA-enabled APK; binary check via latest.json) |

@@ -28,6 +28,7 @@ import {
   type SearchFilterState,
   type SearchSeeAllBucket,
 } from '@/lib/searchConfig';
+import { useMobileChromeScroll, useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 const PAGE_SIZE = 24;
 
@@ -40,6 +41,14 @@ export default function SearchAllScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { columns, gap, cardWidth, horizontalPadding } = usePosterGridLayout(spacing.lg);
+  const chrome = useMobileChromeScroll();
+  const chromeScrollProps = useMobileChromeScrollProps(
+    undefined,
+    [styles.grid, { paddingHorizontal: horizontalPadding, gap }],
+    { padTop: false },
+  );
+  const headerPadTop =
+    !isTvUi() && chrome?.contentInsetsEnabled ? chrome.topContentInset : spacing.md;
 
   const q = pickParam(params.q).trim();
   const bucket = (pickParam(params.bucket) as SearchSeeAllBucket | '') || 'anime';
@@ -134,7 +143,7 @@ export default function SearchAllScreen() {
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding, paddingTop: headerPadTop }]}>
         <TvFocusable
           onPress={() => router.back()}
           style={styles.backBtn}
@@ -153,10 +162,10 @@ export default function SearchAllScreen() {
           data={items}
           keyExtractor={(item) => item.key}
           numColumns={columns}
-          contentContainerStyle={[styles.grid, { paddingHorizontal: horizontalPadding, gap }]}
           columnWrapperStyle={columns > 1 ? { gap } : undefined}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
+          {...chromeScrollProps}
           ListFooterComponent={
             isFetching ? <ActivityIndicator color={colors.brand} style={styles.footer} /> : null
           }
@@ -183,7 +192,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: {
-    paddingTop: spacing.md,
     gap: spacing.sm,
     marginBottom: spacing.md,
   },

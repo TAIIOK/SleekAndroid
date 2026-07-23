@@ -63,10 +63,8 @@ function pickLatestProgressRow<T extends { updatedAt?: string; progress: number 
   });
 }
 
-function isInProgress(progress: number, completed?: boolean): boolean {
-  const value = normalizeProgress(progress);
-  if (completed || value >= 0.98) return false;
-  return value > 0.01;
+function hasWatchProgress(progress: number): boolean {
+  return normalizeProgress(progress) > 0.01;
 }
 
 function indexSavedLampa(savedLampa: unknown[]): Map<string, Record<string, unknown>> {
@@ -260,7 +258,7 @@ function pickAnimeContinueFromProgress(
   progressRows: UserAnimeProgress[],
   saved?: SavedAnimeItem,
 ): ContinueWatchingItem | null {
-  const inProgress = progressRows.filter((row) => isInProgress(row.progress, row.completed));
+  const inProgress = progressRows.filter((row) => hasWatchProgress(row.progress));
   if (!inProgress.length) {
     if (saved?.status !== 'watching') return null;
     return pickAnimeContinue(saved, progressRows);
@@ -299,7 +297,7 @@ function pickAnimeContinue(
   let bestProgress = 0;
 
   for (const [epId, value] of Object.entries(progressMap)) {
-    if (value <= 0.01 || value >= 0.98) continue;
+    if (value <= 0.01) continue;
     if (value >= bestProgress) {
       bestProgress = value;
       bestEpisodeId = Number(epId);
@@ -346,7 +344,7 @@ function pickLampaContinueFromProgress(
     status: savedMeta.status,
   };
 
-  const inProgress = progressRows.filter((row) => isInProgress(row.progress, row.completed));
+  const inProgress = progressRows.filter((row) => hasWatchProgress(row.progress));
   if (!inProgress.length) {
     if (meta.status !== 'watching') return null;
     const kind = inferLampaKind(progressRows, meta);

@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
   Modal,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -11,18 +10,23 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Video from 'react-native-video';
+import Video, { ViewType } from 'react-native-video';
 
+import { PhoneGestureHud } from '@/components/player/phone/PhoneGestureHud';
+import { PhoneScrubBar } from '@/components/player/phone/PhoneScrubBar';
 import type { PlayerMenuOption, VideoPlayerProps } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
+import { usePhonePlayerGestures } from '@/hooks/usePhonePlayerGestures';
 import { useRNVideoEngine } from '@/hooks/useRNVideoEngine';
 import {
   launchExternalPlayer,
   listInstalledExternalPlayers,
   type ExternalPlayerTarget,
 } from '@/lib/externalPlayer';
-import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
 import {
   cyclePlaybackRate,
   cycleVideoFit,
@@ -42,8 +46,12 @@ type PhoneSheet =
   | 'external'
   | null;
 
-const CONTROLS_HIDE_MS = 3200;
+const CONTROLS_HIDE_MS = 4000;
 
+/**
+ * Site-like phone player: TextureView + custom HUD in the activity window.
+ * Bottom sheets use a transparent Modal; video itself is not in a Dialog.
+ */
 export function PhoneVideoPlayer({
   src,
   headers,
@@ -80,31 +88,62 @@ export function PhoneVideoPlayer({
   const [sheet, setSheet] = useState<PhoneSheet>(null);
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
   const [externalError, setExternalError] = useState<string | null>(null);
+  const [lockToast, setLockToast] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const volumeRef = useRef(engine.volume);
+  const controlsVisibleRef = useRef(controlsVisible);
+  const sheetRef = useRef(sheet);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     void listInstalledExternalPlayers().then(setExternalPlayers);
   }, []);
 
+  useEffect(() => {
+    controlsVisibleRef.current = controlsVisible;
+  }, [controlsVisible]);
+
+  useEffect(() => {
+    sheetRef.current = sheet;
+  }, [sheet]);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
+
   const scheduleHide = useCallback(() => {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    if (!engine.playing || sheet) return;
+    clearHideTimer();
+    if (!engine.playing || sheet || engine.playbackError || externalError) return;
     hideTimerRef.current = setTimeout(() => setControlsVisible(false), CONTROLS_HIDE_MS);
-  }, [engine.playing, sheet]);
+  }, [clearHideTimer, engine.playing, engine.playbackError, externalError, sheet]);
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
     scheduleHide();
   }, [scheduleHide]);
 
+  const toggleControls = useCallback(() => {
+    if (controlsVisibleRef.current) {
+      clearHideTimer();
+      setControlsVisible(false);
+      return;
+    }
+    showControls();
+  }, [clearHideTimer, showControls]);
+
   useEffect(() => {
     scheduleHide();
-    return () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [scheduleHide, engine.playing]);
+    return clearHideTimer;
+  }, [scheduleHide, clearHideTimer, engine.playing]);
+
+  useEffect(() => {
+    if (!engine.playing || engine.playbackError || externalError) {
+      setControlsVisible(true);
+      clearHideTimer();
+    }
+  }, [engine.playing, engine.playbackError, externalError, clearHideTimer]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -118,40 +157,43 @@ export function PhoneVideoPlayer({
     return () => sub.remove();
   }, [sheet, onBack]);
 
-  useEffect(() => {
-    volumeRef.current = engine.volume;
-  }, [engine.volume]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => engine.prefs.gestureControlsEnabled && !engine.prefs.gesturesLocked,
-        onMoveShouldSetPanResponder: (_, g) =>
-          engine.prefs.gestureControlsEnabled &&
-          !engine.prefs.gesturesLocked &&
-          (Math.abs(g.dx) > 12 || Math.abs(g.dy) > 12),
-        onPanResponderGrant: () => showControls(),
-        onPanResponderRelease: (_, g) => {
-          if (Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 40) {
-            const seconds = (g.dx / 120) * engine.prefs.skipForwardSeconds;
-            engine.seekBy(seconds);
-          } else if (Math.abs(g.dy) > 40) {
-            const next = volumeRef.current - g.dy / 300;
-            engine.setVolume(next);
-            volumeRef.current = Math.max(0, Math.min(1, next));
-          } else if (Math.abs(g.dx) < 8 && Math.abs(g.dy) < 8) {
-            engine.togglePlay();
-          }
-          scheduleHide();
-        },
-      }),
-    [engine, scheduleHide, showControls],
+  const isSuppressed = useCallback(
+    () => sheetRef.current != null || !!engine.playbackError || !!externalError,
+    [engine.playbackError, externalError],
   );
+
+  const gestures = usePhonePlayerGestures({
+    enabled: engine.prefs.gestureControlsEnabled,
+    locked: engine.prefs.gesturesLocked,
+    duration: engine.duration,
+    currentTime: engine.currentTime,
+    volume: engine.volume,
+    skipBackwardSeconds: engine.prefs.skipBackwardSeconds,
+    skipForwardSeconds: engine.prefs.skipForwardSeconds,
+    setVolume: engine.setVolume,
+    seekTo: engine.seekTo,
+    seekBy: (delta) => {
+      engine.seekBy(delta);
+      showControls();
+    },
+    onToggleControls: toggleControls,
+    isSuppressed,
+  });
 
   const openSheet = (next: PhoneSheet) => {
     setSheet(next);
     setControlsVisible(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    clearHideTimer();
+  };
+
+  const toggleGestureLock = () => {
+    const locked = !engine.prefs.gesturesLocked;
+    engine.updatePrefs({ gesturesLocked: locked });
+    if (locked) {
+      setLockToast(true);
+      setTimeout(() => setLockToast(false), 1800);
+    }
+    showControls();
   };
 
   const settingsRows = [
@@ -180,6 +222,12 @@ export function PhoneVideoPlayer({
       id: 'skip_end',
       label: `Авто ED · ${engine.prefs.autoSkipEnding ? 'Вкл' : 'Выкл'}`,
       onPress: () => engine.updatePrefs({ autoSkipEnding: !engine.prefs.autoSkipEnding }),
+    },
+    {
+      id: 'gestures',
+      label: `Жесты · ${engine.prefs.gestureControlsEnabled ? 'Вкл' : 'Выкл'}`,
+      onPress: () =>
+        engine.updatePrefs({ gestureControlsEnabled: !engine.prefs.gestureControlsEnabled }),
     },
   ];
 
@@ -225,189 +273,337 @@ export function PhoneVideoPlayer({
     });
     setSheet(null);
     if (!result.ok) setExternalError(result.message);
+    else {
+      void engine.updatePrefs({
+        lastExternalPlayerPackage: target.packageName ?? '',
+      });
+    }
   };
 
+  const padH = {
+    paddingLeft: Math.max(insets.left, spacing.md),
+    paddingRight: Math.max(insets.right, spacing.md),
+  };
+
+  const showChrome =
+    (controlsVisible || !engine.playing) && !engine.playbackError && !externalError;
+  const canPickEpisodes = Boolean(episodeNav && episodeNav.items.length > 1);
+  const selectedDubbing = dubbingOptions?.find((o) => o.selected)?.label;
+  const selectedQuality = qualityOptions?.find((o) => o.selected)?.label;
+  const selectedConnection = connectionOptions?.find((o) => o.selected)?.label;
+  const selectedDelivery = deliveryOptions?.find((o) => o.selected)?.label;
+
   return (
-    <View style={styles.root} {...panResponder.panHandlers}>
-      {engine.source ? (
-        <Video
-          key={`${src}-${engine.reloadKey}`}
-          ref={engine.videoRef}
-          style={styles.video}
-          source={engine.source}
-          paused={engine.paused}
-          rate={engine.rate}
-          volume={engine.volume}
-          resizeMode={engine.resizeMode}
-          selectedTextTrack={engine.selectedTextTrack}
-          bufferConfig={engine.bufferConfig}
-          controls={false}
-          playInBackground={false}
-          ignoreSilentSwitch="ignore"
-          fullscreenAutorotate
-          fullscreenOrientation="landscape"
-          onLoad={engine.onLoad}
-          onProgress={engine.onProgress}
-          onEnd={engine.onEnd}
-          onError={engine.onError}
-          onBuffer={engine.onBuffer}
-          onReadyForDisplay={engine.onReadyForDisplay}
-          onTextTracks={engine.onTextTracks}
-        />
+    <GestureHandlerRootView style={styles.root}>
+      <View
+        style={styles.videoHost}
+        collapsable={false}
+        onLayout={(e) =>
+          gestures.onLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height)
+        }
+      >
+        {engine.source ? (
+          <Video
+            key={`${src}-${engine.reloadKey}`}
+            ref={engine.videoRef}
+            style={styles.video}
+            source={engine.source}
+            paused={engine.paused}
+            rate={engine.rate}
+            volume={engine.volume}
+            resizeMode={engine.resizeMode}
+            selectedTextTrack={engine.selectedTextTrack}
+            bufferConfig={engine.bufferConfig}
+            controls={false}
+            viewType={Platform.OS === 'android' ? ViewType.TEXTURE : undefined}
+            playInBackground={false}
+            ignoreSilentSwitch="ignore"
+            onLoad={engine.onLoad}
+            onProgress={engine.onProgress}
+            onEnd={engine.onEnd}
+            onError={engine.onError}
+            onBuffer={engine.onBuffer}
+            onReadyForDisplay={engine.onReadyForDisplay}
+            onTextTracks={engine.onTextTracks}
+          />
+        ) : null}
+      </View>
+
+      <GestureDetector gesture={gestures.gesture}>
+        <View style={styles.gestureLayer} />
+      </GestureDetector>
+
+      <PhoneGestureHud kind={gestures.hudKind} volume={gestures.hudVolume} />
+
+      {gestures.doubleTapHint ? (
+        <View style={styles.doubleTapRow} pointerEvents="none">
+          <View style={styles.doubleTapHalf}>
+            {gestures.doubleTapHint === 'backward' ? (
+              <View style={styles.doubleTapPill}>
+                <Text style={styles.doubleTapText}>−{engine.prefs.skipBackwardSeconds}c</Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.doubleTapHalf}>
+            {gestures.doubleTapHint === 'forward' ? (
+              <View style={styles.doubleTapPill}>
+                <Text style={styles.doubleTapText}>+{engine.prefs.skipForwardSeconds}c</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
       ) : null}
 
+      {lockToast ? (
+        <View style={styles.lockToastWrap} pointerEvents="none">
+          <View style={styles.lockToast}>
+            <Text style={styles.lockToastText}>Жесты заблокированы</Text>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.fadeLayer} pointerEvents="none">
+        <LinearGradient
+          colors={['rgba(0,0,0,0.85)', 'rgba(0,0,0,0.4)', 'transparent']}
+          style={[styles.topFade, { opacity: showChrome ? 1 : 0 }]}
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.95)']}
+          style={[styles.bottomFade, { opacity: showChrome ? 1 : 0 }]}
+        />
+      </View>
+
       {engine.isLoading && !engine.playbackError ? (
-        <View style={styles.center}>
+        <View style={styles.center} pointerEvents="none">
           <ActivityIndicator color={colors.brand} size="large" />
         </View>
       ) : null}
 
       {engine.playbackError || externalError ? (
         <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>Ошибка воспроизведения</Text>
           <Text style={styles.errorText}>{engine.playbackError ?? externalError}</Text>
           {engine.playbackError ? (
-            <Pressable onPress={engine.retryPlayback} style={styles.menuChip}>
+            <Pressable onPress={engine.retryPlayback} style={styles.errorBtn}>
               <Text style={styles.chipText}>Повторить</Text>
             </Pressable>
           ) : (
-            <Pressable onPress={() => setExternalError(null)} style={styles.menuChip}>
+            <Pressable onPress={() => setExternalError(null)} style={styles.errorBtn}>
               <Text style={styles.chipText}>Закрыть</Text>
             </Pressable>
           )}
+          <Pressable onPress={onBack} style={styles.errorBtn}>
+            <Text style={styles.chipText}>Назад</Text>
+          </Pressable>
         </View>
       ) : null}
 
-      {controlsVisible || !engine.playing ? (
+      <View
+        style={[styles.chrome, { opacity: showChrome ? 1 : 0 }]}
+        pointerEvents={showChrome ? 'box-none' : 'none'}
+      >
         <View
-          style={[
-            styles.hud,
-            {
-              paddingTop: Math.max(insets.top, 8),
-              paddingBottom: Math.max(insets.bottom, 12),
-              paddingLeft: Math.max(insets.left, spacing.md),
-              paddingRight: Math.max(insets.right, spacing.md),
-            },
-          ]}
+          style={[styles.topBar, padH, { paddingTop: Math.max(insets.top, 12) }]}
+          pointerEvents="box-none"
         >
-          <View style={styles.topRow}>
-            <Pressable onPress={onBack} style={styles.backBtn}>
-              <Text style={styles.chipText}>←</Text>
-            </Pressable>
-            <View style={styles.meta}>
-              {title ? <Text style={styles.title} numberOfLines={1}>{title}</Text> : null}
-              {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
-            </View>
-          </View>
-
-          <View style={styles.bottomBlock}>
-            {engine.visibleSkip ? (
+          <IconBtn onPress={onBack} label="Назад">
+            <Ionicons name="chevron-back" size={26} color="#fff" />
+          </IconBtn>
+          <View style={styles.meta}>
+            {canPickEpisodes ? (
               <Pressable
-                onPress={() => engine.applySkip(engine.visibleSkip!)}
-                style={styles.skipBtn}
+                onPress={() => openSheet('episodes')}
+                style={styles.titleBtn}
+                hitSlop={8}
               >
-                <Text style={styles.chipText}>{engine.visibleSkip.title}</Text>
+                {title ? (
+                  <Text style={styles.title} numberOfLines={1}>
+                    {title}
+                  </Text>
+                ) : null}
+                <Ionicons name="chevron-down" size={16} color="#fff" />
               </Pressable>
+            ) : title ? (
+              <Text style={styles.title} numberOfLines={1}>
+                {title}
+              </Text>
             ) : null}
+            {subtitle ? (
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+          <IconBtn
+            onPress={toggleGestureLock}
+            label={engine.prefs.gesturesLocked ? 'Разблокировать жесты' : 'Заблокировать жесты'}
+          >
+            <Ionicons
+              name={engine.prefs.gesturesLocked ? 'lock-closed' : 'lock-open'}
+              size={20}
+              color={engine.prefs.gesturesLocked ? '#fb923c' : '#fff'}
+            />
+          </IconBtn>
+          <IconBtn onPress={() => openSheet('settings')} label="Настройки">
+            <Ionicons name="settings-outline" size={22} color="#fff" />
+          </IconBtn>
+        </View>
 
-            <ScrubBar
-              progress={engine.progress}
-              currentTime={engine.currentTime}
-              duration={engine.duration}
-              onSeekRatio={(ratio) => {
-                if (engine.duration > 0) engine.seekTo(engine.duration * ratio);
+        <View style={styles.centerTransport} pointerEvents="box-none">
+          <View style={styles.transportPill}>
+            {episodeNav ? (
+              <IconBtn
+                onPress={episodeNav.onPrevious}
+                disabled={!episodeNav.hasPrevious}
+                label="Предыдущий эпизод"
+                size={44}
+              >
+                <Ionicons name="play-skip-back" size={26} color="#fff" />
+              </IconBtn>
+            ) : null}
+            <IconBtn
+              onPress={() => {
+                engine.seekBy(-engine.prefs.skipBackwardSeconds);
                 showControls();
               }}
-            />
-
-            <View style={styles.transport}>
-              {episodeNav?.hasPrevious ? (
-                <Pressable onPress={episodeNav.onPrevious} style={styles.menuChip}>
-                  <Text style={styles.chipText}>⏮</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={() => {
-                  engine.seekBy(-engine.prefs.skipBackwardSeconds);
-                  showControls();
-                }}
-                style={styles.menuChip}
+              label={`Назад ${engine.prefs.skipBackwardSeconds}с`}
+              size={44}
+            >
+              <Text style={styles.seekLabel}>−{engine.prefs.skipBackwardSeconds}</Text>
+            </IconBtn>
+            <Pressable
+              onPress={() => {
+                engine.togglePlay();
+                showControls();
+              }}
+              style={styles.playBtn}
+              hitSlop={8}
+              accessibilityLabel={engine.playing ? 'Пауза' : 'Воспроизведение'}
+            >
+              <Ionicons
+                name={engine.playing ? 'pause' : 'play'}
+                size={36}
+                color="#fff"
+                style={!engine.playing ? { marginLeft: 3 } : undefined}
+              />
+            </Pressable>
+            <IconBtn
+              onPress={() => {
+                engine.seekBy(engine.prefs.skipForwardSeconds);
+                showControls();
+              }}
+              label={`Вперёд ${engine.prefs.skipForwardSeconds}с`}
+              size={44}
+            >
+              <Text style={styles.seekLabel}>+{engine.prefs.skipForwardSeconds}</Text>
+            </IconBtn>
+            {episodeNav ? (
+              <IconBtn
+                onPress={episodeNav.onNext}
+                disabled={!episodeNav.hasNext}
+                label="Следующий эпизод"
+                size={44}
               >
-                <Text style={styles.chipText}>−{engine.prefs.skipBackwardSeconds}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  engine.togglePlay();
-                  showControls();
-                }}
-                style={[styles.menuChip, styles.playChip]}
-              >
-                <Text style={styles.chipText}>{engine.playing ? '❚❚' : '▶'}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  engine.seekBy(engine.prefs.skipForwardSeconds);
-                  showControls();
-                }}
-                style={styles.menuChip}
-              >
-                <Text style={styles.chipText}>+{engine.prefs.skipForwardSeconds}</Text>
-              </Pressable>
-              {episodeNav?.hasNext ? (
-                <Pressable onPress={episodeNav.onNext} style={styles.menuChip}>
-                  <Text style={styles.chipText}>⏭</Text>
-                </Pressable>
-              ) : null}
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.menuRow}>
-              {dubbingOptions && dubbingOptions.length > 1 ? (
-                <Pressable onPress={() => openSheet('dubbing')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>Озвучка</Text>
-                </Pressable>
-              ) : null}
-              {qualityOptions && qualityOptions.length > 1 ? (
-                <Pressable onPress={() => openSheet('quality')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>Качество</Text>
-                </Pressable>
-              ) : null}
-              {connectionOptions && connectionOptions.length > 1 ? (
-                <Pressable onPress={() => openSheet('connection')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>Сеть</Text>
-                </Pressable>
-              ) : null}
-              {deliveryOptions && deliveryOptions.length > 1 ? (
-                <Pressable onPress={() => openSheet('delivery')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>Тип</Text>
-                </Pressable>
-              ) : null}
-              {episodeNav && episodeNav.items.length > 1 ? (
-                <Pressable onPress={() => openSheet('episodes')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>Эпизоды</Text>
-                </Pressable>
-              ) : null}
-              {engine.subtitleTracks.length > 0 ? (
-                <Pressable onPress={() => openSheet('subtitles')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>CC</Text>
-                </Pressable>
-              ) : null}
-              {Platform.OS === 'android' && externalPlayers.length > 0 ? (
-                <Pressable onPress={() => openSheet('external')} style={styles.menuChip}>
-                  <Text style={styles.chipText}>Внешний</Text>
-                </Pressable>
-              ) : null}
-              <Pressable onPress={() => openSheet('settings')} style={styles.menuChip}>
-                <Text style={styles.chipText}>Настройки</Text>
-              </Pressable>
-            </ScrollView>
+                <Ionicons name="play-skip-forward" size={26} color="#fff" />
+              </IconBtn>
+            ) : null}
           </View>
         </View>
-      ) : (
-        <Pressable style={StyleSheet.absoluteFill} onPress={showControls} />
-      )}
 
-      <Modal visible={sheet != null} transparent animationType="slide" onRequestClose={() => setSheet(null)}>
+        <View
+          style={[styles.bottomBar, padH, { paddingBottom: Math.max(insets.bottom, 14) }]}
+          pointerEvents="box-none"
+        >
+          {engine.visibleSkip ? (
+            <Pressable
+              onPress={() => engine.applySkip(engine.visibleSkip!)}
+              style={styles.skipBtn}
+            >
+              <Text style={styles.chipText}>{engine.visibleSkip.title}</Text>
+            </Pressable>
+          ) : null}
+
+          <PhoneScrubBar
+            progress={engine.progress}
+            currentTime={engine.currentTime}
+            duration={engine.duration}
+            skipSegments={skipSegments}
+            onSeekRatio={(ratio) => {
+              if (engine.duration > 0) engine.seekTo(engine.duration * ratio);
+              showControls();
+            }}
+          />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.menuRow}
+          >
+            <ActionChip
+              label="Авто"
+              active={engine.prefs.autoPlayNext}
+              onPress={() => {
+                engine.updatePrefs({ autoPlayNext: !engine.prefs.autoPlayNext });
+                showControls();
+              }}
+              icon="play-forward"
+            />
+            {dubbingOptions && dubbingOptions.length > 1 ? (
+              <ActionChip
+                label={selectedDubbing ?? 'Озвучка'}
+                onPress={() => openSheet('dubbing')}
+                icon="mic"
+              />
+            ) : null}
+            {qualityOptions && qualityOptions.length > 1 ? (
+              <ActionChip
+                label={selectedQuality ?? 'Качество'}
+                onPress={() => openSheet('quality')}
+                icon="videocam"
+              />
+            ) : null}
+            {connectionOptions && connectionOptions.length > 1 ? (
+              <ActionChip
+                label={selectedConnection ?? 'Сеть'}
+                onPress={() => openSheet('connection')}
+                icon="wifi"
+              />
+            ) : null}
+            {deliveryOptions && deliveryOptions.length > 1 ? (
+              <ActionChip
+                label={selectedDelivery ?? 'Поток'}
+                onPress={() => openSheet('delivery')}
+                icon="git-network"
+              />
+            ) : null}
+            {canPickEpisodes ? (
+              <ActionChip label="Эпизоды" onPress={() => openSheet('episodes')} icon="list" />
+            ) : null}
+            {engine.subtitleTracks.length > 0 ? (
+              <ActionChip label="CC" onPress={() => openSheet('subtitles')} icon="text" />
+            ) : null}
+            {Platform.OS === 'android' && externalPlayers.length > 0 ? (
+              <ActionChip
+                label="Внешний"
+                onPress={() => openSheet('external')}
+                icon="open-outline"
+              />
+            ) : null}
+          </ScrollView>
+        </View>
+      </View>
+
+      <Modal
+        visible={sheet != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSheet(null)}
+      >
         <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
-          <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => undefined}>
+          <Pressable
+            style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
+            onPress={() => undefined}
+          >
             <Text style={styles.sheetTitle}>{sheetTitle}</Text>
             <ScrollView style={styles.sheetScroll}>
               {sheet === 'settings'
@@ -505,109 +701,192 @@ export function PhoneVideoPlayer({
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
-function ScrubBar({
-  progress,
-  currentTime,
-  duration,
-  onSeekRatio,
+function IconBtn({
+  children,
+  onPress,
+  disabled,
+  label,
+  size = 40,
 }: {
-  progress: number;
-  currentTime: number;
-  duration: number;
-  onSeekRatio: (ratio: number) => void;
+  children: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  label: string;
+  size?: number;
 }) {
-  const [width, setWidth] = useState(1);
-
   return (
-    <View>
-      <View style={styles.times}>
-        <Text style={styles.time}>{formatPlaybackTime(currentTime)}</Text>
-        <Text style={styles.time}>{formatPlaybackTime(duration)}</Text>
-      </View>
-      <Pressable
-        style={styles.track}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width || 1)}
-        onPress={(e) => onSeekRatio(Math.min(1, Math.max(0, e.nativeEvent.locationX / width)))}
-      >
-        <View style={[styles.progress, { width: `${Math.min(100, Math.max(0, progress))}%` }]} />
-      </Pressable>
-    </View>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || !onPress}
+      accessibilityLabel={label}
+      hitSlop={8}
+      style={[
+        styles.iconBtn,
+        { width: size, height: size, opacity: disabled ? 0.35 : 1 },
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+function ActionChip({
+  label,
+  onPress,
+  icon,
+  active,
+}: {
+  label: string;
+  onPress: () => void;
+  icon: keyof typeof Ionicons.glyphMap;
+  active?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.actionChip, active && styles.actionChipActive]}
+    >
+      <Ionicons name={icon} size={16} color={active ? colors.brand : '#fff'} />
+      <Text style={[styles.actionChipText, active && styles.actionChipTextActive]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  video: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  videoHost: { ...StyleSheet.absoluteFill, backgroundColor: '#000' },
+  video: { ...StyleSheet.absoluteFill },
+  gestureLayer: { ...StyleSheet.absoluteFill, zIndex: 10 },
+  fadeLayer: { ...StyleSheet.absoluteFill, zIndex: 15 },
+  topFade: { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
+  bottomFade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 180 },
+  chrome: { ...StyleSheet.absoluteFill, zIndex: 20 },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 25,
   },
-  hud: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  meta: { flex: 1, gap: 2 },
-  title: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  subtitle: { color: colors.textSecondary, fontSize: 13 },
-  bottomBlock: { gap: spacing.sm },
-  times: { flexDirection: 'row', justifyContent: 'space-between' },
-  time: { color: colors.textSecondary, fontSize: 12, fontVariant: ['tabular-nums'] },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    overflow: 'hidden',
-  },
-  progress: { height: '100%', backgroundColor: colors.brand },
-  transport: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  menuRow: { gap: spacing.sm, paddingVertical: 4 },
-  menuChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+  meta: { flex: 1, gap: 2, minWidth: 0 },
+  titleBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  title: { color: '#fff', fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  subtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
+  iconBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  centerTransport: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transportPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  playBtn: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seekLabel: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  menuRow: { gap: spacing.sm, paddingVertical: 4, alignItems: 'center' },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    maxWidth: 140,
   },
-  playChip: { minWidth: 56, alignItems: 'center' },
-  chipText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  actionChipActive: { backgroundColor: 'rgba(79,70,229,0.35)' },
+  actionChipText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  actionChipTextActive: { color: colors.brand },
   skipBtn: {
     alignSelf: 'flex-end',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  chipText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  doubleTapRow: {
+    ...StyleSheet.absoluteFill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 22,
+  },
+  doubleTapHalf: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  doubleTapPill: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  doubleTapText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  lockToastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 120,
+    alignItems: 'center',
+    zIndex: 35,
+  },
+  lockToast: {
     borderRadius: 10,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    borderWidth: 1,
-    borderColor: colors.brand,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
+  lockToastText: { color: '#fff', fontSize: 14 },
   errorBox: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    zIndex: 40,
+    paddingHorizontal: spacing.lg,
   },
-  errorText: { color: colors.text, fontSize: 18, fontWeight: '600' },
+  errorTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  errorText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, textAlign: 'center' },
+  errorBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
   sheetBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',

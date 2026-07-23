@@ -37,6 +37,7 @@ import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
 import { isHomeConfigConfigured, resolveEnabledContentTypes } from '@/lib/homeSettings';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 import {
   resolveAvailableTvHomeFeedTabs,
   resolveAvailableTvHomeTypeFilters,
@@ -55,6 +56,10 @@ export default function HomeScreen() {
   const showWelcome =
     ready && syncSettled && !isHomeConfigConfigured(config);
   const catalogScroll = useTvCatalogScrollRestore('/');
+  const chromeScrollProps = useMobileChromeScrollProps(catalogScroll.onScroll, [
+    styles.content,
+    isTvUi() && styles.contentTv,
+  ]);
   const { items: continueItems, ready: continueReady } = useContinueWatching();
   const continueWatchingDedupe = useMemo(
     () => buildContinueWatchingDedupeKeys(continueItems),
@@ -217,9 +222,7 @@ export default function HomeScreen() {
       <ScrollView
         ref={catalogScroll.scrollRef}
         style={styles.scroll}
-        contentContainerStyle={[styles.content, isTvUi() && styles.contentTv]}
-        onScroll={catalogScroll.onScroll}
-        scrollEventThrottle={16}
+        {...chromeScrollProps}
         {...tvVerticalCatalogScrollProps}
       >
         <ContinueWatchingRow items={continueItems} />

@@ -84,8 +84,18 @@ export function isRedundantEpisodeTitle(title: string, number: number): boolean 
 
 /** API may return screenshot/poster even when shared AnimeEpisode type omits them. */
 export function episodeThumbnail(ep: AnimeEpisode): string | undefined {
-  const raw = ep as AnimeEpisode & { screenshot?: unknown; poster?: unknown };
-  return extractPosterPath(raw.screenshot) ?? extractPosterPath(raw.poster);
+  const raw = ep as AnimeEpisode & {
+    screenshot?: unknown;
+    poster?: unknown;
+    image?: unknown;
+    thumbnail?: unknown;
+  };
+  return (
+    extractPosterPath(raw.screenshot, true) ??
+    extractPosterPath(raw.poster, true) ??
+    extractPosterPath(raw.image, true) ??
+    extractPosterPath(raw.thumbnail, true)
+  );
 }
 
 export function hasPlayableVideo(ep: AnimeEpisode): boolean {

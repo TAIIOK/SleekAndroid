@@ -21,6 +21,7 @@ import { getSavedAccounts } from '@/lib/savedAccounts';
 import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { resolvePosterUrl } from '@/lib/config';
 import { useAuth } from '@/providers/AuthProvider';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 import type { LeaderboardPeriod, LeaderboardType } from '@/types/profile';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -37,6 +38,7 @@ export default function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>('week');
   const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>('watch');
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
 
   const { data: profile } = useQuery({
     queryKey: ['profile-full'],
@@ -82,7 +84,7 @@ export default function ProfileScreen() {
 
   return (
     <>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scroll} {...chromeScrollProps}>
         <Text style={styles.title}>Профиль</Text>
 
         <View style={styles.card}>

@@ -9,6 +9,7 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { LIBRARY_HUB_TITLE, libraryHubTabs } from '@/lib/libraryHub';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScroll } from '@/providers/MobileChromeScroll';
 
 function normalizePath(segments: string[]): string {
   const cleaned = segments.filter((segment) => !segment.startsWith('('));
@@ -20,10 +21,13 @@ export function LibraryHubLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const currentPath = normalizePath(segments as string[]);
+  const chrome = useMobileChromeScroll();
+  const headerPadTop =
+    !isTvUi() && chrome?.contentInsetsEnabled ? chrome.topContentInset : spacing.md;
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerPadTop }]}>
         {!isTvUi() ? (
           <TvFocusable onPress={() => router.push('/')} style={styles.backBtn}>
             <Text style={styles.back}>← Назад</Text>
@@ -62,7 +66,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
     gap: spacing.sm,
   },
   backBtn: {

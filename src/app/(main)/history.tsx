@@ -28,6 +28,7 @@ import {
 } from '@/lib/history';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { useAuth } from '@/providers/AuthProvider';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 import { isTvUi } from '@/lib/isTvUi';
 
 export default function HistoryScreen() {
@@ -37,6 +38,7 @@ export default function HistoryScreen() {
   const [media, setMedia] = useState<HistoryMediaFilter>('all');
   const [confirmClear, setConfirmClear] = useState(false);
   const [hiddenRevision, setHiddenRevision] = useState(0);
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
 
   const { data: history = [], isLoading: historyLoading } = useQuery({
     queryKey: ['history-feed'],
@@ -117,7 +119,7 @@ export default function HistoryScreen() {
     <>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        {...chromeScrollProps}
         {...tvVerticalCatalogScrollProps}
       >
         <View style={[styles.header, { paddingHorizontal: horizontalPad }]}>

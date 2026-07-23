@@ -28,6 +28,7 @@ export {
 } from '@aniverse/catalog';
 
 import { resolveLampaPosterUrl } from '@/lib/config';
+import { normalizeEpisode } from '@/lib/episodeUtils';
 import {
   decodeLampaDetail,
   mergeLampaWithTmdb,
@@ -400,10 +401,10 @@ export async function fetchAnimeEpisodes(
   limit = 50,
 ): Promise<{ episodes: AnimeEpisode[]; totalPages: number }> {
   const json = await request<{
-    data?: AnimeEpisode[];
+    data?: unknown[];
     meta?: { totalPages?: number; total?: number };
   }>(`/api/animes/${animeId}/episodes?page=${page}&limit=${limit}`);
-  const episodes = json.data ?? [];
+  const episodes = (json.data ?? []).map(normalizeEpisode);
   const total = json.meta?.total;
   const totalPages =
     json.meta?.totalPages ??
@@ -523,7 +524,7 @@ export async function fetchEpisodeById(episodeId: number): Promise<AnimeEpisode 
       json && typeof json === 'object' && 'data' in json
         ? (json as { data: unknown }).data
         : json;
-    return raw as AnimeEpisode;
+    return normalizeEpisode(raw);
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;

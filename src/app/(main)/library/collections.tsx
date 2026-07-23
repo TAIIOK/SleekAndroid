@@ -29,6 +29,7 @@ import {
 import { colors, layout, radii, spacing } from '@/constants/aniverse';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function CollectionsScreen() {
   const router = useRouter();
@@ -36,6 +37,9 @@ export default function CollectionsScreen() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content, {
+    padTop: false,
+  });
 
   const { data: collections = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['collections'],
@@ -112,7 +116,7 @@ export default function CollectionsScreen() {
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
+      {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
       <View style={styles.createRow}>

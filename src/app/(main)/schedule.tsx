@@ -20,6 +20,7 @@ import {
 } from '@/lib/schedule';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 const WEEK_OPTIONS = [
   { offset: 0, label: 'Эта неделя' },
@@ -29,6 +30,7 @@ const WEEK_OPTIONS = [
 export default function ScheduleScreen() {
   const router = useRouter();
   const [week, setWeek] = useState(0);
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
 
   const { data = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['anime-schedule', week],
@@ -40,7 +42,7 @@ export default function ScheduleScreen() {
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.content}
+      {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
       <SectionHeader title="Расписание" subtitle={scheduleWeekLabel(week)} showAccent />

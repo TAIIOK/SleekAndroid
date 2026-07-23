@@ -218,24 +218,41 @@ export function AnimeDetailHero({
 
   const body = (
     <>
-      <LinearGradient
-        colors={['rgba(19,18,27,0.75)', 'rgba(19,18,27,0.2)', 'transparent']}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 0.55, y: 0.5 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      <LinearGradient
-        colors={[
-          'transparent',
-          'rgba(19,18,27,0.35)',
-          'rgba(19,18,27,0.85)',
-          colors.bg,
-        ]}
-        locations={[0.35, 0.62, 0.85, 1]}
-        style={styles.bottomFade}
-        pointerEvents="none"
-      />
+      {/* Phone: full vertical scrim (site mobile). TV: side wash + bottom dissolve. */}
+      {!tv ? (
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0.35)',
+            'rgba(19,18,27,0.55)',
+            'rgba(19,18,27,0.82)',
+            colors.bg,
+          ]}
+          locations={[0, 0.35, 0.72, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : (
+        <>
+          <LinearGradient
+            colors={['rgba(19,18,27,0.75)', 'rgba(19,18,27,0.2)', 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 0.55, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={[
+              'transparent',
+              'rgba(19,18,27,0.35)',
+              'rgba(19,18,27,0.85)',
+              colors.bg,
+            ]}
+            locations={[0.35, 0.62, 0.85, 1]}
+            style={styles.bottomFade}
+            pointerEvents="none"
+          />
+        </>
+      )}
 
       <View style={[styles.content, tv && styles.contentTv]}>
         {leftCol}
@@ -288,7 +305,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: PAGE_PAD,
-    paddingTop: isTvUi() ? spacing.xxl : spacing.lg,
+    paddingTop: isTvUi() ? spacing.xxl : spacing.xl + 28,
     paddingBottom: isTvUi() ? spacing.xl : spacing.md,
     gap: spacing.md,
     zIndex: 1,
@@ -318,13 +335,16 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   title: {
-    color: colors.text,
+    color: '#fff',
     fontSize: isTvUi() ? 36 : 22,
     fontWeight: '700',
     letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.65)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   alt: {
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: isTvUi() ? 16 : 13,
   },
   pills: {
@@ -337,24 +357,24 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: 'rgba(0,0,0,0.48)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   pillAccent: {
     backgroundColor: colors.brandAccent,
     borderColor: 'transparent',
   },
   pillRating: {
-    backgroundColor: 'rgba(0,0,0,0.58)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   pillText: {
-    color: 'rgba(255,255,255,0.95)',
+    color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },
   pillAccentText: {
-    color: colors.text,
+    color: '#fff',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     fontSize: 11,
@@ -381,12 +401,12 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   playLabel: {
-    color: colors.text,
+    color: '#fff',
     fontSize: isTvUi() ? 16 : 15,
     fontWeight: '700',
   },
   playHint: {
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.8)',
     fontSize: 11,
   },
   infoGrid: {

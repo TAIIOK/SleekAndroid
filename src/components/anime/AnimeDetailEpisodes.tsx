@@ -4,6 +4,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type DimensionValue,
 } from 'react-native';
 
 import { AnimeDubbingSelector } from '@/components/anime/AnimeDubbingSelector';
@@ -21,6 +22,7 @@ import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
 
 const CARD_WIDTH = isTvUi() ? 200 : 136;
+const FILL: DimensionValue = '100%';
 
 interface AnimeDetailEpisodesProps {
   episodes: AnimeEpisode[];
@@ -53,7 +55,9 @@ export function AnimeDetailEpisodes({
 }: AnimeDetailEpisodesProps) {
   const header = (
     <View style={styles.header}>
-      <Text style={styles.title}>Сезоны и серии</Text>
+      <Text style={styles.title} numberOfLines={1}>
+        Сезоны и серии
+      </Text>
       {dubbingOptions.length > 1 && onSelectDubbing ? (
         <AnimeDubbingSelector
           options={dubbingOptions}
@@ -96,9 +100,9 @@ export function AnimeDetailEpisodes({
         ? episode.title
         : undefined;
     const watched = progress >= 0.98;
-    const progressWidth = watched
-      ? 100
-      : Math.round(Math.min(1, Math.max(0, progress)) * 100);
+    const progressWidth = (
+      watched ? '100%' : `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`
+    ) as DimensionValue;
 
     return (
       <TvFocusable
@@ -123,14 +127,14 @@ export function AnimeDetailEpisodes({
           ) : (
             <View style={styles.thumbFallback} />
           )}
-          <View style={styles.playOverlay}>
+          <View style={styles.playOverlay} pointerEvents="none">
             <View style={styles.playBadge}>
               <Text style={styles.playBadgeText}>{playable ? '▶' : '🔒'}</Text>
             </View>
           </View>
           {(progress > 0.02 || watched) && (
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressWidth}%` }]} />
+              <View style={[styles.progressFill, { width: progressWidth }]} />
             </View>
           )}
         </View>
@@ -186,16 +190,17 @@ export function AnimeDetailEpisodes({
 const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   header: {
-    flexDirection: isTvUi() ? 'row' : 'column',
-    alignItems: isTvUi() ? 'center' : 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    flexWrap: 'wrap',
   },
   title: {
     color: colors.brand,
     fontSize: isTvUi() ? 20 : 16,
     fontWeight: '700',
+    flexShrink: 1,
+    minWidth: 0,
   },
   meta: {
     color: colors.textSecondary,
@@ -212,7 +217,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: 'rgba(255,255,255,0.03)',
     overflow: 'hidden',
-    width: '100%',
+    width: FILL,
   },
   listContent: {
     padding: spacing.sm,
@@ -228,7 +233,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   cardTv: {
-    width: '100%',
+    width: FILL,
     flexDirection: 'row',
     alignItems: 'stretch',
     borderRadius: radii.md,
@@ -241,10 +246,11 @@ const styles = StyleSheet.create({
   },
   cardDisabled: { opacity: 0.55 },
   thumbWrap: {
-    width: '100%',
+    width: FILL,
     aspectRatio: 16 / 9,
     backgroundColor: colors.bgElevated,
     position: 'relative',
+    overflow: 'hidden',
   },
   thumbWrapTv: {
     width: 120,
@@ -255,14 +261,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   thumb: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
+    width: FILL,
+    height: FILL,
   },
   thumbFallback: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bgElevated,
   },
   playOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -302,7 +310,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: {
-    height: '100%',
+    height: FILL,
     backgroundColor: colors.brand,
   },
   loadMore: {
@@ -315,7 +323,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   loadMoreTv: {
-    width: '100%',
+    width: FILL,
     minHeight: 48,
     borderRadius: radii.md,
     backgroundColor: colors.bgElevated,
@@ -326,6 +334,6 @@ const styles = StyleSheet.create({
   loadMoreLabel: {
     color: colors.text,
     fontWeight: '700',
-    fontSize: isTvUi() ? 14 : 14,
+    fontSize: 14,
   },
 });

@@ -13,12 +13,14 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { getSavedAccounts, removeSavedAccount } from '@/lib/savedAccounts';
 import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { useAuth } from '@/providers/AuthProvider';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 import { isTvUi } from '@/lib/isTvUi';
 
 export default function AccountsScreen() {
   const router = useRouter();
   const { switchAccount, user, logout } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
 
   const { data: accounts = [], refetch } = useQuery({
     queryKey: ['saved-accounts'],
@@ -56,7 +58,7 @@ export default function AccountsScreen() {
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.scroll} {...chromeScrollProps}>
       <Text style={styles.title}>Аккаунты</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {accounts.map((account, index) => (

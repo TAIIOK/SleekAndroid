@@ -9,6 +9,8 @@ import {
   Text,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 
 import { fetchGenres, fetchLampaGenres, lampaItemTitle, searchCatalog } from '@/api/catalog';
@@ -39,6 +41,7 @@ import {
   clearSearchHistory,
   getSearchHistory,
 } from '@/lib/searchHistory';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 type SearchLampaItem = RailItem & { kind?: string };
 
@@ -63,6 +66,11 @@ export default function SearchScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+
+  const trackScrollY = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollYRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+  const chromeScrollProps = useMobileChromeScrollProps(trackScrollY, styles.content);
 
   const { data: genres = [] } = useQuery({
     queryKey: ['search-genres'],
@@ -237,12 +245,8 @@ export default function SearchScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
-        onScroll={(event) => {
-          scrollYRef.current = event.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
+        {...chromeScrollProps}
       >
         <View style={styles.topBar}>
           <Text style={styles.title}>Поиск</Text>

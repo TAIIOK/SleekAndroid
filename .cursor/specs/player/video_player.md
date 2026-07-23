@@ -45,9 +45,11 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 ### Phone UI
 
-- [x] Custom HUD (not only native controls): transport, timeline scrub, back
-- [x] Gestures: tap play/pause, horizontal seek; volume via player.volume when gesture applies
-- [x] Sheets for dubbing/quality/episodes/settings/external player (shared prefs)
+- [x] Custom site-like HUD (not TV chips / not native Exo chrome): top meta + center transport pill + scrub + icon action row; top/bottom gradients
+- [x] Android uses `viewType={ViewType.TEXTURE}` so video composites under React overlays; video stays in the activity window (Modal only for bottom sheets)
+- [x] `controls={false}` plus config plugin forcing ExoPlayer `useController=false` (Fabric may omit the JS prop)
+- [x] Gestures (RNGH): tap toggles chrome; double-tap L/R seeks; vertical (right third) volume; horizontal scrub; gesture lock in top bar
+- [x] Sheets for dubbing/quality/connection/delivery/episodes/subtitles/settings/external player (shared prefs)
 - [x] Watch opens immersive fullscreen on phone: landscape lock, status/nav bars hidden, video fills the screen (no AppShell chrome)
 
 ### Anime watch
@@ -74,7 +76,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 2. TV panel focus works across transport and option pills; overlays open and select with OK.
 3. Anime: switch dubbing/quality keeps playback time; episode next/prev and auto-next work.
 4. Lampa: quality/connection/delivery change URL with time preserved; progress resumes via payload or server; BAD_HTTP on direct auto-switches to proxy once; serials support prev/next, episode list, and auto-next.
-5. Phone: custom HUD play/seek/menus work without relying solely on native controls; watch opens landscape immersive fullscreen (status/nav bars hidden).
+5. Phone: TextureView + site-like HUD — play/seek/scrub/menus/gestures work without native Exo controls; watch opens landscape immersive fullscreen (status/nav bars hidden).
 6. Progress syncs periodically and flushes on leave; continue-watching queries invalidate after flush.
 7. Playback error shows Retry; empty source shows «Нет источника видео».
 8. HLS and progressive play on Android TV via react-native-video (ExoPlayer).
@@ -88,15 +90,15 @@ Code-verified against acceptance criteria and remote handler (device smoke still
 - [x] Watch: panel focus transport → options; Enter activates; Back hides panel
 - [x] Watch: hint disappears ~2.5s (`TV_PLAYER_HINT_HIDE_MS`)
 - [x] Watch: dubbing / quality / episodes / subtitles / settings / external overlays open and close with Back
-- [x] Phone: scrub, transport, sheets, gestures
+- [x] Phone: TextureView playback, site-like chrome show/hide, scrub, center transport, sheets, gestures
 - [x] Anime resume + auto-next; Lampa modes + source sheet startProgress
 - [ ] Device: multi-minute HLS / 4K on Television_1080p
 - [ ] Device: external Just Player / VLC launch with resume position
 
 ## Notes
 
-- Source of truth: `site` `TvVideoPlayer`, `useTvPlayerRemote`, desktop `VideoPlayer`, `WatchPage`.
-- Visual language uses `colors` / glass tokens; not pixel-perfect CSS copy.
+- Source of truth: `site` `TvVideoPlayer`, `useTvPlayerRemote`, desktop `VideoPlayer` (mobile branch), `WatchPage`.
+- Phone visual language follows site mobile chrome (gradients, center pill, icon row); not TV panel density. Not pixel-perfect CSS copy.
 - Android TV: `useTVEventHandler` only fires when a focusable view is focused (rn-tvos#584); player HUD is software-focus, so `TvVideoPlayer` keeps a 1×1 focus sink.
 - Subtitles appear only when the media container exposes text tracks (HLS/embedded); many anime sources have no CC tracks.
 - For heavy 4K streams prefer «Внешний плеер» (Lampa model) if in-app ExoPlayer stutters.

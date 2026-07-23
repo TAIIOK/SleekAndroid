@@ -30,6 +30,7 @@ import {
   typography,
 } from '@/constants/aniverse';
 import { openHomeSettings } from '@/lib/homeSettingsBridge';
+import { isMobileChromeHiddenRoute, isMobileDetailRoute } from '@/lib/mobileRoutes';
 import {
   clearCatalogScrollSnapshot,
   clearPendingCatalogFocusRestore,
@@ -37,6 +38,12 @@ import {
 } from '@/lib/tvCatalogScrollRestore';
 import { isTvAllowedPath, tvRedirectPath } from '@/lib/tvRoutes';
 import { useAuth } from '@/providers/AuthProvider';
+import {
+  MobileChromeAnimated,
+  MobileChromeScrollProvider,
+  useMobileChromeScroll,
+  useMobileChromeTopAnimatedStyle,
+} from '@/providers/MobileChromeScroll';
 import { TvShellFocusProvider, useTvShellFocus } from '@/providers/TvShellFocus';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -120,8 +127,79 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const moreActive = MORE_LINKS.some((item) => isActivePath(currentPath, item.path));
-  const topChrome = mobileTopChromeInset(insets.top);
-  const bottomChrome = mobileBottomChromeInset(insets.bottom);
+  const isDetail = isMobileDetailRoute(currentPath);
+  const hideChrome = isMobileChromeHiddenRoute(currentPath);
+  const overlayChrome = !hideChrome;
+  const topChrome = 0;
+  const bottomChrome = hideChrome
+    ? Math.max(insets.bottom, isDetail ? 8 : 0)
+    : 0;
+  const topContentInset = overlayChrome ? mobileTopChromeInset(insets.top) : 0;
+  const bottomContentInset = overlayChrome ? mobileBottomChromeInset(insets.bottom) : 0;
+  const topHideDistance = Math.max(insets.top, 12) + layout.mobileTopBarHeight + 8;
+
+  return (
+    <MobileChromeScrollProvider
+      hideDistance={topHideDistance}
+      contentInsetsEnabled={overlayChrome}
+      topContentInset={topContentInset}
+      bottomContentInset={bottomContentInset}
+    >
+      <MobileAppChrome
+        currentPath={currentPath}
+        isHome={isHome}
+        isDetail={isDetail}
+        hideChrome={hideChrome}
+        topChrome={topChrome}
+        bottomChrome={bottomChrome}
+        moreActive={moreActive}
+        moreOpen={moreOpen}
+        setMoreOpen={setMoreOpen}
+        insetsTop={insets.top}
+        insetsBottom={insets.bottom}
+      >
+        {children}
+      </MobileAppChrome>
+    </MobileChromeScrollProvider>
+  );
+}
+
+function MobileAppChrome({
+  children,
+  currentPath,
+  isHome,
+  isDetail,
+  hideChrome,
+  topChrome,
+  bottomChrome,
+  moreActive,
+  moreOpen,
+  setMoreOpen,
+  insetsTop,
+  insetsBottom,
+}: {
+  children: React.ReactNode;
+  currentPath: string;
+  isHome: boolean;
+  isDetail: boolean;
+  hideChrome: boolean;
+  topChrome: number;
+  bottomChrome: number;
+  moreActive: boolean;
+  moreOpen: boolean;
+  setMoreOpen: (open: boolean) => void;
+  insetsTop: number;
+  insetsBottom: number;
+}) {
+  const router = useRouter();
+  const chromeScroll = useMobileChromeScroll();
+  const topAnimatedStyle = useMobileChromeTopAnimatedStyle();
+
+  useEffect(() => {
+    chromeScroll?.reset();
+    // Reset only on route change so the island returns when switching tabs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path-only
+  }, [currentPath]);
 
   return (
     <View style={styles.mobileRoot}>
@@ -129,80 +207,108 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </View>
 
-      <View
-        style={[
-          styles.mobileTopBar,
-          { paddingTop: Math.max(insets.top, 12) },
-        ]}
-        pointerEvents="box-none"
-      >
-        <GlassSurface
-          style={Platform.OS === 'web' ? undefined : styles.mobileTopIsland}
-          className={
-            Platform.OS === 'web' ? 'liquid-glass floating-island mobile-top-island' : undefined
-          }
-        >
-          <SleekWordmark onPress={() => router.push('/')} size="md" />
-          <View
-            style={Platform.OS === 'web' ? undefined : styles.mobileTopActions}
-            className={Platform.OS === 'web' ? 'mobile-top-actions' : undefined}
-          >
-            <IconButton
-              icon="search-outline"
-              label="Поиск"
-              onPress={() => router.push('/search')}
-            />
-            {isHome ? (
-              <IconButton
-                icon="settings-outline"
-                label="Настройки главной"
-                onPress={openHomeSettings}
-                ring
-              />
-            ) : null}
-            <IconButton
-              icon="person-outline"
-              label="Профиль"
-              onPress={() => router.push('/profile')}
-              accent
-            />
-          </View>
-        </GlassSurface>
-      </View>
-
-      <View
-        style={[
-          styles.mobileBottomWrap,
-          { paddingBottom: Math.max(insets.bottom, 12) },
-        ]}
-        pointerEvents="box-none"
-      >
+      {isDetail ? (
         <View
-          style={Platform.OS === 'web' ? undefined : styles.mobileBottomShell}
-          className={Platform.OS === 'web' ? 'mobile-bottom-shell' : undefined}
+          style={[styles.mobileDetailTopBar, { paddingTop: Math.max(insetsTop, 8) }]}
+          pointerEvents="box-none"
         >
-          <View
-            style={Platform.OS === 'web' ? undefined : styles.mobileBottomIsland}
-            className={Platform.OS === 'web' ? 'mobile-bottom-island' : undefined}
+          <Pressable
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/' as '/');
+            }}
+            accessibilityLabel="Назад"
+            hitSlop={10}
+            style={styles.mobileDetailBack}
           >
-            {MOBILE_NAV_ITEMS.map((item) => (
-              <TabItem
-                key={item.path}
-                label={item.label}
-                path={item.path}
-                active={isActivePath(currentPath, item.path)}
-                onPress={() => router.push(item.path as '/')}
-              />
-            ))}
-            <TabItem
-              label="Ещё"
-              path="/more"
-              active={moreActive || moreOpen}
-              onPress={() => setMoreOpen(true)}
-            />
-          </View>
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </Pressable>
         </View>
-      </View>
+      ) : hideChrome ? null : (
+        <>
+          <MobileChromeAnimated.View
+            style={[
+              styles.mobileTopBar,
+              { paddingTop: Math.max(insetsTop, 12) },
+              topAnimatedStyle,
+            ]}
+            pointerEvents="box-none"
+          >
+            <GlassSurface
+              style={Platform.OS === 'web' ? undefined : styles.mobileTopIsland}
+              className={
+                Platform.OS === 'web' ? 'liquid-glass floating-island mobile-top-island' : undefined
+              }
+            >
+              <SleekWordmark onPress={() => router.push('/')} size="md" />
+              <View
+                style={Platform.OS === 'web' ? undefined : styles.mobileTopActions}
+                className={Platform.OS === 'web' ? 'mobile-top-actions' : undefined}
+              >
+                <IconButton
+                  icon="search-outline"
+                  label="Поиск"
+                  onPress={() => router.push('/search')}
+                />
+                {isHome ? (
+                  <IconButton
+                    icon="settings-outline"
+                    label="Настройки главной"
+                    onPress={openHomeSettings}
+                    ring
+                  />
+                ) : null}
+                <IconButton
+                  icon="person-outline"
+                  label="Профиль"
+                  onPress={() => router.push('/profile')}
+                  accent
+                />
+              </View>
+            </GlassSurface>
+          </MobileChromeAnimated.View>
+
+          <View
+            style={[
+              styles.mobileBottomWrap,
+              { paddingBottom: Math.max(insetsBottom, 12) },
+            ]}
+            pointerEvents="box-none"
+          >
+            <LinearGradient
+              colors={['rgba(19,18,27,0)', 'rgba(19,18,27,0.72)', 'rgba(19,18,27,0.92)']}
+              locations={[0, 0.45, 1]}
+              style={styles.mobileBottomScrim}
+              pointerEvents="none"
+            />
+            <View
+              style={Platform.OS === 'web' ? undefined : styles.mobileBottomShell}
+              className={Platform.OS === 'web' ? 'mobile-bottom-shell' : undefined}
+            >
+              <View
+                style={Platform.OS === 'web' ? undefined : styles.mobileBottomIsland}
+                className={Platform.OS === 'web' ? 'mobile-bottom-island' : undefined}
+              >
+                {MOBILE_NAV_ITEMS.map((item) => (
+                  <TabItem
+                    key={item.path}
+                    label={item.label}
+                    path={item.path}
+                    active={isActivePath(currentPath, item.path)}
+                    onPress={() => router.push(item.path as '/')}
+                  />
+                ))}
+                <TabItem
+                  label="Ещё"
+                  path="/more"
+                  active={moreActive || moreOpen}
+                  onPress={() => setMoreOpen(true)}
+                />
+              </View>
+            </View>
+          </View>
+        </>
+      )}
 
       <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
         <Pressable style={styles.moreBackdrop} onPress={() => setMoreOpen(false)}>
@@ -739,6 +845,27 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     zIndex: 10,
   },
+  mobileDetailTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: layout.gutterMobile,
+    paddingBottom: spacing.sm,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mobileDetailBack: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   mobileTopIsland: {
     height: layout.mobileTopBarHeight,
     flexDirection: 'row',
@@ -782,6 +909,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     zIndex: 10,
   },
+  mobileBottomScrim: {
+    ...StyleSheet.absoluteFill,
+    top: -36,
+  },
   mobileBottomShell: {
     width: '100%',
     maxWidth: layout.mobileTabMaxWidth,
@@ -794,18 +925,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: colors.glassStrong,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(19,18,27,0.62)',
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 25,
-    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
     ...(Platform.OS === 'web'
       ? ({
           // @ts-expect-error web-only
-          backdropFilter: 'blur(24px)',
+          backdropFilter: 'blur(28px) saturate(160%)',
           // @ts-expect-error web-only
-          WebkitBackdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(28px) saturate(160%)',
         } as object)
       : {}),
   },
@@ -820,10 +952,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tabItemActive: {
-    backgroundColor: 'rgba(195,192,255,0.2)',
+    backgroundColor: 'rgba(195,192,255,0.22)',
   },
   tabLabel: {
-    color: colors.textSecondary,
+    color: '#e8e6f4',
     ...typography.tabLabel,
   },
   tabLabelActive: {

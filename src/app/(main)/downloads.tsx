@@ -21,12 +21,14 @@ import {
 } from '@/services/download/types';
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function DownloadsScreen() {
   const router = useRouter();
   const { records } = useDownloadQueue();
   const [busy, setBusy] = useState(false);
   const svc = getDownloadService();
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
 
   useEffect(() => {
     void svc.init();
@@ -97,7 +99,7 @@ export default function DownloadsScreen() {
   }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.scroll} {...chromeScrollProps}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Загрузки</Text>
         <View style={styles.headerActions}>

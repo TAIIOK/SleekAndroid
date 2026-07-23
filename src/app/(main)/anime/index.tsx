@@ -19,11 +19,13 @@ import { mapAnimeToRailItem } from '@/lib/poster';
 import { currentSeasonalShowcase } from '@/lib/seasonal';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function AnimeBrowseScreen() {
   const router = useRouter();
   const { config, ready } = useHomeCatalogConfig();
   const catalogScroll = useTvCatalogScrollRestore('/anime');
+  const chromeScrollProps = useMobileChromeScrollProps(catalogScroll.onScroll, styles.content);
   const seasonal = useMemo(() => currentSeasonalShowcase(), []);
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
 
@@ -52,9 +54,7 @@ export default function AnimeBrowseScreen() {
     <ScrollView
       ref={catalogScroll.scrollRef}
       style={styles.scroll}
-      contentContainerStyle={styles.content}
-      onScroll={catalogScroll.onScroll}
-      scrollEventThrottle={16}
+      {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
       {isTvUi() ? <SectionHeader title="Аниме" showAccent tvFocusEntry /> : null}
