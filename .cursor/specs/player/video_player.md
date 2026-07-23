@@ -48,7 +48,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Custom site-like HUD (not TV chips / not native Exo chrome): top meta + center transport pill + scrub + icon action row; top/bottom gradients
 - [x] Android uses `viewType={ViewType.TEXTURE}` so video composites under React overlays; video stays in the activity window (Modal only for bottom sheets)
 - [x] `controls={false}` plus config plugin forcing ExoPlayer `useController=false` (Fabric may omit the JS prop)
-- [x] Gestures (RNGH): tap toggles chrome; double-tap L/R seeks; vertical (right third) volume; horizontal scrub; gesture lock in top bar
+- [x] Gestures (RNGH): tap shows chrome immediately when hidden, hides after double-tap window when visible; double-tap L/R seeks; vertical (right third) volume; horizontal scrub; gesture lock in top bar
 - [x] Sheets for dubbing/quality/connection/delivery/episodes/subtitles/settings/external player (shared prefs)
 - [x] Watch opens immersive fullscreen on phone: landscape lock, status/nav bars hidden, video fills the screen (no AppShell chrome)
 

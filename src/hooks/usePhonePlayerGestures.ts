@@ -15,8 +15,10 @@ export interface PhonePlayerGesturesOptions {
   setVolume: (value: number) => void;
   seekTo: (time: number) => void;
   seekBy: (delta: number) => void;
-  onToggleControls: () => void;
-  onSingleTapPlayToggle?: () => void;
+  /** Current chrome visibility (read at tap time). */
+  areControlsVisible: () => boolean;
+  showControls: () => void;
+  hideControls: () => void;
   /** When true, surface gestures are ignored (sheet open, etc.). */
   isSuppressed: () => boolean;
 }
@@ -27,10 +29,14 @@ const DOUBLE_TAP_MS = 280;
 
 /**
  * Phone surface gestures (site parity):
- * - tap → toggle chrome (or only toggle when locked)
+ * - tap (chrome hidden) → show immediately
+ * - tap (chrome visible) → hide after double-tap window
  * - double-tap L/R → seek
  * - vertical drag (right third) → volume
  * - horizontal drag → scrub
+ *
+ * Tap is a real Gesture.Tap raced with Pan — Pan alone often fails
+ * on stationary touches (especially Android), so chrome never appeared.
  */
 export function usePhonePlayerGestures({
   enabled,
@@ -43,12 +49,13 @@ export function usePhonePlayerGestures({
   setVolume,
   seekTo,
   seekBy,
-  onToggleControls,
+  areControlsVisible,
+  showControls,
+  hideControls,
   isSuppressed,
 }: PhonePlayerGesturesOptions) {
   const activeGesture = useRef<ActiveGesture>(null);
   const pointerStart = useRef({ x: 0, y: 0, volume: 0, time: 0, width: 0, height: 0 });
-  const moved = useRef(false);
   const scrubTimeRef = useRef(currentTime);
   const hideHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ time: number; x: number } | null>(null);
@@ -68,7 +75,6 @@ export function usePhonePlayerGestures({
   const dismissHud = useCallback(() => {
     clearHideHudTimer();
     activeGesture.current = null;
-    moved.current = false;
     setHudKind(null);
   }, [clearHideHudTimer]);
 
@@ -85,12 +91,20 @@ export function usePhonePlayerGestures({
     setTimeout(() => setDoubleTapHint(null), 700);
   }, []);
 
+  const toggleChrome = useCallback(() => {
+    if (areControlsVisible()) {
+      hideControls();
+    } else {
+      showControls();
+    }
+  }, [areControlsVisible, hideControls, showControls]);
+
   const handleTap = useCallback(
     (x: number) => {
       if (isSuppressed()) return;
 
       if (locked || !enabled) {
-        onToggleControls();
+        toggleChrome();
         return;
       }
 
@@ -112,29 +126,39 @@ export function usePhonePlayerGestures({
       }
 
       lastTapRef.current = { time: now, x };
+
+      // Show immediately when chrome is hidden so the first tap always feels responsive.
+      if (!areControlsVisible()) {
+        showControls();
+        return;
+      }
+
+      // When visible, wait for a possible double-tap before hiding.
       setTimeout(() => {
         if (!lastTapRef.current || lastTapRef.current.time !== now) return;
         lastTapRef.current = null;
-        onToggleControls();
+        hideControls();
       }, DOUBLE_TAP_MS);
     },
     [
+      areControlsVisible,
       enabled,
+      hideControls,
       isSuppressed,
       locked,
-      onToggleControls,
       seekBy,
+      showControls,
       showDoubleTap,
       skipBackwardSeconds,
       skipForwardSeconds,
+      toggleChrome,
     ],
   );
 
-  const onBegin = useCallback(
+  const onPanBegin = useCallback(
     (x: number, y: number) => {
       if (isSuppressed()) return;
       clearHideHudTimer();
-      moved.current = false;
       activeGesture.current = null;
       pointerStart.current = {
         x,
@@ -148,15 +172,12 @@ export function usePhonePlayerGestures({
     [clearHideHudTimer, currentTime, isSuppressed, volume],
   );
 
-  const onUpdate = useCallback(
+  const onPanUpdate = useCallback(
     (x: number, y: number) => {
       if (isSuppressed() || !enabled || locked) return;
 
       const dx = x - pointerStart.current.x;
       const dy = y - pointerStart.current.y;
-      if (!moved.current && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-      moved.current = true;
-
       const width = pointerStart.current.width;
       const height = pointerStart.current.height;
       const startX = pointerStart.current.x;
@@ -193,7 +214,7 @@ export function usePhonePlayerGestures({
     [duration, enabled, isSuppressed, locked, setVolume],
   );
 
-  const onEnd = useCallback(
+  const onPanEnd = useCallback(
     (x: number) => {
       if (isSuppressed()) {
         dismissHud();
@@ -205,40 +226,42 @@ export function usePhonePlayerGestures({
         dismissHud();
       } else if (activeGesture.current === 'volume') {
         hideHudLater();
-      } else if (!moved.current) {
+      } else {
+        // Pan won the race (finger moved) but never became scrub/volume — still treat as tap.
         handleTap(x);
       }
 
       activeGesture.current = null;
-      moved.current = false;
     },
     [dismissHud, handleTap, hideHudLater, isSuppressed, seekTo],
   );
 
-  const onCancel = useCallback(() => {
-    dismissHud();
-  }, [dismissHud]);
-
   const gesture = useMemo(() => {
-    return Gesture.Pan()
-      .minDistance(0)
+    const tap = Gesture.Tap()
+      .maxDistance(DRAG_THRESHOLD_PX)
+      .onEnd((e) => {
+        'worklet';
+        runOnJS(handleTap)(e.x);
+      });
+
+    const pan = Gesture.Pan()
+      .minDistance(DRAG_THRESHOLD_PX)
       .onBegin((e) => {
         'worklet';
-        runOnJS(onBegin)(e.x, e.y);
+        runOnJS(onPanBegin)(e.x, e.y);
       })
       .onUpdate((e) => {
         'worklet';
-        runOnJS(onUpdate)(e.x, e.y);
+        runOnJS(onPanUpdate)(e.x, e.y);
       })
       .onEnd((e) => {
         'worklet';
-        runOnJS(onEnd)(e.x);
-      })
-      .onFinalize((_e, success) => {
-        'worklet';
-        if (!success) runOnJS(onCancel)();
+        runOnJS(onPanEnd)(e.x);
       });
-  }, [onBegin, onCancel, onEnd, onUpdate]);
+
+    // Tap must be a first-class gesture: Pan alone often fails on stationary touches.
+    return Gesture.Race(tap, pan);
+  }, [handleTap, onPanBegin, onPanEnd, onPanUpdate]);
 
   const onLayout = useCallback((width: number, height: number) => {
     layoutRef.current = { width: width || 1, height: height || 1 };

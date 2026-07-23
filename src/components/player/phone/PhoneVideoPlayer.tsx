@@ -124,14 +124,10 @@ export function PhoneVideoPlayer({
     scheduleHide();
   }, [scheduleHide]);
 
-  const toggleControls = useCallback(() => {
-    if (controlsVisibleRef.current) {
-      clearHideTimer();
-      setControlsVisible(false);
-      return;
-    }
-    showControls();
-  }, [clearHideTimer, showControls]);
+  const hideControls = useCallback(() => {
+    clearHideTimer();
+    setControlsVisible(false);
+  }, [clearHideTimer]);
 
   useEffect(() => {
     scheduleHide();
@@ -176,7 +172,9 @@ export function PhoneVideoPlayer({
       engine.seekBy(delta);
       showControls();
     },
-    onToggleControls: toggleControls,
+    areControlsVisible: () => controlsVisibleRef.current,
+    showControls,
+    hideControls,
     isSuppressed,
   });
 
@@ -330,7 +328,7 @@ export function PhoneVideoPlayer({
       </View>
 
       <GestureDetector gesture={gestures.gesture}>
-        <View style={styles.gestureLayer} />
+        <View collapsable={false} style={styles.gestureLayer} />
       </GestureDetector>
 
       <PhoneGestureHud kind={gestures.hudKind} volume={gestures.hudVolume} />
@@ -762,7 +760,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   videoHost: { ...StyleSheet.absoluteFill, backgroundColor: '#000' },
   video: { ...StyleSheet.absoluteFill },
-  gestureLayer: { ...StyleSheet.absoluteFill, zIndex: 10 },
+  gestureLayer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 10,
+    backgroundColor: 'transparent',
+  },
   fadeLayer: { ...StyleSheet.absoluteFill, zIndex: 15 },
   topFade: { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
   bottomFade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 180 },
