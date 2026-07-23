@@ -1,7 +1,7 @@
 {
   "name": "aniverse-tv",
   "main": "expo-router/entry",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "scripts": {
     "start": "node ./scripts/with-expo-path.js expo start",
     "android": "node ./scripts/with-expo-path.js expo run:android",
