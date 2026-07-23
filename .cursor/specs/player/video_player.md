@@ -48,9 +48,9 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Custom site-like HUD (not TV chips / not native Exo chrome): top meta + center transport pill + scrub + icon action row; top/bottom gradients
 - [x] Android uses `viewType={ViewType.TEXTURE}` so video composites under React overlays; video stays in the activity window (Modal only for bottom sheets)
 - [x] `controls={false}` plus config plugin forcing ExoPlayer `useController=false` (Fabric may omit the JS prop)
-- [x] Gestures (RNGH): tap shows chrome immediately when hidden, hides after double-tap window when visible; double-tap L/R seeks; vertical (right third) volume; horizontal scrub; gesture lock in top bar
+- [x] Gestures (RNGH): tap shows chrome immediately when hidden, hides after double-tap window when visible; double-tap L/R seeks; vertical left third brightness; vertical right third volume; horizontal scrub; gesture lock in top bar
 - [x] Sheets for dubbing/quality/connection/delivery/episodes/subtitles/settings/external player (shared prefs)
-- [x] Watch opens immersive fullscreen on phone: landscape lock, status/nav bars hidden, video fills the screen (no AppShell chrome)
+- [x] Phone PiP: top-bar button calls `enterPictureInPicture`; Android `supportsPictureInPicture` via RNV Expo plugin; chrome hidden while PiP active
 
 ### Anime watch
 
@@ -102,4 +102,4 @@ Code-verified against acceptance criteria and remote handler (device smoke still
 - Android TV: `useTVEventHandler` only fires when a focusable view is focused (rn-tvos#584); player HUD is software-focus, so `TvVideoPlayer` keeps a 1×1 focus sink.
 - Subtitles appear only when the media container exposes text tracks (HLS/embedded); many anime sources have no CC tracks.
 - For heavy 4K streams prefer «Внешний плеер» (Lampa model) if in-app ExoPlayer stutters.
-- Out of scope: ambient backdrop, PiP/cast, hover scrub preview, Norigin spatial nav, IMA/ads.
+- Out of scope: ambient backdrop, cast, hover scrub preview, Norigin spatial nav, IMA/ads.

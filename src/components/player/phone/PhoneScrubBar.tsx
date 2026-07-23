@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: colors.brandAccent,
+    backgroundColor: colors.brand,
   },
   skipMark: {
     position: 'absolute',
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   skipOpen: { backgroundColor: 'rgba(251,146,60,0.45)' },
-  skipEnd: { backgroundColor: 'rgba(192,132,252,0.45)' },
+  skipEnd: { backgroundColor: 'rgba(195,192,255,0.45)' },
   thumb: {
     position: 'absolute',
     top: '50%',
@@ -93,9 +93,9 @@ const styles = StyleSheet.create({
     marginLeft: -7,
     marginTop: -7,
     borderRadius: 7,
-    backgroundColor: colors.brandAccent,
+    backgroundColor: colors.brand,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: colors.brandTint,
   },
   times: {
     marginTop: 4,

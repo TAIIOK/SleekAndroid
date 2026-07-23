@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Brightness from 'expo-brightness';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -89,6 +90,8 @@ export function PhoneVideoPlayer({
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
   const [externalError, setExternalError] = useState<string | null>(null);
   const [lockToast, setLockToast] = useState(false);
+  const [brightness, setBrightnessState] = useState(1);
+  const [pipActive, setPipActive] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsVisibleRef = useRef(controlsVisible);
   const sheetRef = useRef(sheet);
@@ -96,6 +99,19 @@ export function PhoneVideoPlayer({
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     void listInstalledExternalPlayers().then(setExternalPlayers);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Brightness.getBrightnessAsync()
+      .then((value) => {
+        if (cancelled) return;
+        setBrightnessState(Math.max(0, Math.min(1, value)));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -128,6 +144,12 @@ export function PhoneVideoPlayer({
     clearHideTimer();
     setControlsVisible(false);
   }, [clearHideTimer]);
+
+  const setBrightness = useCallback((value: number) => {
+    const next = Math.max(0, Math.min(1, value));
+    setBrightnessState(next);
+    void Brightness.setBrightnessAsync(next).catch(() => {});
+  }, []);
 
   useEffect(() => {
     scheduleHide();
@@ -164,9 +186,11 @@ export function PhoneVideoPlayer({
     duration: engine.duration,
     currentTime: engine.currentTime,
     volume: engine.volume,
+    brightness,
     skipBackwardSeconds: engine.prefs.skipBackwardSeconds,
     skipForwardSeconds: engine.prefs.skipForwardSeconds,
     setVolume: engine.setVolume,
+    setBrightness,
     seekTo: engine.seekTo,
     seekBy: (delta) => {
       engine.seekBy(delta);
@@ -284,7 +308,10 @@ export function PhoneVideoPlayer({
   };
 
   const showChrome =
-    (controlsVisible || !engine.playing) && !engine.playbackError && !externalError;
+    (controlsVisible || !engine.playing) &&
+    !engine.playbackError &&
+    !externalError &&
+    !pipActive;
   const canPickEpisodes = Boolean(episodeNav && episodeNav.items.length > 1);
   const selectedDubbing = dubbingOptions?.find((o) => o.selected)?.label;
   const selectedQuality = qualityOptions?.find((o) => o.selected)?.label;
@@ -323,6 +350,15 @@ export function PhoneVideoPlayer({
             onBuffer={engine.onBuffer}
             onReadyForDisplay={engine.onReadyForDisplay}
             onTextTracks={engine.onTextTracks}
+            onPictureInPictureStatusChanged={({ isActive }) => {
+              setPipActive(isActive);
+              if (isActive) {
+                setControlsVisible(false);
+                clearHideTimer();
+              } else {
+                showControls();
+              }
+            }}
           />
         ) : null}
       </View>
@@ -331,7 +367,11 @@ export function PhoneVideoPlayer({
         <View collapsable={false} style={styles.gestureLayer} />
       </GestureDetector>
 
-      <PhoneGestureHud kind={gestures.hudKind} volume={gestures.hudVolume} />
+      <PhoneGestureHud
+        kind={gestures.hudKind}
+        volume={gestures.hudVolume}
+        brightness={gestures.hudBrightness}
+      />
 
       {gestures.doubleTapHint ? (
         <View style={styles.doubleTapRow} pointerEvents="none">
@@ -441,6 +481,15 @@ export function PhoneVideoPlayer({
               size={20}
               color={engine.prefs.gesturesLocked ? '#fb923c' : '#fff'}
             />
+          </IconBtn>
+          <IconBtn
+            onPress={() => {
+              engine.enterPictureInPicture();
+              showControls();
+            }}
+            label="Картинка в картинке"
+          >
+            <Ionicons name="browsers-outline" size={22} color="#fff" />
           </IconBtn>
           <IconBtn onPress={() => openSheet('settings')} label="Настройки">
             <Ionicons name="settings-outline" size={22} color="#fff" />
@@ -748,7 +797,7 @@ function ActionChip({
       onPress={onPress}
       style={[styles.actionChip, active && styles.actionChipActive]}
     >
-      <Ionicons name={icon} size={16} color={active ? colors.brand : '#fff'} />
+      <Ionicons name={icon} size={16} color={active ? colors.brand : colors.brandTint} />
       <Text style={[styles.actionChipText, active && styles.actionChipTextActive]} numberOfLines={1}>
         {label}
       </Text>
@@ -827,22 +876,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    maxWidth: 140,
+    backgroundColor: 'rgba(79,70,229,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(195,192,255,0.22)',
+    maxWidth: 160,
+    overflow: 'hidden',
   },
-  actionChipActive: { backgroundColor: 'rgba(79,70,229,0.35)' },
-  actionChipText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  actionChipActive: {
+    backgroundColor: 'rgba(79,70,229,0.42)',
+    borderColor: colors.brand,
+  },
+  actionChipText: {
+    color: colors.brandTint,
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+    minWidth: 0,
+  },
   actionChipTextActive: { color: colors.brand },
   skipBtn: {
     alignSelf: 'flex-end',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(79,70,229,0.35)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: colors.brand,
   },
-  chipText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  chipText: { color: colors.brandTint, fontSize: 15, fontWeight: '600' },
   doubleTapRow: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',

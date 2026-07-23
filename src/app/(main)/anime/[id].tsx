@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ScrollView,
@@ -123,16 +123,18 @@ export default function AnimeDetailScreen() {
   const [watchedDubbing, setWatchedDubbing] = useState<string | null>(null);
   const [selectedDubbing, setSelectedDubbing] = useState('');
 
-  useEffect(() => {
-    if (!Number.isFinite(animeId)) return;
-    let cancelled = false;
-    void loadAnimeLastDubbing(animeId).then((value) => {
-      if (!cancelled) setWatchedDubbing(value);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [animeId]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!Number.isFinite(animeId)) return;
+      let cancelled = false;
+      void loadAnimeLastDubbing(animeId).then((value) => {
+        if (!cancelled) setWatchedDubbing(value);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [animeId]),
+  );
 
   useEffect(() => {
     if (!dubbingOptions.length) {
@@ -140,8 +142,8 @@ export default function AnimeDetailScreen() {
       return;
     }
     setSelectedDubbing((current) => {
-      if (current && dubbingOptions.includes(current)) return current;
       if (watchedDubbing && dubbingOptions.includes(watchedDubbing)) return watchedDubbing;
+      if (current && dubbingOptions.includes(current)) return current;
       return pickBestDubbingOption(allVideos) ?? dubbingOptions[0];
     });
   }, [dubbingOptions, watchedDubbing, allVideos]);

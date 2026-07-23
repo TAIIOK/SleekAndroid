@@ -379,6 +379,14 @@ export function useRNVideoEngine({
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  const enterPictureInPicture = useCallback(() => {
+    try {
+      videoRef.current?.enterPictureInPicture();
+    } catch {
+      // Device/OS may reject PiP (unsupported, multi-window, etc.)
+    }
+  }, []);
+
   return {
     videoRef,
     reloadKey,
@@ -416,6 +424,7 @@ export function useRNVideoEngine({
     applySkip,
     retryPlayback,
     setVolume,
+    enterPictureInPicture,
     /** High-bitrate friendly ExoPlayer buffers (seconds via ms). */
     bufferConfig: {
       minBufferMs: 15000,

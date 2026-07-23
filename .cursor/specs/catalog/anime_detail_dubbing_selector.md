@@ -11,9 +11,10 @@ Anime detail seasons/episodes block includes a voiceover (озвучка) select
 3. [x] Selecting a voiceover shows only episodes that have a playable stream for that voiceover.
 4. [x] Play and resume navigate with `preferredDubbing` set to the selected voiceover.
 5. [x] Last selected/watched voiceover is stored in AsyncStorage keyed by anime id.
-6. [x] On detail open, the selector defaults to the stored voiceover when it is still available.
+6. [x] On detail open (and on focus return), the selector defaults to the stored voiceover when it is still available.
 7. [x] The stored/last-watched option is labeled «Смотрели» in the selector when present.
 8. [x] Changing voiceover in the catalog watch player persists the new choice for that anime.
+8b. [x] Watch screen restores stored voiceover on mount when `preferredDubbing` is absent (Continue Watching / bare re-entry).
 9. [x] While more episode pages are loading and the filtered list is empty, the UI keeps loading instead of showing a permanent empty state.
 10. [x] Sidebar dubbing block remains disabled; the selector lives in the episodes section only.
 

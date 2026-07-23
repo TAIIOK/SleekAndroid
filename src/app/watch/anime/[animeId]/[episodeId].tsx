@@ -9,7 +9,7 @@ import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { colors, spacing } from '@/constants/aniverse';
 import { useThrottledEpisodeProgress } from '@/hooks/useThrottledEpisodeProgress';
 import { useWatchEpisodeNavigation } from '@/hooks/useWatchEpisodeNavigation';
-import { saveAnimeLastDubbing } from '@/lib/animeLastDubbing';
+import { saveAnimeLastDubbing, loadAnimeLastDubbing } from '@/lib/animeLastDubbing';
 import {
   getQualityOptionsForDubbing,
   getUniqueDubbingOptions,
@@ -77,6 +77,8 @@ export default function WatchAnimeScreen() {
 
   const dubbingOptionsList = useMemo(() => getUniqueDubbingOptions(videos), [videos]);
   const [selectedDubbing, setSelectedDubbing] = useState('');
+  /** undefined = AsyncStorage load in flight */
+  const [storedDubbing, setStoredDubbing] = useState<string | null | undefined>(undefined);
   const [selectedQuality, setSelectedQuality] = useState<PlaybackQuality>('720p');
   const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
   const playbackTimeRef = useRef(0);
@@ -132,15 +134,36 @@ export default function WatchAnimeScreen() {
   }, [numericEpisodeId, routeProgress, syncedProgress, episode?.duration]);
 
   useEffect(() => {
+    if (!Number.isFinite(numericAnimeId)) {
+      setStoredDubbing(null);
+      return;
+    }
+    let cancelled = false;
+    setStoredDubbing(undefined);
+    void loadAnimeLastDubbing(numericAnimeId).then((value) => {
+      if (!cancelled) setStoredDubbing(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericAnimeId]);
+
+  useEffect(() => {
     if (!dubbingOptionsList.length) return;
+    // Wait for persisted dubbing so we don't lock onto pickBest before storage resolves.
+    if (storedDubbing === undefined) return;
+
     setSelectedDubbing((current) => {
-      if (current && dubbingOptionsList.includes(current)) return current;
       if (preferredDubbing && dubbingOptionsList.includes(preferredDubbing)) {
         return preferredDubbing;
       }
+      if (storedDubbing && dubbingOptionsList.includes(storedDubbing)) {
+        return storedDubbing;
+      }
+      if (current && dubbingOptionsList.includes(current)) return current;
       return pickBestDubbingOption(videos) ?? dubbingOptionsList[0];
     });
-  }, [dubbingOptionsList, videos, preferredDubbing, numericEpisodeId]);
+  }, [dubbingOptionsList, videos, preferredDubbing, numericEpisodeId, storedDubbing]);
 
   useEffect(() => {
     if (!qualityOptionsList.length) return;

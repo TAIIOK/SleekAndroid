@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
-type ActiveGesture = 'volume' | 'scrub' | null;
+type ActiveGesture = 'volume' | 'brightness' | 'scrub' | null;
 
 export interface PhonePlayerGesturesOptions {
   enabled: boolean;
@@ -10,9 +10,11 @@ export interface PhonePlayerGesturesOptions {
   duration: number;
   currentTime: number;
   volume: number;
+  brightness: number;
   skipBackwardSeconds: number;
   skipForwardSeconds: number;
   setVolume: (value: number) => void;
+  setBrightness: (value: number) => void;
   seekTo: (time: number) => void;
   seekBy: (delta: number) => void;
   /** Current chrome visibility (read at tap time). */
@@ -32,6 +34,7 @@ const DOUBLE_TAP_MS = 280;
  * - tap (chrome hidden) → show immediately
  * - tap (chrome visible) → hide after double-tap window
  * - double-tap L/R → seek
+ * - vertical drag (left third) → brightness
  * - vertical drag (right third) → volume
  * - horizontal drag → scrub
  *
@@ -44,9 +47,11 @@ export function usePhonePlayerGestures({
   duration,
   currentTime,
   volume,
+  brightness,
   skipBackwardSeconds,
   skipForwardSeconds,
   setVolume,
+  setBrightness,
   seekTo,
   seekBy,
   areControlsVisible,
@@ -55,14 +60,23 @@ export function usePhonePlayerGestures({
   isSuppressed,
 }: PhonePlayerGesturesOptions) {
   const activeGesture = useRef<ActiveGesture>(null);
-  const pointerStart = useRef({ x: 0, y: 0, volume: 0, time: 0, width: 0, height: 0 });
+  const pointerStart = useRef({
+    x: 0,
+    y: 0,
+    volume: 0,
+    brightness: 0,
+    time: 0,
+    width: 0,
+    height: 0,
+  });
   const scrubTimeRef = useRef(currentTime);
   const hideHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ time: number; x: number } | null>(null);
   const layoutRef = useRef({ width: 1, height: 1 });
 
-  const [hudKind, setHudKind] = useState<'volume' | null>(null);
+  const [hudKind, setHudKind] = useState<'volume' | 'brightness' | null>(null);
   const [hudVolume, setHudVolume] = useState(volume);
+  const [hudBrightness, setHudBrightness] = useState(brightness);
   const [doubleTapHint, setDoubleTapHint] = useState<'backward' | 'forward' | null>(null);
 
   const clearHideHudTimer = useCallback(() => {
@@ -164,12 +178,13 @@ export function usePhonePlayerGestures({
         x,
         y,
         volume,
+        brightness,
         time: currentTime,
         width: layoutRef.current.width,
         height: layoutRef.current.height,
       };
     },
-    [clearHideHudTimer, currentTime, isSuppressed, volume],
+    [brightness, clearHideHudTimer, currentTime, isSuppressed, volume],
   );
 
   const onPanUpdate = useCallback(
@@ -183,13 +198,17 @@ export function usePhonePlayerGestures({
       const startX = pointerStart.current.x;
       const startY = pointerStart.current.y;
 
-      // Ignore scrub/volume starts from the bottom chrome zone.
+      // Ignore scrub/volume/brightness starts from the bottom chrome zone.
       if (startY > height * 0.68) return;
 
       if (!activeGesture.current) {
-        if (startX > width * 0.7 && Math.abs(dy) > Math.abs(dx)) {
-          activeGesture.current = 'volume';
-        } else if (duration > 0 && Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(dy) > Math.abs(dx)) {
+          if (startX > width * 0.7) {
+            activeGesture.current = 'volume';
+          } else if (startX < width * 0.3) {
+            activeGesture.current = 'brightness';
+          }
+        } else if (duration > 0) {
           activeGesture.current = 'scrub';
         }
       }
@@ -203,6 +222,15 @@ export function usePhonePlayerGestures({
         return;
       }
 
+      if (activeGesture.current === 'brightness') {
+        const delta = -(dy / Math.max(height, 1)) * 1.2;
+        const next = Math.max(0, Math.min(1, pointerStart.current.brightness + delta));
+        setBrightness(next);
+        setHudBrightness(next);
+        setHudKind('brightness');
+        return;
+      }
+
       if (activeGesture.current === 'scrub' && duration > 0) {
         const secondsPerPoint = (duration / Math.max(width, 1)) * 0.35;
         scrubTimeRef.current = Math.max(
@@ -211,7 +239,7 @@ export function usePhonePlayerGestures({
         );
       }
     },
-    [duration, enabled, isSuppressed, locked, setVolume],
+    [duration, enabled, isSuppressed, locked, setBrightness, setVolume],
   );
 
   const onPanEnd = useCallback(
@@ -224,7 +252,7 @@ export function usePhonePlayerGestures({
       if (activeGesture.current === 'scrub') {
         seekTo(scrubTimeRef.current);
         dismissHud();
-      } else if (activeGesture.current === 'volume') {
+      } else if (activeGesture.current === 'volume' || activeGesture.current === 'brightness') {
         hideHudLater();
       } else {
         // Pan won the race (finger moved) but never became scrub/volume — still treat as tap.
@@ -271,6 +299,7 @@ export function usePhonePlayerGestures({
     gesture,
     hudKind,
     hudVolume,
+    hudBrightness,
     doubleTapHint,
     onLayout,
     dismissHud,

@@ -100,7 +100,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     'expo-web-browser',
-    'react-native-video',
+    [
+      'react-native-video',
+      {
+        enableAndroidPictureInPicture: true,
+      },
+    ],
     'expo-updates',
     './plugins/withLargeHeap.js',
     './plugins/withLetsEncryptGenYTrust.js',

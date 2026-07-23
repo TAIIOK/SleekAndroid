@@ -6,18 +6,30 @@ import { spacing } from '@/constants/aniverse';
 export function PhoneGestureHud({
   kind,
   volume,
+  brightness,
 }: {
-  kind: 'volume' | null;
+  kind: 'volume' | 'brightness' | null;
   volume: number;
+  brightness: number;
 }) {
-  if (kind !== 'volume') return null;
+  if (kind !== 'volume' && kind !== 'brightness') return null;
 
-  const percent = Math.round(volume * 100);
+  const isBrightness = kind === 'brightness';
+  const value = isBrightness ? brightness : volume;
+  const percent = Math.round(value * 100);
   const fillWidth = `${percent}%` as DimensionValue;
+  const icon = isBrightness
+    ? percent < 35
+      ? 'sunny-outline'
+      : 'sunny'
+    : percent === 0
+      ? 'volume-mute'
+      : 'volume-medium';
+
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    <View style={[styles.wrap, isBrightness ? styles.wrapLeft : styles.wrapRight]} pointerEvents="none">
       <View style={styles.pill}>
-        <Ionicons name={percent === 0 ? 'volume-mute' : 'volume-medium'} size={18} color="#fff" />
+        <Ionicons name={icon} size={18} color="#fff" />
         <View style={styles.track}>
           <View style={[styles.fill, { width: fillWidth }]} />
         </View>
@@ -31,8 +43,13 @@ const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
     top: 72,
-    right: spacing.md,
     zIndex: 35,
+  },
+  wrapLeft: {
+    left: spacing.md,
+  },
+  wrapRight: {
+    right: spacing.md,
   },
   pill: {
     flexDirection: 'row',
