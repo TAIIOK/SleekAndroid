@@ -1,17 +1,29 @@
 import { useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import { SearchFilterSelect } from '@/components/search/SearchFilterSelect';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { isTvUi } from '@/lib/isTvUi';
 import {
-  SEARCH_YEAR_OPTIONS,
+  SEARCH_AGE_RATING_OPTIONS,
+  SEARCH_ANIME_STATUS_OPTIONS,
+  SEARCH_ANIME_TYPE_OPTIONS,
+  SEARCH_COUNTRY_OPTIONS,
+  SEARCH_LAMPA_STATUS_OPTIONS,
+  SEARCH_LANG_OPTIONS,
+  SEARCH_ORDER_OPTIONS,
+  SEARCH_RATING_MIN_OPTIONS,
+  SEARCH_SEASON_OPTIONS,
+  SEARCH_SORT_OPTIONS,
+  searchYearOptions,
   usesAnimeFilters,
+  usesLampaFilters,
+  type SearchFilterState,
   type SearchMediaFilter,
 } from '@/lib/searchConfig';
 
@@ -22,30 +34,43 @@ const MEDIA_OPTIONS: { id: SearchMediaFilter; label: string }[] = [
   { id: 'tv', label: 'Сериалы' },
 ];
 
+const YEAR_OPTIONS = searchYearOptions();
+
 interface SearchFiltersProps {
   media: SearchMediaFilter;
   onMediaChange: (value: SearchMediaFilter) => void;
-  genre: string;
-  onGenreChange: (value: string) => void;
-  year: string;
-  onYearChange: (value: string) => void;
-  genres: Array<{ id: number; name: string }>;
+  filters: SearchFilterState;
+  onFiltersChange: (patch: Partial<SearchFilterState>) => void;
+  genres: Array<{ id: number | string; name: string }>;
+  lampaGenres: Array<{ id: number | string; name: string }>;
 }
 
 export function SearchFilters({
   media,
   onMediaChange,
-  genre,
-  onGenreChange,
-  year,
-  onYearChange,
+  filters,
+  onFiltersChange,
   genres,
+  lampaGenres,
 }: SearchFiltersProps) {
   const showAnimeFilters = usesAnimeFilters(media);
+  const showLampaFilters = usesLampaFilters(media);
+  const set = (key: keyof SearchFilterState) => (value: string) =>
+    onFiltersChange({ [key]: value });
+
+  const animeGenreOptions = [
+    { value: '', label: 'Все жанры' },
+    ...genres.map((g) => ({ value: String(g.id), label: g.name })),
+  ];
+  const lampaGenreOptions = [
+    { value: '', label: 'Все жанры' },
+    ...lampaGenres.map((g) => ({ value: String(g.id), label: g.name })),
+  ];
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.row}>
+      <Text style={styles.sectionLabel}>Тип контента</Text>
+      <View style={styles.mediaRow}>
         {MEDIA_OPTIONS.map((option) => (
           <FilterChip
             key={option.id}
@@ -56,37 +81,107 @@ export function SearchFilters({
         ))}
       </View>
 
+      <Text style={styles.sectionLabel}>Общие</Text>
+      <View style={styles.grid}>
+        <SearchFilterSelect
+          label="Сортировка"
+          value={filters.sortBy}
+          onChange={set('sortBy')}
+          options={[...SEARCH_SORT_OPTIONS]}
+        />
+        <SearchFilterSelect
+          label="Порядок"
+          value={filters.order || 'desc'}
+          onChange={set('order')}
+          options={[...SEARCH_ORDER_OPTIONS]}
+        />
+        <SearchFilterSelect
+          label="Год"
+          value={filters.year}
+          onChange={set('year')}
+          options={YEAR_OPTIONS}
+        />
+      </View>
+
       {showAnimeFilters ? (
         <>
-          <Text style={styles.sectionLabel}>Жанр</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-            <FilterChip
-              label="Все жанры"
-              active={!genre}
-              onPress={() => onGenreChange('')}
+          <Text style={styles.sectionLabel}>Аниме</Text>
+          <View style={styles.grid}>
+            <SearchFilterSelect
+              label="Жанр"
+              value={filters.genre}
+              onChange={set('genre')}
+              options={animeGenreOptions}
             />
-            {genres.map((item) => (
-              <FilterChip
-                key={item.id}
-                label={item.name}
-                active={genre === String(item.id)}
-                onPress={() => onGenreChange(String(item.id))}
-              />
-            ))}
-          </ScrollView>
+            <SearchFilterSelect
+              label="Статус"
+              value={filters.status}
+              onChange={set('status')}
+              options={[...SEARCH_ANIME_STATUS_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Тип аниме"
+              value={filters.animeType}
+              onChange={set('animeType')}
+              options={[...SEARCH_ANIME_TYPE_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Сезон"
+              value={filters.season}
+              onChange={set('season')}
+              options={[...SEARCH_SEASON_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Возраст"
+              value={filters.ageRating}
+              onChange={set('ageRating')}
+              options={[...SEARCH_AGE_RATING_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Мин. рейтинг"
+              value={filters.ratingMin}
+              onChange={set('ratingMin')}
+              options={[...SEARCH_RATING_MIN_OPTIONS]}
+            />
+          </View>
+        </>
+      ) : null}
 
-          <Text style={styles.sectionLabel}>Год</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-            <FilterChip label="Любой" active={!year} onPress={() => onYearChange('')} />
-            {SEARCH_YEAR_OPTIONS.map((value) => (
-              <FilterChip
-                key={value}
-                label={value}
-                active={year === value}
-                onPress={() => onYearChange(value)}
-              />
-            ))}
-          </ScrollView>
+      {showLampaFilters ? (
+        <>
+          <Text style={styles.sectionLabel}>Фильмы и сериалы</Text>
+          <View style={styles.grid}>
+            <SearchFilterSelect
+              label="Жанр"
+              value={filters.lampaGenre}
+              onChange={set('lampaGenre')}
+              options={lampaGenreOptions}
+            />
+            <SearchFilterSelect
+              label="Статус"
+              value={filters.lampaStatus}
+              onChange={set('lampaStatus')}
+              options={[...SEARCH_LAMPA_STATUS_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Мин. рейтинг"
+              value={filters.lampaMinRating}
+              onChange={set('lampaMinRating')}
+              options={[...SEARCH_RATING_MIN_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Язык"
+              value={filters.lampaLang}
+              onChange={set('lampaLang')}
+              options={[...SEARCH_LANG_OPTIONS]}
+            />
+            <SearchFilterSelect
+              label="Страна"
+              value={filters.lampaCountry}
+              onChange={set('lampaCountry')}
+              options={[...SEARCH_COUNTRY_OPTIONS]}
+            />
+          </View>
         </>
       ) : null}
     </View>
@@ -116,7 +211,7 @@ function FilterChip({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
+  wrap: { gap: spacing.md },
   sectionLabel: {
     color: colors.textSecondary,
     fontSize: 12,
@@ -125,10 +220,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: spacing.xs,
   },
-  row: {
+  mediaRow: {
     flexDirection: 'row',
-    flexWrap: isTvUi() ? 'nowrap' : 'wrap',
+    flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
   },
   chip: {
     paddingHorizontal: spacing.md,

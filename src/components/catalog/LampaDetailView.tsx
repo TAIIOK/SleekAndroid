@@ -23,11 +23,9 @@ import {
 import { fetchLampaProgress } from '@/api/progress';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
-import { LampaDetailGenres } from '@/components/lampa/detail/LampaDetailGenres';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
 import { LampaDetailPlot } from '@/components/lampa/detail/LampaDetailPlot';
 import { LampaDetailSeasons } from '@/components/lampa/detail/LampaDetailSeasons';
-import { LampaDetailSidebar } from '@/components/lampa/detail/LampaDetailSidebar';
 import { LampaDetailSkeleton } from '@/components/lampa/detail/LampaDetailSkeleton';
 import { LampaSourceSheet } from '@/components/lampa/LampaSourceSheet';
 import { colors, layout, spacing } from '@/constants/aniverse';
@@ -260,25 +258,35 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           onToggleFavorite={onToggleFavorite}
         />
 
-        <View style={styles.stack}>
-          <LampaDetailPlot detail={detail} />
-          <LampaDetailGenres detail={detail} />
-          <LampaDetailSidebar detail={detail} isSerial={isSerial} />
-          <LampaDetailCast cast={cast} loading={castPending} />
-        </View>
-
+        {/* Seasons/episodes directly under hero; genres already in hero pills. */}
         {isSerial && seasons.length > 0 ? (
-          <View style={styles.stack}>
-            <LampaDetailSeasons
-              seasons={seasons}
-              tmdbId={tmdbId}
-              episodeProgressByKey={savedState?.episodeProgressByKey}
-              onSelectEpisode={onSelectEpisode}
-            />
-          </View>
+          <LampaDetailSeasons
+            seasons={seasons}
+            tmdbId={tmdbId}
+            episodeProgressByKey={savedState?.episodeProgressByKey}
+            onSelectEpisode={onSelectEpisode}
+          />
         ) : null}
 
-        <View style={styles.stack}>{relatedRails}</View>
+        {isTvUi() ? (
+          <View style={styles.stack}>
+            <View style={styles.wideGrid}>
+              <View style={styles.wideMain}>
+                <LampaDetailPlot detail={detail} />
+                <LampaDetailCast cast={cast} loading={castPending} />
+              </View>
+              <View style={styles.wideSide}>{relatedRails}</View>
+            </View>
+          </View>
+        ) : (
+          <>
+            <View style={styles.stack}>
+              <LampaDetailPlot detail={detail} />
+              <LampaDetailCast cast={cast} loading={castPending} />
+            </View>
+            <View style={styles.stack}>{relatedRails}</View>
+          </>
+        )}
       </ScrollView>
 
       <LampaSourceSheet
@@ -302,13 +310,33 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 0,
     padding: isTvUi() ? spacing.lg : spacing.md,
-    gap: spacing.md,
+    // Tighter gap under full-bleed hero so bottom fade blends into plot.
+    gap: isTvUi() ? spacing.sm : spacing.md,
     paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
   },
   stack: {
     width: '100%',
     flexDirection: 'column',
     alignItems: 'stretch',
+    gap: spacing.md,
+  },
+  wideGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.lg,
+  },
+  wideMain: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    gap: spacing.md,
+  },
+  wideSide: {
+    width: 300,
+    flexGrow: 0,
+    flexShrink: 0,
     gap: spacing.md,
   },
   loader: {

@@ -11,12 +11,24 @@ import {
 } from '@/api/catalog';
 import type { RailItem } from '@/components/catalog/PosterRail';
 import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
+import {
+  resolveHideAsianLiveAction,
+  shouldExcludeCjkFromLampaSection,
+  type CatalogHomeConfig,
+} from '@/lib/homeSettings';
 import { mapAnimeToRailItem } from '@/lib/poster';
 import type { TvHomeFeedSource } from '@/lib/tvHomeFeeds';
 
-export function useTvHomeFeedSource(source: TvHomeFeedSource) {
+export function useTvHomeFeedSource(
+  source: TvHomeFeedSource,
+  config?: CatalogHomeConfig,
+) {
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
   const router = useRouter();
+  const hideAsian = config ? resolveHideAsianLiveAction(config) : true;
+  const excludeCjk = source.lampaSection
+    ? shouldExcludeCjkFromLampaSection(source.lampaSection.endpoint, hideAsian)
+    : false;
 
   const query = useInfiniteQuery({
     queryKey: [
@@ -27,6 +39,7 @@ export function useTvHomeFeedSource(source: TvHomeFeedSource) {
       source.lampaSection?.endpoint,
       source.lampaSection?.fetch?.urlPath,
       pageSize,
+      excludeCjk,
     ],
     queryFn: async ({ pageParam }): Promise<AnimeListItem[] | LampaItem[]> => {
       if (source.kind === 'anime' && source.animePath) {
@@ -38,6 +51,7 @@ export function useTvHomeFeedSource(source: TvHomeFeedSource) {
           source.lampaSection,
           pageParam,
           pageSize,
+          { excludeCjk },
         );
       }
       return [];

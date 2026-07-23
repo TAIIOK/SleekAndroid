@@ -29,6 +29,7 @@ export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
       width,
       railStart,
       contentEntry,
+      pinVerticalFocus,
     },
     ref,
   ) {
@@ -46,6 +47,7 @@ export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
         variant={variant}
         railStart={railStart}
         contentEntry={contentEntry}
+        pinVerticalFocus={pinVerticalFocus}
       />
     );
   },

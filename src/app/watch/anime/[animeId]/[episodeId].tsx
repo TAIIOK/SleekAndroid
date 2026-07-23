@@ -9,6 +9,7 @@ import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { colors, spacing } from '@/constants/aniverse';
 import { useThrottledEpisodeProgress } from '@/hooks/useThrottledEpisodeProgress';
 import { useWatchEpisodeNavigation } from '@/hooks/useWatchEpisodeNavigation';
+import { saveAnimeLastDubbing } from '@/lib/animeLastDubbing';
 import {
   getQualityOptionsForDubbing,
   getUniqueDubbingOptions,
@@ -58,7 +59,20 @@ export default function WatchAnimeScreen() {
 
   const episode = episodesData?.episodes.find((e) => e.id === numericEpisodeId);
   const videos = episode?.video ?? [];
-  const episodeNav = useWatchEpisodeNavigation(numericAnimeId, numericEpisodeId);
+  const progressByEpisodeId = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const row of progressRows) {
+      if (typeof row.episodeId === 'number' && typeof row.progress === 'number') {
+        map[row.episodeId] = row.progress;
+      }
+    }
+    return map;
+  }, [progressRows]);
+  const episodeNav = useWatchEpisodeNavigation(
+    numericAnimeId,
+    numericEpisodeId,
+    progressByEpisodeId,
+  );
   const episodeOrdinal = episode?.ordinal ?? episode?.id;
 
   const dubbingOptionsList = useMemo(() => getUniqueDubbingOptions(videos), [videos]);
@@ -251,7 +265,11 @@ export default function WatchAnimeScreen() {
           id: label,
           label,
           selected: label === selectedDubbing,
-          onSelect: () => switchWithResume(() => setSelectedDubbing(label)),
+          onSelect: () =>
+            switchWithResume(() => {
+              setSelectedDubbing(label);
+              void saveAnimeLastDubbing(numericAnimeId, label);
+            }),
         }))
       : undefined;
 
@@ -266,41 +284,44 @@ export default function WatchAnimeScreen() {
       : undefined;
 
   return (
-    <VideoPlayer
-      src={src}
-      title={title}
-      subtitle={subtitle}
-      startTime={resumeTime}
-      startProgressFraction={resumeFraction}
-      skipSegments={skipSegments}
-      onBack={() => router.back()}
-      dubbingOptions={dubbingOptions}
-      qualityOptions={qualityOptions}
-      episodeNav={{
-        items: episodeNav.items,
-        currentEpisodeId: numericEpisodeId,
-        hasPrevious: episodeNav.hasPrevious,
-        hasNext: episodeNav.hasNext,
-        onPrevious: episodeNav.previous
-          ? () => navigateToEpisode(episodeNav.previous!.id)
-          : undefined,
-        onNext: episodeNav.next ? () => navigateToEpisode(episodeNav.next!.id) : undefined,
-        onSelect: (id) => {
-          if (id !== numericEpisodeId) navigateToEpisode(id);
-        },
-      }}
-      onAutoPlayNext={
-        episodeNav.next ? () => navigateToEpisode(episodeNav.next!.id) : undefined
-      }
-      onProgress={(current, duration) => {
-        playbackTimeRef.current = current;
-        syncProgress(current, duration);
-      }}
-    />
+    <View style={styles.playerRoot}>
+      <VideoPlayer
+        src={src}
+        title={title}
+        subtitle={subtitle}
+        startTime={resumeTime}
+        startProgressFraction={resumeFraction}
+        skipSegments={skipSegments}
+        onBack={() => router.back()}
+        dubbingOptions={dubbingOptions}
+        qualityOptions={qualityOptions}
+        episodeNav={{
+          items: episodeNav.items,
+          currentEpisodeId: numericEpisodeId,
+          hasPrevious: episodeNav.hasPrevious,
+          hasNext: episodeNav.hasNext,
+          onPrevious: episodeNav.previous
+            ? () => navigateToEpisode(episodeNav.previous!.id)
+            : undefined,
+          onNext: episodeNav.next ? () => navigateToEpisode(episodeNav.next!.id) : undefined,
+          onSelect: (id) => {
+            if (id !== numericEpisodeId) navigateToEpisode(id);
+          },
+        }}
+        onAutoPlayNext={
+          episodeNav.next ? () => navigateToEpisode(episodeNav.next!.id) : undefined
+        }
+        onProgress={(current, duration) => {
+          playbackTimeRef.current = current;
+          syncProgress(current, duration);
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  playerRoot: { flex: 1, backgroundColor: '#000' },
   loader: {
     flex: 1,
     alignItems: 'center',

@@ -108,6 +108,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const sidebarFocusCountRef = useRef(0);
   const closeMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitLeft = useArmedExitFlag();
   const exitUp = useArmedExitFlag();
 
@@ -118,16 +119,25 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearOpenMenuTimer = useCallback(() => {
+    if (openMenuTimerRef.current != null) {
+      clearTimeout(openMenuTimerRef.current);
+      openMenuTimerRef.current = null;
+    }
+  }, []);
+
   const openMenu = useCallback(() => {
     clearCloseMenuTimer();
+    clearOpenMenuTimer();
     setMenuOpen(true);
-  }, [clearCloseMenuTimer]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer]);
 
   const closeMenu = useCallback(() => {
     clearCloseMenuTimer();
+    clearOpenMenuTimer();
     sidebarFocusCountRef.current = 0;
     setMenuOpen(false);
-  }, [clearCloseMenuTimer]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer]);
 
   const setSidebarFocused = useCallback(
     (focused: boolean) => {
@@ -135,10 +145,19 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       sidebarFocusCountRef.current = next;
       if (next > 0) {
         clearCloseMenuTimer();
-        setMenuOpen(true);
+        // Delay open so transient focus during detail remount does not flash the overlay.
+        // Intentional Left/Up uses focusSidebarAfterOpen (immediate).
+        clearOpenMenuTimer();
+        openMenuTimerRef.current = setTimeout(() => {
+          openMenuTimerRef.current = null;
+          if (sidebarFocusCountRef.current > 0) {
+            setMenuOpen(true);
+          }
+        }, 50);
         return;
       }
       // Blur→focus between nav rows is sequential; delay close so the menu does not flicker.
+      clearOpenMenuTimer();
       clearCloseMenuTimer();
       closeMenuTimerRef.current = setTimeout(() => {
         closeMenuTimerRef.current = null;
@@ -147,7 +166,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
         }
       }, 80);
     },
-    [clearCloseMenuTimer],
+    [clearCloseMenuTimer, clearOpenMenuTimer],
   );
 
   const registerSidebarAnchor = useCallback((node: unknown) => {
@@ -166,6 +185,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
   /** Open overlay first, then focus after layout — off-screen/hidden anchors reject focus. */
   const focusSidebarAfterOpen = useCallback(() => {
     clearCloseMenuTimer();
+    clearOpenMenuTimer();
     setMenuOpen(true);
     const focus = () => hostRef.current?.requestTVFocus?.();
     focus();
@@ -173,7 +193,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       focus();
       requestAnimationFrame(focus);
     });
-  }, [clearCloseMenuTimer]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer]);
 
   const requestSidebarFocus = useCallback(() => {
     focusSidebarAfterOpen();
@@ -183,10 +203,11 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
     exitLeft.reset();
     exitUp.reset();
     clearCloseMenuTimer();
+    clearOpenMenuTimer();
     sidebarFocusCountRef.current = 0;
     setMenuOpen(false);
     setContentNativeTag(undefined);
-  }, [clearCloseMenuTimer, exitLeft.reset, exitUp.reset]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer, exitLeft.reset, exitUp.reset]);
 
   useTvEventHandlerSafe((event) => {
     // rn-tvos Android defaults to key-up HW events. Skip key-down if both fire.

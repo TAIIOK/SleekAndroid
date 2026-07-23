@@ -1,31 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { findNodeHandle, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { createDeviceAuthSession, pollDeviceAuthSession } from '@/api/auth';
 import { QrCodeMatrix } from '@/components/auth/QrCodeMatrix';
-import { colors, spacing } from '@/constants/aniverse';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing } from '@/constants/aniverse';
 import { getOrCreateDeviceId } from '@/lib/storage';
 import { isTvUi } from '@/lib/isTvUi';
 
 interface DeviceQrLoginProps {
   onAuthenticated: () => void;
+  /** Native tag of the refresh control — for `nextFocusDown` from login mode tabs. */
+  onRefreshNativeTag?: (tag: number | undefined) => void;
 }
 
 const QR_SIZE = isTvUi() ? 168 : 200;
+const isTv = isTvUi();
 
-export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
+export function DeviceQrLogin({ onAuthenticated, onRefreshNativeTag }: DeviceQrLoginProps) {
   const [code, setCode] = useState<string | null>(null);
   const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionKey, setSessionKey] = useState(0);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshHostRef = useRef<{ requestTVFocus?: () => void } | null>(null);
   const onAuthenticatedRef = useRef(onAuthenticated);
   onAuthenticatedRef.current = onAuthenticated;
+  const showRefresh = Boolean(error) || isTv;
 
   const refreshSession = useCallback(() => {
     setSessionKey((k) => k + 1);
   }, []);
+
+  useEffect(() => {
+    if (!error || !isTv) return;
+    const id = requestAnimationFrame(() => {
+      refreshHostRef.current?.requestTVFocus?.();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [error, sessionKey]);
+
+  useEffect(() => {
+    return () => onRefreshNativeTag?.(undefined);
+  }, [onRefreshNativeTag]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,10 +120,20 @@ export function DeviceQrLogin({ onAuthenticated }: DeviceQrLoginProps) {
         </Text>
         {code ? <Text style={styles.code}>{code}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {error ? (
-          <Pressable onPress={refreshSession} style={styles.refreshBtn}>
+        {showRefresh ? (
+          <TvFocusable
+            onPress={refreshSession}
+            hasTVPreferredFocus={isTv && Boolean(error)}
+            style={styles.refreshBtn}
+            focusedStyle={styles.refreshBtnFocused}
+            hostRef={(node) => {
+              refreshHostRef.current = node as unknown as { requestTVFocus?: () => void } | null;
+              const tag = node ? findNodeHandle(node) ?? undefined : undefined;
+              onRefreshNativeTag?.(tag);
+            }}
+          >
             <Text style={styles.refreshText}>Обновить QR</Text>
-          </Pressable>
+          </TvFocusable>
         ) : null}
         {loading ? <Text style={styles.subtitle}>Генерация кода…</Text> : null}
       </View>
@@ -158,11 +186,17 @@ const styles = StyleSheet.create({
   },
   refreshBtn: {
     alignSelf: 'flex-start',
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    marginTop: spacing.xs,
+  },
+  refreshBtnFocused: {
+    backgroundColor: 'rgba(195,192,255,0.16)',
   },
   refreshText: {
     color: colors.brand,
-    fontSize: 15,
+    fontSize: isTv ? 17 : 15,
     fontWeight: '600',
   },
 });

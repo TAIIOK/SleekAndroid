@@ -67,10 +67,23 @@ export function lampaPosterPath(item: {
   );
 }
 
+/** Pick a non-empty anime title (API sometimes sends "" instead of omitting). */
+export function animeTitle(item: {
+  title?: unknown;
+  name?: unknown;
+  originalTitle?: unknown;
+  original_title?: unknown;
+}): string {
+  for (const value of [item.title, item.name, item.originalTitle, item.original_title]) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return 'Без названия';
+}
+
 export function mapAnimeToRailItem(item: AnimeListItem) {
   return {
     id: item.id,
-    title: item.title ?? 'Без названия',
+    title: animeTitle(item),
     poster: animePosterForRail(item),
     score: item.score,
   };

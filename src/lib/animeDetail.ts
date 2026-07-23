@@ -114,6 +114,58 @@ export function getUniqueDubbingOptions(videos: AnimeVideo[]): string[] {
   return result;
 }
 
+export interface AnimeInfoRow {
+  title: string;
+  value: string;
+}
+
+export function buildAnimeInfoRows(
+  detail: AnimeDetail,
+  episodesTotal?: number,
+): AnimeInfoRow[] {
+  const rows: AnimeInfoRow[] = [];
+
+  const typeLabel = localizedAnimeType(detail.type);
+  if (typeLabel) rows.push({ title: 'Тип', value: typeLabel });
+
+  const status = detail.status ? localizedAnimeStatus(detail.status) : undefined;
+  if (status) rows.push({ title: 'Статус', value: status });
+
+  if (detail.year) rows.push({ title: 'Год', value: String(detail.year) });
+
+  const studio = animeStudioName(detail);
+  if (studio) rows.push({ title: 'Студия', value: studio });
+
+  if (detail.ageRating?.trim()) {
+    rows.push({ title: 'Возраст', value: detail.ageRating.trim() });
+  }
+
+  const score = animeScore(detail);
+  if (score != null) rows.push({ title: 'Рейтинг', value: score.toFixed(1) });
+
+  const resolvedEpisodesTotal =
+    episodesTotal ??
+    (detail.episodesTotal != null && detail.episodesTotal > 0
+      ? detail.episodesTotal
+      : undefined);
+  if (resolvedEpisodesTotal != null) {
+    rows.push({ title: 'Эпизоды', value: String(resolvedEpisodesTotal) });
+  }
+
+  const genres = animeGenreNames(detail.genres);
+  if (genres.length) rows.push({ title: 'Жанры', value: genres.slice(0, 4).join(', ') });
+
+  return rows;
+}
+
+/** Meta rows for hero (genres already shown as chips). */
+export function buildAnimeHeroInfoRows(
+  detail: AnimeDetail,
+  episodesTotal?: number,
+): AnimeInfoRow[] {
+  return buildAnimeInfoRows(detail, episodesTotal).filter((row) => row.title !== 'Жанры');
+}
+
 export function isRecommendationRelation(relationType?: string): boolean {
   const n = (relationType ?? '').toLowerCase();
   return n.includes('recommend') || n.includes('рекомен');

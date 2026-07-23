@@ -26,6 +26,7 @@ import {
   type LampaConnectionMode,
   type LampaDeliveryMode,
 } from '@/lib/lampaPlaybackOptions';
+import { saveLampaLastSelection } from '@/lib/lampaLastSelection';
 import {
   isEpisodeCompleted,
   lampaResumeProgress,
@@ -37,7 +38,12 @@ import {
   parseLampaEpisodeNavId,
 } from '@/lib/watchStore';
 import { useAuth } from '@/providers/AuthProvider';
-import { fetchVideoLinks, type WatchHubVideoLink } from '@/services/watchHub';
+import {
+  fetchTranslators,
+  fetchVideoLinks,
+  type WatchHubTranslator,
+  type WatchHubVideoLink,
+} from '@/services/watchHub';
 
 export default function WatchLampaScreen() {
   const router = useRouter();
@@ -50,6 +56,9 @@ export default function WatchLampaScreen() {
   );
   const [season, setSeason] = useState<number | undefined>(() => payload?.season);
   const [episode, setEpisode] = useState<number | undefined>(() => payload?.episode);
+  const [translatorId, setTranslatorId] = useState<number | undefined>(
+    () => payload?.translatorId,
+  );
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
 
@@ -76,13 +85,23 @@ export default function WatchLampaScreen() {
 
   const lampaId = payload?.lampaId?.trim() ?? '';
   const isSerial = payload?.lampaKind === 'tv';
+  const taskId = payload?.taskId?.trim() ?? '';
+  const sourceId = payload?.sourceId?.trim() ?? '';
+  const canLoadTranslators = Boolean(taskId && sourceId);
   const canNavigateEpisodes = Boolean(
     isSerial &&
-      payload?.taskId &&
-      payload?.sourceId &&
-      payload?.translatorId != null &&
-      (payload.seasons?.length ?? 0) > 0,
+      taskId &&
+      sourceId &&
+      translatorId != null &&
+      (payload?.seasons?.length ?? 0) > 0,
   );
+
+  const { data: lampaTranslators = [] } = useQuery({
+    queryKey: ['lampa-watch-translators', taskId, sourceId],
+    queryFn: () => fetchTranslators(taskId, sourceId),
+    enabled: canLoadTranslators,
+    staleTime: 120_000,
+  });
 
   useEffect(() => {
     httpFallbackTriedRef.current = false;
@@ -226,9 +245,11 @@ export default function WatchLampaScreen() {
         id: lampaEpisodeNavId(ep.season, ep.episode),
         season: ep.season,
         episode: ep.episode,
+        number: ep.episode,
+        title: ep.title?.trim() || undefined,
         label:
           payload.seasons!.length > 1
-            ? `S${ep.season}E${ep.episode} · ${ep.title}`
+            ? `S${ep.season}E${ep.episode}${ep.title?.trim() ? ` · ${ep.title}` : ''}`
             : ep.title?.trim()
               ? `Эп. ${ep.episode} · ${ep.title}`
               : `Эпизод ${ep.episode}`,
@@ -249,9 +270,64 @@ export default function WatchLampaScreen() {
       ? episodeItems[currentEpisodeIndex + 1]
       : undefined;
 
+  const persistTranslatorChoice = useCallback(
+    (translator: WatchHubTranslator) => {
+      const mediaId = lampaId.trim();
+      if (!mediaId) return;
+      const dubId = translator.name?.trim() || String(translator.id);
+      void saveLampaLastSelection(mediaId, {
+        sourceId: sourceId || mediaId,
+        seasonNumber: season ?? 1,
+        dubId,
+      });
+    },
+    [lampaId, sourceId, season],
+  );
+
+  const switchLampaTranslator = useCallback(
+    async (translator: WatchHubTranslator) => {
+      if (!taskId || !sourceId) {
+        setSwitchError('Нет контекста WatchHub для смены озвучки');
+        return;
+      }
+      if (translator.id === translatorId) return;
+      if (switchingEpisode) return;
+
+      if (playbackTimeRef.current > 0) {
+        setResumeTime(playbackTimeRef.current);
+        setResumeFraction(undefined);
+      }
+
+      setSwitchingEpisode(true);
+      setSwitchError(null);
+      try {
+        const links = await fetchVideoLinks({
+          taskId,
+          sourceId,
+          translatorId: translator.id,
+          season,
+          episode,
+        });
+        if (!links.length) {
+          setSwitchError('Для этой озвучки нет ссылки на текущий эпизод');
+          return;
+        }
+        hasSwitchedEpisodeRef.current = true;
+        setLampaLinks(links);
+        setTranslatorId(translator.id);
+        persistTranslatorChoice(translator);
+      } catch (e) {
+        setSwitchError(e instanceof Error ? e.message : 'Ошибка смены озвучки');
+      } finally {
+        setSwitchingEpisode(false);
+      }
+    },
+    [taskId, sourceId, translatorId, switchingEpisode, season, episode, persistTranslatorChoice],
+  );
+
   const navigateToEpisode = useCallback(
     async (nextSeason: number, nextEpisodeNum: number) => {
-      if (!payload?.taskId || !payload.sourceId || payload.translatorId == null) return;
+      if (!taskId || !sourceId || translatorId == null) return;
       if (nextSeason === season && nextEpisodeNum === episode) return;
       if (switchingEpisode) return;
 
@@ -260,9 +336,9 @@ export default function WatchLampaScreen() {
       setSwitchError(null);
       try {
         const links = await fetchVideoLinks({
-          taskId: payload.taskId,
-          sourceId: payload.sourceId,
-          translatorId: payload.translatorId,
+          taskId,
+          sourceId,
+          translatorId,
           season: nextSeason,
           episode: nextEpisodeNum,
         });
@@ -280,13 +356,19 @@ export default function WatchLampaScreen() {
         setSwitchingEpisode(false);
       }
     },
-    [payload, season, episode, switchingEpisode, flushProgress],
+    [taskId, sourceId, translatorId, season, episode, switchingEpisode, flushProgress],
   );
 
   const episodeNav: PlayerEpisodeNav | undefined = useMemo(() => {
     if (!canNavigateEpisodes || episodeItems.length < 2) return undefined;
     return {
-      items: episodeItems.map(({ id, label }) => ({ id, label })),
+      items: episodeItems.map(({ id, label, season: s, number: n, episode: epNum, title }) => ({
+        id,
+        label,
+        season: s,
+        number: n,
+        title: title?.trim() || `Эпизод ${epNum}`,
+      })),
       currentEpisodeId:
         season != null && episode != null ? lampaEpisodeNavId(season, episode) : undefined,
       hasPrevious: Boolean(previousEpisode),
@@ -359,6 +441,21 @@ export default function WatchLampaScreen() {
     );
   }
 
+  const dubbingOptions =
+    canLoadTranslators && lampaTranslators.length > 1
+      ? lampaTranslators.map((translator) => {
+          const label = translator.name?.trim() || `Озвучка ${translator.id}`;
+          return {
+            id: String(translator.id),
+            label,
+            selected: translator.id === translatorId,
+            onSelect: () => {
+              void switchLampaTranslator(translator);
+            },
+          };
+        })
+      : undefined;
+
   const qualityOptions =
     qualityOptionsList.length > 1
       ? qualityOptionsList.map((label) => ({
@@ -410,6 +507,7 @@ export default function WatchLampaScreen() {
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
         onBack={() => router.back()}
+        dubbingOptions={dubbingOptions}
         qualityOptions={qualityOptions}
         connectionOptions={connectionOptions}
         deliveryOptions={deliveryOptions}

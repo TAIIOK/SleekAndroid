@@ -26,6 +26,8 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 - [x] Plot section with expandable description
 - [x] Episodes list with progress + load more
 - [x] Sidebar meta (status, year, studio, age, rating, episode count)
+- [x] Hero surfaces key meta; avoid duplicate meta-only sidebar when hero already shows it (see `detail_desktop_hero.md`)
+- [x] Episodes section voiceover selector when multiple dubbings (see `anime_detail_dubbing_selector.md`)
 - [x] Related rails: Похожие + Рекомендации
 - [x] Characters horizontal rail (name, image, role)
 - [x] Dubbing/quality selection still feeds watch navigation
@@ -41,6 +43,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 - [x] Plot / overview section
 - [x] Serials: seasons + episode list; selecting episode opens sheet with S/E
 - [x] Sidebar info rows (type, premiere, runtime, status, seasons, genres)
+- [x] Hero surfaces key info rows; related sidebar only for movies when related present (see `detail_desktop_hero.md`)
 - [x] Similar + Recommendations rails via WatchHub TMDB
 - [x] Movies: franchise «Связанные» rail via TMDB collection
 - [x] Cast rail via TMDB credits

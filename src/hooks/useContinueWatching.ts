@@ -19,36 +19,51 @@ const CONTINUE_WATCHING_LIMIT = isTvUi() ? 10 : 40;
 export function useContinueWatching() {
   const { isAuthenticated } = useAuth();
 
-  const { data: savedAnime = [] } = useQuery({
+  const savedAnimeQuery = useQuery({
     queryKey: ['library-anime', 'include-anime'],
     queryFn: fetchSavedAnimeLibrary,
     enabled: isAuthenticated,
   });
 
-  const { data: savedLampa = [] } = useQuery({
+  const savedLampaQuery = useQuery({
     queryKey: ['library-lampa', 'include-lampa'],
     queryFn: fetchSavedLampaLibrary,
     enabled: isAuthenticated,
   });
 
-  const { data: animeProgress = [] } = useQuery({
+  const animeProgressQuery = useQuery({
     queryKey: ['anime-progress'],
     queryFn: () => fetchAnimeProgress(),
     enabled: isAuthenticated,
   });
 
-  const { data: lampaProgress = [] } = useQuery({
+  const lampaProgressQuery = useQuery({
     queryKey: ['lampa-progress'],
     queryFn: () => fetchLampaProgress(),
     enabled: isAuthenticated,
   });
 
-  const { data: historyFeed = [] } = useQuery({
+  const historyFeedQuery = useQuery({
     queryKey: ['history-feed'],
     queryFn: fetchActivityHistory,
     enabled: isAuthenticated,
     staleTime: 60_000,
   });
+
+  const savedAnime = savedAnimeQuery.data ?? [];
+  const savedLampa = savedLampaQuery.data ?? [];
+  const animeProgress = animeProgressQuery.data ?? [];
+  const lampaProgress = lampaProgressQuery.data ?? [];
+  const historyFeed = historyFeedQuery.data ?? [];
+
+  /** True once continue sources settled (or user is logged out). */
+  const ready =
+    !isAuthenticated ||
+    (savedAnimeQuery.isFetched &&
+      savedLampaQuery.isFetched &&
+      animeProgressQuery.isFetched &&
+      lampaProgressQuery.isFetched &&
+      historyFeedQuery.isFetched);
 
   const continueBase = useMemo(() => {
     const items = buildContinueWatchingItems(
@@ -95,5 +110,5 @@ export function useContinueWatching() {
     [continueBase, ordinalByEpisodeId],
   );
 
-  return { items, isAuthenticated };
+  return { items, isAuthenticated, ready };
 }

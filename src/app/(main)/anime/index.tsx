@@ -12,6 +12,7 @@ import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
+import { useTvCatalogScrollRestore } from '@/hooks/useTvCatalogScrollRestore';
 import { colors, spacing } from '@/constants/aniverse';
 import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
 import { mapAnimeToRailItem } from '@/lib/poster';
@@ -22,6 +23,7 @@ import { isTvUi } from '@/lib/isTvUi';
 export default function AnimeBrowseScreen() {
   const router = useRouter();
   const { config, ready } = useHomeCatalogConfig();
+  const catalogScroll = useTvCatalogScrollRestore('/anime');
   const seasonal = useMemo(() => currentSeasonalShowcase(), []);
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
 
@@ -48,8 +50,11 @@ export default function AnimeBrowseScreen() {
 
   return (
     <ScrollView
+      ref={catalogScroll.scrollRef}
       style={styles.scroll}
       contentContainerStyle={styles.content}
+      onScroll={catalogScroll.onScroll}
+      scrollEventThrottle={16}
       {...tvVerticalCatalogScrollProps}
     >
       {isTvUi() ? <SectionHeader title="Аниме" showAccent tvFocusEntry /> : null}
@@ -64,9 +69,11 @@ export default function AnimeBrowseScreen() {
           onLoadMore={() => {
             void fetchNextPage();
           }}
+          restorePath="/anime"
+          restoreRailKey={`seasonal:${seasonal.path}`}
         />
       </LazyCatalogRail>
-      {ready ? <AnimeCatalogRails config={config} /> : null}
+      {ready ? <AnimeCatalogRails config={config} restorePath="/anime" /> : null}
     </ScrollView>
   );
 }

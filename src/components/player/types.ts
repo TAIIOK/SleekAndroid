@@ -13,6 +13,20 @@ export interface PlayerMenuOption {
 export interface PlayerEpisodeNavItem {
   id: number;
   label: string;
+  /** Season number when grouping episodes (Lampa / multi-season). */
+  season?: number;
+  /** Display episode number inside a season (defaults to list index + 1). */
+  number?: number;
+  /** Short title for Netflix-style cards (falls back to label). */
+  title?: string;
+  /** Episode still / thumbnail URL. */
+  thumbnail?: string;
+  /** Short synopsis for the card. */
+  overview?: string;
+  /** Runtime in seconds. */
+  durationSec?: number;
+  /** Watch progress 0–1. */
+  progress?: number;
 }
 
 export interface PlayerEpisodeNav {

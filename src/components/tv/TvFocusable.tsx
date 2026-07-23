@@ -25,6 +25,12 @@ interface TvFocusableProps {
   railStart?: boolean;
   /** Top content entry — Up jumps to the TV sidebar. */
   contentEntry?: boolean;
+  /** Access the underlying Pressable (e.g. `requestTVFocus` / `findNodeHandle`). */
+  hostRef?: (node: View | null) => void;
+  nextFocusDown?: number;
+  nextFocusUp?: number;
+  nextFocusLeft?: number;
+  nextFocusRight?: number;
 }
 
 /** TV-friendly brand focus ring (lavender + wash). */
@@ -39,6 +45,11 @@ export function TvFocusable({
   hasTVPreferredFocus,
   railStart = false,
   contentEntry = false,
+  hostRef,
+  nextFocusDown,
+  nextFocusUp,
+  nextFocusLeft,
+  nextFocusRight,
 }: TvFocusableProps) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
@@ -46,11 +57,14 @@ export function TvFocusable({
   const exitLeft = isTvUi() && railStart;
   const exitUp = isTvUi() && contentEntry;
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
+  const pinnedLeft = nextFocusLeft ?? sidebarTag;
 
   return (
     <Pressable
       ref={(node) => {
-        pressableRef.current = node as unknown as View | null;
+        const view = node as unknown as View | null;
+        pressableRef.current = view;
+        hostRef?.(view);
       }}
       disabled={disabled}
       focusable={!disabled}
@@ -73,7 +87,10 @@ export function TvFocusable({
       }}
       hasTVPreferredFocus={hasTVPreferredFocus && !disabled}
       // Pin Left to the sidebar so Android does not 2D-search across the page.
-      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
+      {...(pinnedLeft != null ? { nextFocusLeft: pinnedLeft } : {})}
+      {...(nextFocusDown != null ? { nextFocusDown } : {})}
+      {...(nextFocusUp != null ? { nextFocusUp } : {})}
+      {...(nextFocusRight != null ? { nextFocusRight } : {})}
       // Caller styles first; focused chrome must win (chips/options set their own border/bg).
       style={[styles.base, style, focused && styles.focused, focused && focusedStyle]}
     >

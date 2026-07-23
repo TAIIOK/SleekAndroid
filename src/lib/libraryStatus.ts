@@ -5,12 +5,16 @@ export type UserListStatus =
   | 'dropped'
   | 'on_hold';
 
-export const LIBRARY_STATUS_OPTIONS: { value: UserListStatus; label: string }[] = [
-  { value: 'watching', label: 'Смотрю' },
-  { value: 'planned', label: 'В планах' },
-  { value: 'completed', label: 'Просмотрено' },
-  { value: 'dropped', label: 'Брошено' },
-  { value: 'on_hold', label: 'Отложено' },
+export const LIBRARY_STATUS_OPTIONS: {
+  value: UserListStatus;
+  label: string;
+  icon: string;
+}[] = [
+  { value: 'watching', label: 'Смотрю', icon: '▶' },
+  { value: 'planned', label: 'В планах', icon: '☐' },
+  { value: 'completed', label: 'Просмотрено', icon: '✓' },
+  { value: 'dropped', label: 'Брошено', icon: '✕' },
+  { value: 'on_hold', label: 'Отложено', icon: '⏸' },
 ];
 
 export function libraryStatusLabel(status?: string): string | undefined {

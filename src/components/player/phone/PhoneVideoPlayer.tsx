@@ -244,6 +244,8 @@ export function PhoneVideoPlayer({
           controls={false}
           playInBackground={false}
           ignoreSilentSwitch="ignore"
+          fullscreenAutorotate
+          fullscreenOrientation="landscape"
           onLoad={engine.onLoad}
           onProgress={engine.onProgress}
           onEnd={engine.onEnd}
@@ -276,7 +278,17 @@ export function PhoneVideoPlayer({
       ) : null}
 
       {controlsVisible || !engine.playing ? (
-        <View style={[styles.hud, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
+        <View
+          style={[
+            styles.hud,
+            {
+              paddingTop: Math.max(insets.top, 8),
+              paddingBottom: Math.max(insets.bottom, 12),
+              paddingLeft: Math.max(insets.left, spacing.md),
+              paddingRight: Math.max(insets.right, spacing.md),
+            },
+          ]}
+        >
           <View style={styles.topRow}>
             <Pressable onPress={onBack} style={styles.backBtn}>
               <Text style={styles.chipText}>←</Text>
@@ -529,17 +541,18 @@ function ScrubBar({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  video: { flex: 1, width: '100%', height: '100%' },
+  video: {
+    ...StyleSheet.absoluteFillObject,
+  },
   center: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
   hud: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between',
     backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: spacing.md,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   backBtn: {

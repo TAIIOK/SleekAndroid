@@ -328,6 +328,14 @@ export interface LampaInfoRow {
   value: string;
 }
 
+/** Meta rows for hero (genres shown as chips elsewhere). */
+export function buildLampaHeroInfoRows(
+  detail: LampaDetail,
+  isSerial: boolean,
+): LampaInfoRow[] {
+  return buildLampaInfoRows(detail, isSerial).filter((row) => row.title !== 'Жанры');
+}
+
 export function buildLampaInfoRows(detail: LampaDetail, isSerial: boolean): LampaInfoRow[] {
   const rows: LampaInfoRow[] = [{ title: 'Тип', value: lampaKindLabel(detail.kind) }];
 

@@ -6,6 +6,7 @@ import {
   View,
 } from 'react-native';
 
+import { AnimeDubbingSelector } from '@/components/anime/AnimeDubbingSelector';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import {
@@ -29,6 +30,11 @@ interface AnimeDetailEpisodesProps {
   onLoadMore?: () => void;
   progressByEpisodeId?: Record<number, number>;
   onPlay: (episode: AnimeEpisode) => void;
+  dubbingOptions?: string[];
+  selectedDubbing?: string;
+  watchedDubbing?: string | null;
+  onSelectDubbing?: (value: string) => void;
+  filteredEmptyWhileLoading?: boolean;
 }
 
 export function AnimeDetailEpisodes({
@@ -39,17 +45,46 @@ export function AnimeDetailEpisodes({
   onLoadMore,
   progressByEpisodeId = {},
   onPlay,
+  dubbingOptions = [],
+  selectedDubbing = '',
+  watchedDubbing,
+  onSelectDubbing,
+  filteredEmptyWhileLoading,
 }: AnimeDetailEpisodesProps) {
+  const header = (
+    <View style={styles.header}>
+      <Text style={styles.title}>Сезоны и серии</Text>
+      {dubbingOptions.length > 1 && onSelectDubbing ? (
+        <AnimeDubbingSelector
+          options={dubbingOptions}
+          selected={selectedDubbing}
+          watchedOption={watchedDubbing}
+          onSelect={onSelectDubbing}
+        />
+      ) : null}
+    </View>
+  );
+
   if (isLoading && !episodes.length) {
     return (
       <View style={styles.section}>
-        <Text style={styles.title}>Сезоны и серии</Text>
+        {header}
         <Text style={styles.meta}>Загрузка эпизодов…</Text>
       </View>
     );
   }
 
-  if (!episodes.length) return null;
+  if (!episodes.length) {
+    if (filteredEmptyWhileLoading) {
+      return (
+        <View style={styles.section}>
+          {header}
+          <Text style={styles.meta}>Загрузка эпизодов…</Text>
+        </View>
+      );
+    }
+    return null;
+  }
 
   const cards = episodes.map((episode, index) => {
     const progress = progressByEpisodeId[episode.id] ?? 0;
@@ -124,7 +159,7 @@ export function AnimeDetailEpisodes({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.title}>Сезоны и серии</Text>
+      {header}
       {isTvUi() ? (
         // Plain column — nested ScrollView inside the page ScrollView was overlapping
         // sibling rails ("Похожее") on Android TV when the hero had no poster.
@@ -150,6 +185,13 @@ export function AnimeDetailEpisodes({
 
 const styles = StyleSheet.create({
   section: { gap: spacing.sm },
+  header: {
+    flexDirection: isTvUi() ? 'row' : 'column',
+    alignItems: isTvUi() ? 'center' : 'stretch',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
   title: {
     color: colors.brand,
     fontSize: isTvUi() ? 20 : 16,

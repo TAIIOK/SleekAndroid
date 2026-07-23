@@ -29,9 +29,11 @@ import type { CatalogHomeConfig } from '@/types/homeConfig';
 function AnimeShowcaseRail({
   showcase,
   onItemPress,
+  restorePath,
 }: {
   showcase: CatalogShowcase;
   onItemPress: (item: RailItem) => void;
+  restorePath?: string;
 }) {
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
   const {
@@ -69,6 +71,8 @@ function AnimeShowcaseRail({
       onLoadMore={() => {
         void fetchNextPage();
       }}
+      restorePath={restorePath}
+      restoreRailKey={`anime:${showcase.id}`}
     />
   );
 }
@@ -79,12 +83,14 @@ function AnimeRecommendationRails({
   onItemPress,
   forHome = false,
   continueWatchingDedupe,
+  restorePath,
 }: {
   enabledShowcaseIds: string[];
   showcases: CatalogShowcase[];
   onItemPress: (item: RailItem) => void;
   forHome?: boolean;
   continueWatchingDedupe?: ContinueWatchingDedupeKeys;
+  restorePath?: string;
 }) {
   const { ref, active, onLayoutCheck } = useNearViewport();
   const feedSectionIds = useMemo(
@@ -155,6 +161,8 @@ function AnimeRecommendationRails({
             title={section.title}
             items={section.items.map(mapAnimeToRailItem)}
             onItemPress={onItemPress}
+            restorePath={restorePath}
+            restoreRailKey={`anime:rec:${section.id}`}
           />
         </LazyCatalogRail>
       ))}
@@ -166,12 +174,14 @@ interface AnimeCatalogRailsProps {
   config: CatalogHomeConfig;
   forHome?: boolean;
   continueWatchingDedupe?: ContinueWatchingDedupeKeys;
+  restorePath?: string;
 }
 
 export function AnimeCatalogRails({
   config,
   forHome = false,
   continueWatchingDedupe,
+  restorePath,
 }: AnimeCatalogRailsProps) {
   const router = useRouter();
   const { data: animeCat, isLoading } = useQuery({
@@ -224,10 +234,15 @@ export function AnimeCatalogRails({
         onItemPress={openAnime}
         forHome={forHome}
         continueWatchingDedupe={continueWatchingDedupe}
+        restorePath={restorePath}
       />
       {regularShowcases.map((showcase) => (
         <LazyCatalogRail key={showcase.id}>
-          <AnimeShowcaseRail showcase={showcase} onItemPress={openAnime} />
+          <AnimeShowcaseRail
+            showcase={showcase}
+            onItemPress={openAnime}
+            restorePath={restorePath}
+          />
         </LazyCatalogRail>
       ))}
       {customSections.map((section) => (
@@ -235,6 +250,7 @@ export function AnimeCatalogRails({
           <AnimeShowcaseRail
             showcase={{ id: section.id, name: section.title, path: section.path }}
             onItemPress={openAnime}
+            restorePath={restorePath}
           />
         </LazyCatalogRail>
       ))}

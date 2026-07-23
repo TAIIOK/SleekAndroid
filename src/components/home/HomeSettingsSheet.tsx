@@ -175,6 +175,19 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
               ))}
             </Section>
 
+            <Section title="Фильтры лент">
+              <ToggleRow
+                label="Скрыть азиатский live-action"
+                value={effectiveDraft.hideAsianLiveAction !== false}
+                onValueChange={(enabled) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    hideAsianLiveAction: enabled,
+                  }))
+                }
+              />
+            </Section>
+
             {effectiveDraft.enabledContentTypes.includes('anime') ? (
               <Section title="Аниме-витрины">
                 {(animeCat?.showcases ?? []).map((showcase) => (

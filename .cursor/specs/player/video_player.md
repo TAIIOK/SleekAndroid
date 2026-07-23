@@ -48,6 +48,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Custom HUD (not only native controls): transport, timeline scrub, back
 - [x] Gestures: tap play/pause, horizontal seek; volume via player.volume when gesture applies
 - [x] Sheets for dubbing/quality/episodes/settings/external player (shared prefs)
+- [x] Watch opens immersive fullscreen on phone: landscape lock, status/nav bars hidden, video fills the screen (no AppShell chrome)
 
 ### Anime watch
 
@@ -59,10 +60,12 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 ### Lampa watch
 
 - [x] In-player quality / connection / delivery from WatchHub links
+- [x] In-player озвучка (translator) when multiple translators; switch keeps time (see `episode_picker_and_lampa_dubbing.md`)
 - [x] `startProgress` handoff from source sheet and continue-watching
 - [x] Throttled Lampa progress with movie coords `0,0`
 - [x] On ExoPlayer `ERROR_CODE_IO_BAD_HTTP_STATUS` while on direct, auto-fallback to proxy once (and persist `directFirst: false`); friendly RU error if proxy also fails
 - [x] Serial episode nav: prev/next + episodes overlay; WatchHub session (`taskId` / source / translator / seasons) in watch payload; switch reloads links in-place; auto-next on ended
+- [x] Episodes overlay groups by season with «Сейчас» marker (see `episode_picker_and_lampa_dubbing.md`)
 - [x] Local download playback without WatchHub session does not show episode nav
 
 ## Acceptance Criteria
@@ -71,7 +74,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 2. TV panel focus works across transport and option pills; overlays open and select with OK.
 3. Anime: switch dubbing/quality keeps playback time; episode next/prev and auto-next work.
 4. Lampa: quality/connection/delivery change URL with time preserved; progress resumes via payload or server; BAD_HTTP on direct auto-switches to proxy once; serials support prev/next, episode list, and auto-next.
-5. Phone: custom HUD play/seek/menus work without relying solely on native controls.
+5. Phone: custom HUD play/seek/menus work without relying solely on native controls; watch opens landscape immersive fullscreen (status/nav bars hidden).
 6. Progress syncs periodically and flushes on leave; continue-watching queries invalidate after flush.
 7. Playback error shows Retry; empty source shows «Нет источника видео».
 8. HLS and progressive play on Android TV via react-native-video (ExoPlayer).

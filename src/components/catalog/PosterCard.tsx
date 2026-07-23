@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { forwardRef, useCallback, useRef, useState } from 'react';
 import {
+  findNodeHandle,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +27,11 @@ export interface PosterCardProps {
   railStart?: boolean;
   /** Prefer this card as the content-area focus entry. */
   contentEntry?: boolean;
+  /**
+   * Temporarily pin Up/Down to this card (hold-Right guard).
+   * Cleared by caller after a short arm window so intentional Up/Down still works.
+   */
+  pinVerticalFocus?: boolean;
 }
 
 export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
@@ -41,12 +47,15 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
     variant = 'rail',
     railStart = false,
     contentEntry = false,
+    pinVerticalFocus = false,
   },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
+  const [selfTag, setSelfTag] = useState<number | undefined>();
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<View | null>(null);
+  const displayTitle = title.trim() || 'Без названия';
   const cardWidth = width ?? (variant === 'grid' ? undefined : layout.posterWidthRail);
   const imageUrl =
     typeof poster === 'string' &&
@@ -59,12 +68,19 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
   const exitLeft = isTvUi() && railStart;
   const exitUp = isTvUi() && contentEntry;
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
+  const pinVertical =
+    isTvUi() && variant === 'rail' && focused && pinVerticalFocus && selfTag != null;
 
   const setRefs = useCallback(
     (node: View | null) => {
       nodeRef.current = node;
       if (typeof ref === 'function') ref(node);
       else if (ref) ref.current = node;
+      const tag =
+        node != null
+          ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined)
+          : undefined;
+      setSelfTag(tag);
     },
     [ref],
   );
@@ -76,6 +92,10 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
         setFocused(true);
         if (isTvUi() && nodeRef.current) {
           shellFocus?.registerContentAnchor(nodeRef.current);
+          const tag = findNodeHandle(
+            nodeRef.current as Parameters<typeof findNodeHandle>[0],
+          );
+          if (tag != null) setSelfTag(tag);
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);
@@ -100,6 +120,9 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
       ]}
       {...(contentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
       {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
+      {...(pinVertical
+        ? { nextFocusUp: selfTag, nextFocusDown: selfTag }
+        : {})}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
         <View style={[styles.poster, { aspectRatio: layout.posterAspect }]}>
@@ -112,7 +135,7 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
               recyclingKey={imageUrl}
             />
           ) : (
-            <Text style={styles.fallback}>{title.slice(0, 1) || '?'}</Text>
+            <Text style={styles.fallback}>{displayTitle.slice(0, 1) || '?'}</Text>
           )}
           {ratingLabel ? (
             <View style={styles.ratingBadge}>
@@ -125,7 +148,7 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
         </View>
       </View>
       <Text style={[styles.title, focused && styles.titleFocused]} numberOfLines={2}>
-        {title}
+        {displayTitle}
       </Text>
       {subtitle ? (
         <Text style={[styles.subtitle, focused && styles.subtitleFocused]} numberOfLines={1}>

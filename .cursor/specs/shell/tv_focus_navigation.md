@@ -14,10 +14,11 @@ Remote/D-pad focus on Android TV must be unmistakable on catalog cards and must 
 6. [x] Profile chip in the sidebar is focusable with a visible focused state.
 7. [x] Metro resolves `react-native` to monorepo `react-native-tvos` so `TVFocusGuideView` / `useTVEventHandler` are available.
 8. [x] When D-pad focus moves vertically between rails, the rail/section title stays visible (vertical `snapToAlignment="item"` + section `scrollSnapAlign="start"`).
-9. [x] Scrolling a horizontal rail right (focus paging) keeps focus on the active card; focus must not disappear from that rail.
+9. [x] Scrolling a horizontal rail right (focus paging / hold-Right) keeps focus on the active card; focus must not jump to adjacent rails (see `tv_catalog_focus_and_scroll.md`).
 10. [x] While focus is in content, the side menu is hidden and does not reserve layout width (content is full-bleed).
 11. [x] Right from the side menu (or leaving sidebar focus) returns focus to content and closes the overlay.
-12. [x] Route change closes the side menu overlay and parks sidebar focus so Android relocates into content via `hasTVPreferredFocus` (no `requestTVFocus` on posters — that snaps catalog ScrollViews).
+12. [x] Route change parks sidebar only on top-level nav change, not detail push; detail push must not flash the overlay (see `tv_catalog_focus_and_scroll.md`).
+13. [x] Back from detail restores catalog scroll + focused poster (see `tv_catalog_focus_and_scroll.md`).
 
 ## Acceptance Criteria
 

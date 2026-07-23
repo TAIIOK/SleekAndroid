@@ -11,8 +11,11 @@ import {
   isHomeExcludedAnimeRecommendationSection,
   resolveAnimeCustomSections,
   resolveAnimeShowcaseIds,
+  resolveEnabledHomeSections,
+  resolveHomeSectionOrder,
   resolveLampaSectionEndpoints,
   type CatalogHomeConfig,
+  type HomeSectionId,
 } from '@/lib/homeSettings';
 
 /** `all` or a concrete source key (`anime:…` / `movie:…` / `tv:…` / `anime:custom:…`). */
@@ -182,6 +185,12 @@ export function listTvHomeCatalogSources(
   const includeTv = lampaEnabled && (filter === 'all' || filter === 'tv');
   const disambiguate = filter === 'all';
 
+  const byKind: Record<HomeSectionId, TvHomeFeedSource[]> = {
+    anime: [],
+    movie: [],
+    tv: [],
+  };
+
   if (includeAnime) {
     const allIds = animeShowcases.map((showcase) => showcase.id);
     const enabledIds = resolveAnimeShowcaseIds(config, allIds).filter(
@@ -193,7 +202,7 @@ export function listTvHomeCatalogSources(
 
     for (const showcase of primary) {
       const name = showcase.name || showcase.id;
-      sources.push({
+      byKind.anime.push({
         key: `anime:${showcase.id}`,
         title: disambiguate ? `${name} · ${kindLabel('anime')}` : name,
         kind: 'anime',
@@ -203,7 +212,7 @@ export function listTvHomeCatalogSources(
 
     for (const section of secondary) {
       const name = section.title || section.id;
-      sources.push({
+      byKind.anime.push({
         key: `anime:custom:${section.id}`,
         title: disambiguate ? `${name} · ${kindLabel('anime')}` : name,
         kind: 'anime',
@@ -222,7 +231,7 @@ export function listTvHomeCatalogSources(
     const visible = filterLampaSectionsForHomeKind(ordered, 'movie', firstLampaKindId);
     for (const section of visible) {
       const name = section.title || section.endpoint;
-      sources.push({
+      byKind.movie.push({
         key: `movie:${section.endpoint}`,
         title: disambiguate ? `${name} · ${kindLabel('movie')}` : name,
         kind: 'movie',
@@ -241,13 +250,31 @@ export function listTvHomeCatalogSources(
     const visible = filterLampaSectionsForHomeKind(ordered, 'tv', firstLampaKindId);
     for (const section of visible) {
       const name = section.title || section.endpoint;
-      sources.push({
+      byKind.tv.push({
         key: `tv:${section.endpoint}`,
         title: disambiguate ? `${name} · ${kindLabel('tv')}` : name,
         kind: 'tv',
         lampaSection: section,
       });
     }
+  }
+
+  const enabledSections = resolveEnabledHomeSections(config).filter((id) => {
+    if (id === 'anime') return includeAnime;
+    if (id === 'movie') return includeMovie;
+    return includeTv;
+  });
+  const sectionOrder =
+    filter === 'all'
+      ? resolveHomeSectionOrder(config, enabledSections)
+      : (['anime', 'movie', 'tv'] as HomeSectionId[]).filter((id) => {
+          if (id === 'anime') return includeAnime;
+          if (id === 'movie') return includeMovie;
+          return includeTv;
+        });
+
+  for (const id of sectionOrder) {
+    sources.push(...byKind[id]);
   }
 
   return sources;

@@ -1,11 +1,37 @@
 import {
+  applyHomeSectionToggles,
+  homeSectionLabel,
   isHomeConfigConfigured,
+  materializeLampaSectionDefaults,
+  moveInList,
   normalizeHomeConfig,
   resolveAnimeShowcaseIds,
   resolveEnabledContentTypes,
+  resolveEnabledHomeSections,
+  resolveHomeSectionOrder,
   resolveLampaSectionEndpoints,
   type CatalogHomeConfig,
+  type HomeSectionId,
 } from '@/lib/homeSettings';
+
+export {
+  applyHomeSectionToggles,
+  homeSectionLabel,
+  materializeLampaSectionDefaults,
+  moveInList,
+  resolveEnabledHomeSections,
+  resolveHomeSectionOrder,
+  resolveLampaSectionEndpoints,
+  type HomeSectionId,
+};
+
+/** Default catalog showcases for first-time home (no personalized rails). */
+export const ANIME_DEFAULT_REGULAR_SHOWCASE_IDS = [
+  'trending',
+  'recent',
+  'rating',
+  'random',
+];
 
 export interface SettingsDraftOptions {
   contentTypeIds: string[];

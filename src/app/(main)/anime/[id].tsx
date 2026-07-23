@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ScrollView,
@@ -26,7 +26,13 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { useAccumulatedEpisodes } from '@/hooks/useAccumulatedEpisodes';
 import { useResumeEpisode } from '@/hooks/useResumeEpisode';
-import { extractRelatedItems, getUniqueDubbingOptions } from '@/lib/animeDetail';
+import { extractRelatedItems } from '@/lib/animeDetail';
+import { loadAnimeLastDubbing, saveAnimeLastDubbing } from '@/lib/animeLastDubbing';
+import {
+  filterEpisodesByDubbing,
+  getUniqueDubbingOptions,
+  pickBestDubbingOption,
+} from '@/lib/animePlaybackOptions';
 import type { UserListStatus } from '@/lib/libraryStatus';
 import { animePoster } from '@/lib/poster';
 import { buildAnimePlaybackState } from '@/lib/progressUtils';
@@ -41,8 +47,8 @@ export default function AnimeDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  // TV: stacked full-width (episodes need space + reliable D-pad). Phone wide tablets keep 2-col.
-  const useWideLayout = !isTvUi() && width >= 960;
+  // Site desktop/TV: plot + «Похожее» side-by-side. Phone stays stacked unless wide tablet.
+  const useWideLayout = isTvUi() || width >= 960;
   const { id } = useLocalSearchParams<{ id: string }>();
   const animeId = Number(id);
   const { isAuthenticated } = useAuth();
@@ -109,10 +115,52 @@ export default function AnimeDetailScreen() {
     [related, animeId],
   );
 
-  const activeDubbing = useMemo(() => {
-    const first = allEpisodes[0]?.video ?? [];
-    return getUniqueDubbingOptions(first)[0] || 'Не указана';
-  }, [allEpisodes]);
+  const allVideos = useMemo(
+    () => allEpisodes.flatMap((episode) => episode.video ?? []),
+    [allEpisodes],
+  );
+  const dubbingOptions = useMemo(() => getUniqueDubbingOptions(allVideos), [allVideos]);
+  const [watchedDubbing, setWatchedDubbing] = useState<string | null>(null);
+  const [selectedDubbing, setSelectedDubbing] = useState('');
+
+  useEffect(() => {
+    if (!Number.isFinite(animeId)) return;
+    let cancelled = false;
+    void loadAnimeLastDubbing(animeId).then((value) => {
+      if (!cancelled) setWatchedDubbing(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [animeId]);
+
+  useEffect(() => {
+    if (!dubbingOptions.length) {
+      setSelectedDubbing('');
+      return;
+    }
+    setSelectedDubbing((current) => {
+      if (current && dubbingOptions.includes(current)) return current;
+      if (watchedDubbing && dubbingOptions.includes(watchedDubbing)) return watchedDubbing;
+      return pickBestDubbingOption(allVideos) ?? dubbingOptions[0];
+    });
+  }, [dubbingOptions, watchedDubbing, allVideos]);
+
+  const activeDubbing = selectedDubbing || dubbingOptions[0] || 'Не указана';
+  const filteredEpisodes = useMemo(
+    () => filterEpisodesByDubbing(allEpisodes, activeDubbing),
+    [allEpisodes, activeDubbing],
+  );
+  const filteredEmptyWhileLoading =
+    Boolean(activeDubbing) &&
+    allEpisodes.length > 0 &&
+    filteredEpisodes.length === 0 &&
+    (hasMore || isFetchingMore || episodesLoading);
+
+  const onSelectDubbing = (value: string) => {
+    setSelectedDubbing(value);
+    void saveAnimeLastDubbing(animeId, value).then(() => setWatchedDubbing(value));
+  };
 
   const invalidateLibrary = () => {
     void queryClient.invalidateQueries({ queryKey: ['library-anime'] });
@@ -186,42 +234,48 @@ export default function AnimeDetailScreen() {
     );
   };
 
-  const plotAndEpisodes = (
-    <>
-      <AnimeDetailPlot detail={detail} />
-      <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
-      <AnimeDetailEpisodes
-        episodes={allEpisodes}
-        isLoading={episodesLoading}
-        isFetchingMore={isFetchingMore}
-        hasMore={hasMore}
-        onLoadMore={loadMore}
-        progressByEpisodeId={savedState.progressByEpisodeId}
-        onPlay={onPlayEpisode}
-      />
-    </>
-  );
-
   const sidebar = (
     <AnimeDetailSidebar
-      detail={detail}
-      episodesTotal={detail.episodesTotal}
       similarItems={relatedItems}
       recommendationItems={recommendationItems}
       similarLoading={relatedLoading}
     />
   );
 
-  // Always a single column on TV. Wide phone/tablet may use two columns, but never
-  // put `flex:1` / `width:'100%'` siblings in a row inside ScrollView — that overlays.
+  const episodesBlock = (
+    <AnimeDetailEpisodes
+      episodes={filteredEpisodes}
+      isLoading={episodesLoading}
+      isFetchingMore={isFetchingMore}
+      hasMore={hasMore}
+      onLoadMore={loadMore}
+      progressByEpisodeId={savedState.progressByEpisodeId}
+      onPlay={onPlayEpisode}
+      dubbingOptions={dubbingOptions}
+      selectedDubbing={activeDubbing}
+      watchedDubbing={watchedDubbing}
+      onSelectDubbing={onSelectDubbing}
+      filteredEmptyWhileLoading={filteredEmptyWhileLoading}
+    />
+  );
+
+  // Episodes right under hero; then plot | similar. Genres live in hero pills only.
   const body = useWideLayout ? (
-    <View style={styles.wideGrid}>
-      <View style={styles.wideMain}>{plotAndEpisodes}</View>
-      <View style={styles.wideSide}>{sidebar}</View>
+    <View style={styles.stack}>
+      {episodesBlock}
+      <View style={styles.wideGrid}>
+        <View style={styles.wideMain}>
+          <AnimeDetailPlot detail={detail} />
+          <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
+        </View>
+        <View style={styles.wideSide}>{sidebar}</View>
+      </View>
     </View>
   ) : (
     <View style={styles.stack}>
-      {plotAndEpisodes}
+      {episodesBlock}
+      <AnimeDetailPlot detail={detail} />
+      <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
       {sidebar}
     </View>
   );
@@ -238,6 +292,7 @@ export default function AnimeDetailScreen() {
         resumeLoading={resumeLoading}
         hasHistory={savedState.hasHistory}
         lastProgress={savedState.lastProgress}
+        episodesTotal={detail.episodesTotal}
         userStatus={savedState.userStatus}
         isFavorite={savedState.isFavorite}
         libraryDisabled={!isAuthenticated}
@@ -262,7 +317,7 @@ const styles = StyleSheet.create({
     // flexGrow:0 — never stretch ScrollView children to the viewport (pushes body down).
     flexGrow: 0,
     padding: isTvUi() ? spacing.lg : spacing.md,
-    gap: spacing.md,
+    gap: isTvUi() ? spacing.sm : spacing.md,
     paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
   },
   stack: {
@@ -285,7 +340,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   wideSide: {
-    width: 280,
+    width: isTvUi() ? 300 : 280,
     flexGrow: 0,
     flexShrink: 0,
     gap: spacing.md,

@@ -56,6 +56,7 @@ export function useHomeCatalogConfig() {
   const { isAuthenticated } = useAuth();
   const [config, setConfig] = useState<CatalogHomeConfig>(EMPTY_HOME_CONFIG);
   const [ready, setReady] = useState(false);
+  const [syncSettled, setSyncSettled] = useState(false);
   const syncInFlight = useRef(false);
 
   const refreshLocal = useCallback(async () => {
@@ -108,13 +109,17 @@ export function useHomeCatalogConfig() {
       }
     } finally {
       syncInFlight.current = false;
+      setSyncSettled(true);
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated && ready) {
-      void syncFromServer();
+    if (!ready) return;
+    if (!isAuthenticated) {
+      setSyncSettled(true);
+      return;
     }
+    void syncFromServer();
   }, [isAuthenticated, ready, syncFromServer]);
 
   const persist = useCallback(
@@ -129,5 +134,5 @@ export function useHomeCatalogConfig() {
     [isAuthenticated],
   );
 
-  return { config, setConfig, persist, ready };
+  return { config, setConfig, persist, ready, syncSettled };
 }

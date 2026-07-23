@@ -21,6 +21,7 @@ import { AnimeCatalogRails } from '@/components/catalog/AnimeCatalogRails';
 import { LampaKindRails } from '@/components/catalog/LampaKindRails';
 import { ContinueWatchingRow } from '@/components/home/ContinueWatchingRow';
 import { HomeSettingsSheet } from '@/components/home/HomeSettingsSheet';
+import { HomeWelcomeModal } from '@/components/home/HomeWelcomeModal';
 import { QuickActionsSection } from '@/components/home/QuickActionsSection';
 import { TvHomeFeedGrid } from '@/components/home/TvHomeFeedGrid';
 import { TvHomeFeedRails } from '@/components/home/TvHomeFeedRails';
@@ -30,9 +31,10 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, spacing } from '@/constants/aniverse';
 import { useContinueWatching } from '@/hooks/useContinueWatching';
 import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
+import { useTvCatalogScrollRestore } from '@/hooks/useTvCatalogScrollRestore';
 import { buildContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
-import { resolveEnabledContentTypes } from '@/lib/homeSettings';
+import { isHomeConfigConfigured, resolveEnabledContentTypes } from '@/lib/homeSettings';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
 import {
@@ -49,8 +51,11 @@ export default function HomeScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [feedTab, setFeedTab] = useState<TvHomeFeedTab>('all');
   const [typeFilter, setTypeFilter] = useState<TvHomeTypeFilter>('all');
-  const { config, persist, ready } = useHomeCatalogConfig();
-  const { items: continueItems } = useContinueWatching();
+  const { config, persist, ready, syncSettled } = useHomeCatalogConfig();
+  const showWelcome =
+    ready && syncSettled && !isHomeConfigConfigured(config);
+  const catalogScroll = useTvCatalogScrollRestore('/');
+  const { items: continueItems, ready: continueReady } = useContinueWatching();
   const continueWatchingDedupe = useMemo(
     () => buildContinueWatchingDedupeKeys(continueItems),
     [continueItems],
@@ -204,13 +209,17 @@ export default function HomeScreen() {
     return <ScrollView style={styles.scroll} contentContainerStyle={styles.content} />;
   }
 
-  const continueEmpty = continueItems.length === 0;
+  // Wait until continue settles — otherwise filters steal preferred focus first.
+  const continueEmpty = continueReady && continueItems.length === 0;
 
   return (
     <>
       <ScrollView
+        ref={catalogScroll.scrollRef}
         style={styles.scroll}
         contentContainerStyle={[styles.content, isTvUi() && styles.contentTv]}
+        onScroll={catalogScroll.onScroll}
+        scrollEventThrottle={16}
         {...tvVerticalCatalogScrollProps}
       >
         <ContinueWatchingRow items={continueItems} />
@@ -241,12 +250,15 @@ export default function HomeScreen() {
               <TvHomeFeedGrid
                 key={tvSources[0].key}
                 source={tvSources[0]}
+                config={config}
                 contentEntry={false}
               />
             ) : (
               <TvHomeFeedRails
                 key={`${activeFeedTab}-${activeTypeFilter}`}
                 sources={tvSources}
+                config={config}
+                restorePath="/"
               />
             )}
           </>
@@ -289,6 +301,17 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      <HomeWelcomeModal
+        open={showWelcome}
+        config={config}
+        onSave={(next) => {
+          void persist(next);
+        }}
+        onSkip={(next) => {
+          void persist(next);
+        }}
+      />
 
       <HomeSettingsSheet
         open={settingsOpen}

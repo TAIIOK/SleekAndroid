@@ -9,48 +9,80 @@ import {
   View,
 } from 'react-native';
 
-import { searchCatalog } from '@/api/catalog';
+import { lampaItemTitle, searchCatalog } from '@/api/catalog';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing, tvFocus } from '@/constants/aniverse';
 import { usePosterGridLayout } from '@/hooks/usePosterGridLayout';
 import { lampaDetailPath } from '@/lib/lampaDetail';
-import { animePoster } from '@/lib/poster';
+import { animePoster, animeTitle } from '@/lib/poster';
 import { isTvUi } from '@/lib/isTvUi';
 import {
+  EMPTY_SEARCH_FILTERS,
+  canRunCatalogSearch,
+  catalogSearchFilterParams,
   lampaKindForMediaFilter,
   mediaForSearchBucket,
   searchTypeForMediaFilter,
   uniqueById,
+  type SearchFilterState,
   type SearchSeeAllBucket,
 } from '@/lib/searchConfig';
 
 const PAGE_SIZE = 24;
 
+function pickParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
 export default function SearchAllScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    q?: string;
-    bucket?: string;
-    kind?: string;
-  }>();
+  const params = useLocalSearchParams();
   const { columns, gap, cardWidth, horizontalPadding } = usePosterGridLayout(spacing.lg);
 
-  const q = (params.q ?? '').trim();
-  const bucket = (params.bucket as SearchSeeAllBucket | undefined) ?? 'anime';
-  const kind = params.kind ?? null;
+  const q = pickParam(params.q).trim();
+  const bucket = (pickParam(params.bucket) as SearchSeeAllBucket | '') || 'anime';
+  const kind = pickParam(params.kind) || null;
   const media = mediaForSearchBucket(bucket, kind);
-  const canSearch = q.length >= 2 && (bucket === 'anime' || bucket === 'lampa');
+
+  const filters = useMemo<SearchFilterState>(() => {
+    const next = { ...EMPTY_SEARCH_FILTERS };
+    next.genre = pickParam(params.genre);
+    next.year = pickParam(params.year);
+    next.status = pickParam(params.status);
+    next.animeType = pickParam(params.animeType);
+    next.season = pickParam(params.season);
+    next.ageRating = pickParam(params.ageRating);
+    next.ratingMin = pickParam(params.ratingMin);
+    next.lampaGenre = pickParam(params.lampaGenre);
+    next.lampaStatus = pickParam(params.lampaStatus);
+    next.lampaMinRating = pickParam(params.lampaMinRating);
+    next.lampaLang = pickParam(params.lampaLang);
+    next.lampaCountry = pickParam(params.lampaCountry);
+    next.sortBy = pickParam(params.sortBy);
+    next.order = pickParam(params.order) === 'asc' ? 'asc' : 'desc';
+    return next;
+  }, [params]);
+
+  const canSearch =
+    (bucket === 'anime' || bucket === 'lampa') && canRunCatalogSearch(q, media, filters);
   const [page, setPage] = useState(1);
 
+  const filterParams = useMemo(
+    () => catalogSearchFilterParams(media, filters),
+    [media, filters],
+  );
+
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['search-all', q, bucket, kind, page],
+    queryKey: ['search-all', q, bucket, kind, page, filterParams],
     queryFn: () =>
       searchCatalog({
         q,
         type: searchTypeForMediaFilter(media),
         limit: PAGE_SIZE,
         page,
+        ...filterParams,
       }),
     enabled: canSearch,
   });
@@ -62,7 +94,7 @@ export default function SearchAllScreen() {
     if (bucket === 'anime') {
       return uniqueById(data.anime ?? []).map((item) => ({
         key: `anime-${item.id}`,
-        title: item.title ?? 'Без названия',
+        title: animeTitle(item),
         poster: animePoster(item),
         score: item.score,
         onPress: () => router.push(`/anime/${item.id}` as '/'),
@@ -81,7 +113,7 @@ export default function SearchAllScreen() {
       const k = String(row.kind ?? row.mediaKind ?? lampaKind ?? 'movie');
       return {
         key: `lampa-${item.id}`,
-        title: item.title ?? item.name ?? 'Без названия',
+        title: lampaItemTitle(item),
         poster: item.poster ?? item.poster_path,
         score: item.vote_average,
         onPress: () => router.push(lampaDetailPath(k, { id: item.id }) as '/'),

@@ -1,9 +1,18 @@
 import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { useTvHomeFeedSource } from '@/hooks/useTvHomeFeedSource';
+import type { CatalogHomeConfig } from '@/lib/homeSettings';
 import type { TvHomeFeedSource } from '@/lib/tvHomeFeeds';
 
-function TvHomeSourceRail({ source }: { source: TvHomeFeedSource }) {
+function TvHomeSourceRail({
+  source,
+  config,
+  restorePath,
+}: {
+  source: TvHomeFeedSource;
+  config: CatalogHomeConfig;
+  restorePath?: string;
+}) {
   const {
     items,
     isLoading,
@@ -13,7 +22,7 @@ function TvHomeSourceRail({ source }: { source: TvHomeFeedSource }) {
     isFetchingNextPage,
     fetchNextPage,
     openItem,
-  } = useTvHomeFeedSource(source);
+  } = useTvHomeFeedSource(source, config);
 
   if (!isLoading && (isError || items.length === 0)) {
     return null;
@@ -29,20 +38,24 @@ function TvHomeSourceRail({ source }: { source: TvHomeFeedSource }) {
       hasNextPage={hasNextPage}
       isFetchingNextPage={isFetchingNextPage}
       onLoadMore={fetchNextPage}
+      restorePath={restorePath}
+      restoreRailKey={source.key}
     />
   );
 }
 
 interface TvHomeFeedRailsProps {
   sources: TvHomeFeedSource[];
+  config: CatalogHomeConfig;
+  restorePath?: string;
 }
 
-export function TvHomeFeedRails({ sources }: TvHomeFeedRailsProps) {
+export function TvHomeFeedRails({ sources, config, restorePath }: TvHomeFeedRailsProps) {
   return (
     <>
       {sources.map((source, index) => (
         <LazyCatalogRail key={source.key} eager={index < 2}>
-          <TvHomeSourceRail source={source} />
+          <TvHomeSourceRail source={source} config={config} restorePath={restorePath} />
         </LazyCatalogRail>
       ))}
     </>

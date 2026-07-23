@@ -2,11 +2,22 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchAnimeDetail, fetchAnimeEpisodes } from '@/api/catalog';
+import type { PlayerEpisodeNavItem } from '@/components/player/types';
+import {
+  episodeNumber,
+  episodeThumbnail,
+  isRedundantEpisodeTitle,
+} from '@/lib/animeDetail';
+import { resolveAnimePosterUrl } from '@/lib/config';
 import type { AnimeEpisode } from '@aniverse/types';
 
 const NAV_LIMIT = 500;
 
-export function useWatchEpisodeNavigation(animeId: number, currentEpisodeId: number) {
+export function useWatchEpisodeNavigation(
+  animeId: number,
+  currentEpisodeId: number,
+  progressByEpisodeId: Record<number, number> = {},
+) {
   const { data: detail } = useQuery({
     queryKey: ['anime', animeId],
     queryFn: () => fetchAnimeDetail(animeId),
@@ -24,15 +35,25 @@ export function useWatchEpisodeNavigation(animeId: number, currentEpisodeId: num
 
   const episodes = data?.episodes ?? [];
 
-  const items = useMemo(
-    () =>
-      episodes.map((ep) => ({
+  const items = useMemo((): PlayerEpisodeNavItem[] => {
+    return episodes.map((ep) => {
+      const num = episodeNumber(ep);
+      const rawTitle = ep.title?.trim();
+      const title =
+        rawTitle && !isRedundantEpisodeTitle(rawTitle, num) ? rawTitle : undefined;
+      const thumb = resolveAnimePosterUrl(episodeThumbnail(ep));
+      const progress = progressByEpisodeId[ep.id];
+      return {
         id: ep.id,
-        ordinal: ep.ordinal ?? ep.id,
-        label: ep.title?.trim() ? `Эп. ${ep.ordinal ?? ep.id} · ${ep.title}` : `Эпизод ${ep.ordinal ?? ep.id}`,
-      })),
-    [episodes],
-  );
+        number: num,
+        label: title ? `Эп. ${num} · ${title}` : `Эпизод ${num}`,
+        title: title ?? `Эпизод ${num}`,
+        thumbnail: thumb,
+        durationSec: typeof ep.duration === 'number' && ep.duration > 0 ? ep.duration : undefined,
+        progress: typeof progress === 'number' ? progress : undefined,
+      };
+    });
+  }, [episodes, progressByEpisodeId]);
 
   const currentIndex = items.findIndex((item) => item.id === currentEpisodeId);
   const previous = currentIndex > 0 ? items[currentIndex - 1] : undefined;

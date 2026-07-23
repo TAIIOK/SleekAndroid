@@ -83,7 +83,8 @@
       "expo-web-browser",
       "react-native-video",
       "expo-updates",
-      "./plugins/withLargeHeap.js"
+      "./plugins/withLargeHeap.js",
+      "./plugins/withLetsEncryptGenYTrust.js"
     ],
     "experiments": {
       "typedRoutes": false,

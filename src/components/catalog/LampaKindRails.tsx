@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type ScrollView,
 } from 'react-native';
@@ -17,7 +17,9 @@ import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
 import {
   filterLampaSectionsForHomeKind,
+  resolveHideAsianLiveAction,
   resolveLampaSectionEndpoints,
+  shouldExcludeCjkFromLampaSection,
 } from '@/lib/homeSettings';
 import type { ContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
@@ -27,8 +29,20 @@ import { isTvUi } from '@/lib/isTvUi';
 /** Minimum skeleton time so cached data does not flash unfinished rails. */
 const TV_BROWSE_MIN_SKELETON_MS = 400;
 
-function lampaItemsQueryKey(kind: string, section: LampaSection, pageSize: number) {
-  return ['lampa-items', kind, section.endpoint, section.fetch?.urlPath, pageSize] as const;
+function lampaItemsQueryKey(
+  kind: string,
+  section: LampaSection,
+  pageSize: number,
+  excludeCjk: boolean,
+) {
+  return [
+    'lampa-items',
+    kind,
+    section.endpoint,
+    section.fetch?.urlPath,
+    pageSize,
+    excludeCjk,
+  ] as const;
 }
 
 function LampaSectionRail({
@@ -36,16 +50,20 @@ function LampaSectionRail({
   section,
   onItemPress,
   excludeLampaKeys,
+  excludeCjk = false,
   enabled = true,
   onSettled,
+  restorePath,
 }: {
   kind: string;
   section: LampaSection;
   onItemPress: (item: RailItem) => void;
   excludeLampaKeys?: ReadonlySet<string>;
+  excludeCjk?: boolean;
   /** When false, do not fetch yet (TV browse loads top → bottom). */
   enabled?: boolean;
   onSettled?: () => void;
+  restorePath?: string;
 }) {
   const isRecommendation = isLampaRecommendationEndpoint(section.endpoint);
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
@@ -59,8 +77,9 @@ function LampaSectionRail({
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: lampaItemsQueryKey(kind, section, pageSize),
-    queryFn: ({ pageParam }) => fetchLampaSectionItems(kind, section, pageParam, pageSize),
+    queryKey: lampaItemsQueryKey(kind, section, pageSize, excludeCjk),
+    queryFn: ({ pageParam }) =>
+      fetchLampaSectionItems(kind, section, pageParam, pageSize, { excludeCjk }),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < pageSize) return undefined;
@@ -112,6 +131,8 @@ function LampaSectionRail({
       onLoadMore={() => {
         void fetchNextPage();
       }}
+      restorePath={restorePath}
+      restoreRailKey={`${kind}:${section.endpoint}`}
     />
   );
 }
@@ -124,6 +145,7 @@ interface LampaKindRailsProps {
   continueWatchingDedupe?: ContinueWatchingDedupeKeys;
   /** Unused — kept for call-site compatibility. */
   browseScrollRef?: RefObject<ScrollView | null>;
+  restorePath?: string;
 }
 
 export function LampaKindRails({
@@ -132,8 +154,10 @@ export function LampaKindRails({
   home = false,
   firstKindId,
   continueWatchingDedupe,
+  restorePath,
 }: LampaKindRailsProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const browseGate = isTvUi() && !home;
   const pageTitle = kind === 'movie' ? 'Фильмы' : 'Сериалы';
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
@@ -142,6 +166,8 @@ export function LampaKindRails({
     queryKey: ['lampa-sections', kind],
     queryFn: () => fetchLampaSections(kind),
   });
+
+  const hideAsian = resolveHideAsianLiveAction(config);
 
   const visibleSections = useMemo(() => {
     if (!sections.length) return [];
@@ -161,11 +187,17 @@ export function LampaKindRails({
 
   // Prefetch first section so skeleton waits until the top rail can paint.
   const firstSection = browseGate ? visibleSections[0] : undefined;
+  const firstExcludeCjk = firstSection
+    ? shouldExcludeCjkFromLampaSection(firstSection.endpoint, hideAsian)
+    : false;
   const firstQuery = useInfiniteQuery({
     queryKey: firstSection
-      ? lampaItemsQueryKey(kind, firstSection, pageSize)
-      : ['lampa-items', kind, '__browse_idle__', pageSize],
-    queryFn: ({ pageParam }) => fetchLampaSectionItems(kind, firstSection!, pageParam, pageSize),
+      ? lampaItemsQueryKey(kind, firstSection, pageSize, firstExcludeCjk)
+      : ['lampa-items', kind, '__browse_idle__', pageSize, false],
+    queryFn: ({ pageParam }) =>
+      fetchLampaSectionItems(kind, firstSection!, pageParam, pageSize, {
+        excludeCjk: firstExcludeCjk,
+      }),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < pageSize) return undefined;
@@ -175,20 +207,37 @@ export function LampaKindRails({
     retry: firstSection && isLampaRecommendationEndpoint(firstSection.endpoint) ? false : 1,
   });
 
-  const [minSkeletonDone, setMinSkeletonDone] = useState(!browseGate);
+  // Remount with cached first page — skip skeleton (do not key off live fetch, or cold
+  // start would unlock every rail as soon as rail 0 settles).
+  const cacheWarm = useMemo(() => {
+    if (!browseGate || !firstSection) return false;
+    return (
+      queryClient.getQueryData(
+        lampaItemsQueryKey(kind, firstSection, pageSize, firstExcludeCjk),
+      ) != null
+    );
+  }, [browseGate, firstSection, kind, pageSize, firstExcludeCjk, queryClient]);
+
+  const [minSkeletonDone, setMinSkeletonDone] = useState(() => !browseGate || cacheWarm);
   useEffect(() => {
     if (!browseGate) {
+      setMinSkeletonDone(true);
+      return;
+    }
+    if (cacheWarm) {
       setMinSkeletonDone(true);
       return;
     }
     setMinSkeletonDone(false);
     const timer = setTimeout(() => setMinSkeletonDone(true), TV_BROWSE_MIN_SKELETON_MS);
     return () => clearTimeout(timer);
-  }, [browseGate, kind]);
+  }, [browseGate, kind, cacheWarm]);
 
   // Unlock rails 1 → N after each settles (top → bottom). No focus/scroll steering.
-  const [enabledCount, setEnabledCount] = useState(browseGate ? 0 : Number.MAX_SAFE_INTEGER);
-  const [revealed, setRevealed] = useState(!browseGate);
+  const [enabledCount, setEnabledCount] = useState(() =>
+    !browseGate || cacheWarm ? Number.MAX_SAFE_INTEGER : 0,
+  );
+  const [revealed, setRevealed] = useState(() => !browseGate || cacheWarm);
 
   useEffect(() => {
     if (!browseGate) {
@@ -196,9 +245,14 @@ export function LampaKindRails({
       setRevealed(true);
       return;
     }
+    if (cacheWarm) {
+      setEnabledCount(Number.MAX_SAFE_INTEGER);
+      setRevealed(true);
+      return;
+    }
     setEnabledCount(0);
     setRevealed(false);
-  }, [browseGate, kind]);
+  }, [browseGate, kind, cacheWarm]);
 
   const firstSettled =
     !browseGate ||
@@ -247,7 +301,9 @@ export function LampaKindRails({
               kind={kind}
               section={section}
               onItemPress={openItem}
+              excludeCjk={shouldExcludeCjkFromLampaSection(section.endpoint, hideAsian)}
               excludeLampaKeys={home ? continueWatchingDedupe?.lampaKeys : undefined}
+              restorePath={restorePath}
             />
           </LazyCatalogRail>
         ))}
@@ -263,7 +319,9 @@ export function LampaKindRails({
           kind={kind}
           section={section}
           onItemPress={openItem}
+          excludeCjk={shouldExcludeCjkFromLampaSection(section.endpoint, hideAsian)}
           enabled={index < enabledCount}
+          restorePath={restorePath}
           onSettled={() => {
             setEnabledCount((count) => {
               if (index !== count - 1) return count;

@@ -103,6 +103,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'react-native-video',
     'expo-updates',
     './plugins/withLargeHeap.js',
+    './plugins/withLetsEncryptGenYTrust.js',
   ],
   experiments: {
     typedRoutes: false,

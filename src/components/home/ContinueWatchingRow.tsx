@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { forwardRef, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -19,8 +19,11 @@ import {
 } from '@/lib/continueWatching';
 import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { setCatalogActiveFocus } from '@/lib/tvCatalogScrollRestore';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
 import { isTvUi } from '@/lib/isTvUi';
+
+const CONTINUE_RAIL_KEY = '__continue__';
 
 const CARD_WIDTH = layout.continueCardWidth;
 
@@ -178,16 +181,27 @@ const ContinueCard = forwardRef<
 ) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
-  const nodeRef = useRef<View | null>(null);
+  const nodeRef = useRef<(View & { requestTVFocus?: () => void }) | null>(null);
+  const claimedEntryFocusRef = useRef(false);
   const exitLeft = isTvUi() && Boolean(railStart || isContentEntry);
   const exitUp = isTvUi() && Boolean(isContentEntry);
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
 
   const setRefs = (node: View | null) => {
-    nodeRef.current = node;
+    nodeRef.current = node as (View & { requestTVFocus?: () => void }) | null;
     if (typeof ref === 'function') ref(node);
     else if (ref) ref.current = node;
   };
+
+  // Win the home content-entry race against feed rails / type chips.
+  useEffect(() => {
+    if (!isTvUi() || !isContentEntry || claimedEntryFocusRef.current) return;
+    claimedEntryFocusRef.current = true;
+    const timer = setTimeout(() => {
+      nodeRef.current?.requestTVFocus?.();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [isContentEntry]);
 
   return (
     <Pressable
@@ -196,6 +210,7 @@ const ContinueCard = forwardRef<
         setFocused(true);
         if (isTvUi() && nodeRef.current) {
           shellFocus?.registerContentAnchor(nodeRef.current);
+          setCatalogActiveFocus('/', CONTINUE_RAIL_KEY, 0);
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);

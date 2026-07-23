@@ -31,9 +31,7 @@ interface DetailLibraryActionsProps {
 }
 
 /**
- * Library status + favorite controls.
- * On Android TV, RN Modal often drops Pressable select events — we keep a Modal shell
- * for layering but route Select via TV event handler when an option is focused.
+ * Library status (dropdown) + favorite / collection icons.
  */
 export function DetailLibraryActions({
   userStatus,
@@ -48,6 +46,7 @@ export function DetailLibraryActions({
   const focusedStatusRef = useRef<UserListStatus | 'close' | null>(null);
   const pickingRef = useRef(false);
   const statusLabel = libraryStatusLabel(userStatus) ?? 'В список';
+  const tv = isTvUi();
 
   const closeMenu = useCallback(() => {
     focusedStatusRef.current = null;
@@ -57,7 +56,6 @@ export function DetailLibraryActions({
 
   const pickStatus = useCallback(
     (value: UserListStatus) => {
-      // Guard against Select firing both Pressable.onPress and TV HW event.
       if (pickingRef.current) return;
       pickingRef.current = true;
       focusedStatusRef.current = null;
@@ -73,8 +71,7 @@ export function DetailLibraryActions({
   }, [menuOpen]);
 
   useTvEventHandlerSafe((evt) => {
-    if (!menuOpen || !isTvUi()) return;
-    // rn-tvos Android delivers HW events on key-up (action === 1).
+    if (!menuOpen || !tv) return;
     if (evt.eventKeyAction != null && evt.eventKeyAction !== 1) return;
     if (evt.eventType !== 'select' && evt.eventType !== 'playPause') return;
 
@@ -96,7 +93,7 @@ export function DetailLibraryActions({
         return (
           <TvFocusable
             key={option.value}
-            hasTVPreferredFocus={isTvUi() && index === 0}
+            hasTVPreferredFocus={tv && index === 0}
             onFocus={() => {
               focusedStatusRef.current = option.value;
             }}
@@ -108,7 +105,9 @@ export function DetailLibraryActions({
             onPress={() => pickStatus(option.value)}
             style={[styles.option, active && styles.optionActive]}
           >
-            <Text style={styles.optionLabel}>{option.label}</Text>
+            <Text style={styles.optionLabel}>
+              {option.icon} {option.label}
+            </Text>
             {active ? <Text style={styles.check}>✓</Text> : null}
           </TvFocusable>
         );
@@ -135,9 +134,12 @@ export function DetailLibraryActions({
       <TvFocusable
         disabled={disabled}
         onPress={() => setMenuOpen(true)}
-        style={[styles.chip, userStatus ? styles.chipActive : null]}
+        style={[styles.dropdown, userStatus ? styles.dropdownActive : null]}
       >
-        <Text style={styles.chipLabel}>{statusLabel}</Text>
+        <Text style={styles.dropdownLabel} numberOfLines={1}>
+          {statusLabel}
+        </Text>
+        <Text style={styles.dropdownChevron}>▾</Text>
       </TvFocusable>
 
       <TvFocusable
@@ -161,7 +163,6 @@ export function DetailLibraryActions({
         onRequestClose={closeMenu}
       >
         <View style={styles.backdrop} focusable={false}>
-          {/* Non-focusable dismiss layer — must not steal TV Select from options. */}
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={closeMenu}
@@ -182,40 +183,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  chip: {
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: isTvUi() ? spacing.lg : spacing.md,
-    paddingVertical: isTvUi() ? 14 : 9,
+    paddingVertical: isTvUi() ? 14 : 10,
+    minHeight: isTvUi() ? 48 : undefined,
     borderRadius: radii.md,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
-  chipActive: {
-    borderColor: 'rgba(195,192,255,0.4)',
-    backgroundColor: 'rgba(195,192,255,0.1)',
+  dropdownActive: {
+    borderColor: 'rgba(195,192,255,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.62)',
   },
-  chipLabel: {
+  dropdownLabel: {
     color: colors.text,
-    fontSize: isTvUi() ? 16 : 13,
+    fontSize: isTvUi() ? 15 : 13,
     fontWeight: '600',
+    maxWidth: isTvUi() ? 160 : 120,
+  },
+  dropdownChevron: {
+    color: colors.textSecondary,
+    fontSize: isTvUi() ? 14 : 12,
+    marginTop: 1,
   },
   iconBtn: {
-    width: isTvUi() ? 52 : 38,
-    height: isTvUi() ? 52 : 38,
-    borderRadius: radii.md,
+    width: isTvUi() ? 48 : 38,
+    height: isTvUi() ? 48 : 38,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   iconBtnActive: {
-    borderColor: 'rgba(195,192,255,0.45)',
-    backgroundColor: 'rgba(195,192,255,0.12)',
+    borderColor: 'rgba(195,192,255,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.62)',
   },
   iconLabel: {
     color: colors.brand,
-    fontSize: isTvUi() ? 22 : 18,
+    fontSize: isTvUi() ? 20 : 18,
   },
   backdrop: {
     flex: 1,

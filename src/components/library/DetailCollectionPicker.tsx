@@ -146,9 +146,16 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
           setError(null);
           setOpen(true);
         }}
-        style={[styles.chip, inCollection ? styles.chipDone : null]}
+        style={[
+          isTvUi() ? styles.iconBtn : styles.chip,
+          inCollection ? (isTvUi() ? styles.iconBtnDone : styles.chipDone) : null,
+        ]}
       >
-        <Text style={styles.chipLabel}>{inCollection ? 'В коллекции' : 'В коллекцию'}</Text>
+        {isTvUi() ? (
+          <Text style={styles.iconLabel}>⊞</Text>
+        ) : (
+          <Text style={styles.chipLabel}>{inCollection ? 'В коллекции' : 'В коллекцию'}</Text>
+        )}
       </TvFocusable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
@@ -269,6 +276,25 @@ const styles = StyleSheet.create({
   chipLabel: {
     color: colors.text,
     fontSize: isTvUi() ? 16 : 14,
+    fontWeight: '600',
+  },
+  iconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  iconBtnDone: {
+    borderColor: 'rgba(195,192,255,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.62)',
+  },
+  iconLabel: {
+    color: colors.text,
+    fontSize: 18,
     fontWeight: '600',
   },
   backdrop: {

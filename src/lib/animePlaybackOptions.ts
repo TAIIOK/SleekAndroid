@@ -1,4 +1,4 @@
-import type { AnimeVideo } from '@aniverse/types';
+import type { AnimeEpisode, AnimeVideo } from '@aniverse/types';
 import {
   PLAYBACK_QUALITIES,
   normalizeDubbingName,
@@ -6,6 +6,8 @@ import {
   pickVideoUrlForQuality,
   type PlaybackQuality,
 } from '@aniverse/playback';
+
+import { pickVideoUrl } from '@/lib/animeDetail';
 
 export type { PlaybackQuality };
 export { PLAYBACK_QUALITIES, normalizeDubbingName, pickPlaybackUrl, pickVideoUrlForQuality };
@@ -53,4 +55,21 @@ export function pickBestDubbingOption(videos: AnimeVideo[]): string | undefined 
     if (currentCount !== bestCount) return currentCount > bestCount ? current : best;
     return current.localeCompare(best, 'ru', { sensitivity: 'accent' }) < 0 ? current : best;
   });
+}
+
+export function videosForDubbing(videos: AnimeVideo[], dubbing: string): AnimeVideo[] {
+  return videos.filter((video) => dubbingEquals(normalizeDubbingName(video), dubbing));
+}
+
+export function episodeHasDubbing(episode: AnimeEpisode, dubbing: string): boolean {
+  if (!dubbing) return false;
+  return videosForDubbing(episode.video ?? [], dubbing).some((video) => !!pickVideoUrl(video));
+}
+
+export function filterEpisodesByDubbing(
+  episodes: AnimeEpisode[],
+  dubbing: string,
+): AnimeEpisode[] {
+  if (!dubbing) return episodes;
+  return episodes.filter((episode) => episodeHasDubbing(episode, dubbing));
 }

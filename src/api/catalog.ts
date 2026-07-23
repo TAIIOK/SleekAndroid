@@ -175,10 +175,12 @@ export async function fetchLampaSection(
   endpoint: string,
   page = 1,
   limit = CATALOG_PAGE_SIZE,
+  options?: { excludeCjk?: boolean },
 ): Promise<LampaItem[]> {
   const enc = encodeURIComponent(endpoint);
+  const exclude = options?.excludeCjk ? '&excludeCjk=1' : '';
   const json = await request<unknown>(
-    `/api/lampa/tmdb/catalog/${kind}/section?endpoint=${enc}&page=${page}&limit=${limit}`,
+    `/api/lampa/tmdb/catalog/${kind}/section?endpoint=${enc}&page=${page}&limit=${limit}${exclude}`,
   );
   return decodeLampaList(json);
 }
@@ -214,6 +216,7 @@ export async function fetchLampaSectionItems(
   section: LampaSection,
   page = 1,
   limit = CATALOG_PAGE_SIZE,
+  options?: { excludeCjk?: boolean },
 ): Promise<LampaItem[]> {
   const isRecommendation = isLampaRecommendationEndpoint(section.endpoint);
   const useRecommendationFetch = isRecommendation && Boolean(section.fetch?.urlPath);
@@ -229,7 +232,9 @@ export async function fetchLampaSectionItems(
         sectionId: parseLampaRecommendationSectionId(section.endpoint),
       });
     }
-    const items = await fetchLampaSection(kind, section.endpoint, page, limit);
+    const items = await fetchLampaSection(kind, section.endpoint, page, limit, {
+      excludeCjk: options?.excludeCjk,
+    });
     return filterLampaItemsByKind(items, kind as 'movie' | 'tv');
   } catch {
     if (isRecommendation) return [];
@@ -358,6 +363,22 @@ export async function fetchGenres(): Promise<{ id: number; name: string }[]> {
   }
 }
 
+export async function fetchLampaGenres(): Promise<Array<{ id: number | string; name: string }>> {
+  try {
+    const json = await request<unknown>('/api/lampa/genres?limit=100');
+    type Genre = { id: number | string; name: string };
+    if (Array.isArray(json)) return json as Genre[];
+    if (json && typeof json === 'object') {
+      const obj = json as { data?: unknown; items?: unknown };
+      if (Array.isArray(obj.items)) return obj.items as Genre[];
+      if (Array.isArray(obj.data)) return obj.data as Genre[];
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchAnimeSkip(
   animeId: number,
   episode: number,
@@ -443,7 +464,19 @@ export interface CatalogSearchParams {
   page?: number;
   year?: string;
   genre?: string;
+  status?: string;
+  animeType?: string;
+  season?: string;
+  ageRating?: string;
+  ratingMin?: string;
   lampaKind?: string;
+  lampaGenre?: string;
+  lampaStatus?: string;
+  lampaMinRating?: string;
+  lampaLang?: string;
+  lampaCountry?: string;
+  sortBy?: string;
+  order?: string;
 }
 
 export interface CatalogSearchData {
@@ -453,12 +486,27 @@ export interface CatalogSearchData {
 
 export async function searchCatalog(params: CatalogSearchParams): Promise<CatalogSearchData> {
   const qs = new URLSearchParams({ q: params.q });
-  if (params.type) qs.set('type', params.type);
-  if (params.limit) qs.set('limit', String(params.limit));
-  if (params.page) qs.set('page', String(params.page));
-  if (params.year) qs.set('year', params.year);
-  if (params.genre) qs.set('genre', params.genre);
-  if (params.lampaKind) qs.set('lampaKind', params.lampaKind);
+  const setIf = (key: string, value?: string | number) => {
+    if (value != null && String(value).trim() !== '') qs.set(key, String(value));
+  };
+  setIf('type', params.type);
+  setIf('limit', params.limit);
+  setIf('page', params.page);
+  setIf('year', params.year);
+  setIf('genre', params.genre);
+  setIf('status', params.status);
+  setIf('animeType', params.animeType);
+  setIf('season', params.season);
+  setIf('ageRating', params.ageRating);
+  setIf('ratingMin', params.ratingMin);
+  setIf('lampaKind', params.lampaKind);
+  setIf('lampaGenre', params.lampaGenre);
+  setIf('lampaStatus', params.lampaStatus);
+  setIf('lampaMinRating', params.lampaMinRating);
+  setIf('lampaLang', params.lampaLang);
+  setIf('lampaCountry', params.lampaCountry);
+  setIf('sortBy', params.sortBy);
+  if (params.sortBy) setIf('order', params.order);
   const json = await request<{ data?: CatalogSearchData } | CatalogSearchData>(
     `/api/catalog/search?${qs}`,
   );

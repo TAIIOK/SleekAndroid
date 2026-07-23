@@ -1,23 +1,33 @@
 export {
+  DEFAULT_HOME_SECTION_ORDER,
   EMPTY_HOME_CONFIG,
   type AnimeCustomSectionConfig,
   type CatalogHomeConfig,
+  type HomeSectionId,
 } from '@aniverse/catalog';
 
 export {
+  applyHomeSectionToggles,
   dedupeAnimeRailsByPath,
   filterLampaSectionsForHomeKind,
+  homeSectionLabel,
   inferHomeConfigConfigured,
   isHomeConfigConfigured,
   isHomeExcludedAnimeRecommendationSection,
+  materializeLampaSectionDefaults,
+  moveInList,
   normalizeHomeConfig,
   resolveAnimeCustomSections,
   resolveAnimeShowcaseIds,
   resolveEnabledContentTypes,
+  resolveEnabledHomeSections,
   resolveEnabledRecommendationShowcaseIds,
+  resolveHideAsianLiveAction,
+  resolveHomeSectionOrder,
   resolveLampaSectionEndpoints,
   resolveRecommendationFeedSectionIds,
   resolveRegularAnimeShowcaseIds,
+  shouldExcludeCjkFromLampaSection,
 } from '@aniverse/catalog';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';

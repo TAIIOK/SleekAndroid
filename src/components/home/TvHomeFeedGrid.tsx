@@ -5,15 +5,21 @@ import { PosterGrid, usePosterGridCardWidth } from '@/components/catalog/PosterG
 import { colors, spacing } from '@/constants/aniverse';
 import { usePosterGridLayout } from '@/hooks/usePosterGridLayout';
 import { useTvHomeFeedSource } from '@/hooks/useTvHomeFeedSource';
+import type { CatalogHomeConfig } from '@/lib/homeSettings';
 import type { TvHomeFeedSource } from '@/lib/tvHomeFeeds';
 
 interface TvHomeFeedGridProps {
   source: TvHomeFeedSource;
+  config: CatalogHomeConfig;
   /** Prefer first poster when Continue Watching is empty and tabs are not the entry. */
   contentEntry?: boolean;
 }
 
-export function TvHomeFeedGrid({ source, contentEntry = false }: TvHomeFeedGridProps) {
+export function TvHomeFeedGrid({
+  source,
+  config,
+  contentEntry = false,
+}: TvHomeFeedGridProps) {
   const {
     items,
     isLoading,
@@ -23,7 +29,7 @@ export function TvHomeFeedGrid({ source, contentEntry = false }: TvHomeFeedGridP
     isFetchingNextPage,
     fetchNextPage,
     openItem,
-  } = useTvHomeFeedSource(source);
+  } = useTvHomeFeedSource(source, config);
   const cardWidth = usePosterGridCardWidth();
   const { columns } = usePosterGridLayout();
 

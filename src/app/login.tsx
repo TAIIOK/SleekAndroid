@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DeviceQrLogin } from '@/components/auth/DeviceQrLogin';
 import { OnScreenKeyboard } from '@/components/auth/OnScreenKeyboard';
 import { SleekLogo } from '@/components/brand/SleekLogo';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { GlassSurface } from '@/components/ui/GlassSurface';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { useAuth } from '@/providers/AuthProvider';
@@ -32,6 +33,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'qr' | 'keyboard'>(isTvUi() ? 'qr' : 'keyboard');
+  const [qrRefreshTag, setQrRefreshTag] = useState<number | undefined>();
 
   const onAuthenticated = useCallback(() => {
     void refreshUser().then(() => router.replace(redirectPath as '/'));
@@ -105,17 +107,26 @@ export default function LoginScreen() {
         >
           {isTv && (
             <View style={styles.modeRow}>
-              <ModeButton label="QR" active={mode === 'qr'} onPress={() => setMode('qr')} />
+              <ModeButton
+                label="QR"
+                active={mode === 'qr'}
+                onPress={() => setMode('qr')}
+                nextFocusDown={mode === 'qr' ? qrRefreshTag : undefined}
+              />
               <ModeButton
                 label="Клавиатура"
                 active={mode === 'keyboard'}
                 onPress={() => setMode('keyboard')}
+                nextFocusDown={mode === 'qr' ? qrRefreshTag : undefined}
               />
             </View>
           )}
 
           {isTv && mode === 'qr' ? (
-            <DeviceQrLogin onAuthenticated={onAuthenticated} />
+            <DeviceQrLogin
+              onAuthenticated={onAuthenticated}
+              onRefreshNativeTag={(tag) => setQrRefreshTag(tag)}
+            />
           ) : (
             <View style={styles.form}>
               <Text style={styles.label}>Логин</Text>
@@ -158,21 +169,22 @@ function ModeButton({
   label,
   active,
   onPress,
+  nextFocusDown,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  nextFocusDown?: number;
 }) {
-  const [focused, setFocused] = useState(false);
   return (
-    <Pressable
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+    <TvFocusable
       onPress={onPress}
-      style={[styles.modeButton, (active || focused) && styles.modeButtonActive]}
+      nextFocusDown={nextFocusDown}
+      style={[styles.modeButton, active && styles.modeButtonActive]}
+      focusedStyle={styles.modeButtonFocused}
     >
       <Text style={styles.modeButtonLabel}>{label}</Text>
-    </Pressable>
+    </TvFocusable>
   );
 }
 
@@ -248,6 +260,10 @@ const styles = StyleSheet.create({
   },
   modeButtonActive: {
     backgroundColor: 'rgba(195,192,255,0.2)',
+    borderColor: colors.brand,
+  },
+  modeButtonFocused: {
+    backgroundColor: 'rgba(195,192,255,0.28)',
     borderColor: colors.brand,
   },
   modeButtonLabel: {
