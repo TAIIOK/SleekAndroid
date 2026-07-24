@@ -1,4 +1,5 @@
 import { request, requestData, unwrapData } from './client';
+import { captureMessage } from '@/lib/crashReporting';
 import type {
   AnimeProgressPut,
   LampaProgressPut,
@@ -7,6 +8,11 @@ import type {
 } from '@/types/progress';
 
 const BATCH_LIMIT = 200;
+
+export type ProgressWriteOptions = {
+  /** When false, failed writes are not queued (used by queue flush). Default true. */
+  enqueueOnFail?: boolean;
+};
 
 function clampProgress(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -93,6 +99,13 @@ function normalizeLampaProgressList(payload: unknown): UserLampaProgress[] {
   return single ? [single] : [];
 }
 
+export class ProgressFetchError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = 'ProgressFetchError';
+  }
+}
+
 export async function fetchAnimeProgress(
   animeId?: number,
   animeIds?: number[],
@@ -106,8 +119,12 @@ export async function fetchAnimeProgress(
     }
     const json = await request<unknown>(path);
     return normalizeAnimeProgressList(json);
-  } catch {
-    return [];
+  } catch (error) {
+    captureMessage('fetchAnimeProgress failed', {
+      animeId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw new ProgressFetchError('Не удалось загрузить прогресс аниме', error);
   }
 }
 
@@ -127,63 +144,59 @@ export async function fetchLampaProgress(
     }
     const json = await request<unknown>(path);
     return normalizeLampaProgressList(json);
-  } catch {
-    return [];
+  } catch (error) {
+    captureMessage('fetchLampaProgress failed', {
+      lampaId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw new ProgressFetchError('Не удалось загрузить прогресс Lampa', error);
   }
 }
 
 export async function putAnimeProgress(
   payload: AnimeProgressPut,
+  options?: ProgressWriteOptions,
 ): Promise<UserAnimeProgress | void> {
   const body = { ...payload, progress: clampProgress(payload.progress) };
+  const enqueueOnFail = options?.enqueueOnFail !== false;
   try {
     return await requestData<UserAnimeProgress>('/api/v2/progress/anime', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
-  } catch {
+  } catch (error) {
+    captureMessage('putAnimeProgress failed', {
+      episodeId: payload.episodeId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    if (enqueueOnFail) {
+      const { enqueueAnimeProgress } = await import('@/lib/progressQueue');
+      await enqueueAnimeProgress(body);
+    }
     return undefined;
   }
 }
 
 export async function putLampaProgress(
   payload: LampaProgressPut,
+  options?: ProgressWriteOptions,
 ): Promise<UserLampaProgress | void> {
   const body = { ...payload, progress: clampProgress(payload.progress) };
+  const enqueueOnFail = options?.enqueueOnFail !== false;
   try {
     return await requestData<UserLampaProgress>('/api/v2/progress/lampa', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
-  } catch {
+  } catch (error) {
+    captureMessage('putLampaProgress failed', {
+      lampaId: payload.lampaId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    if (enqueueOnFail) {
+      const { enqueueLampaProgress } = await import('@/lib/progressQueue');
+      await enqueueLampaProgress(body);
+    }
     return undefined;
   }
-}
-
-/** @deprecated Use putAnimeProgress */
-export async function postEpisodeProgress(payload: {
-  animeId: number;
-  episodeId: number;
-  position: number;
-  duration?: number;
-}): Promise<void> {
-  const progress =
-    payload.duration && payload.duration > 0
-      ? payload.position / payload.duration
-      : 0;
-  await putAnimeProgress({
-    animeId: payload.animeId,
-    episodeId: payload.episodeId,
-    progress,
-    completed: progress >= 0.9,
-  });
-}
-
-export function animeResumeProgress(
-  rows: UserAnimeProgress[],
-  episodeId: number,
-): number | undefined {
-  const row = rows.find((r) => r.episodeId === episodeId);
-  if (!row || row.progress <= 0.01 || row.progress >= 0.98) return undefined;
-  return clampProgress(row.progress);
 }

@@ -2,10 +2,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Account } from '@aniverse/types';
 
-import { getRefreshToken, getToken } from '@/lib/storage';
+import { getRefreshToken, getToken, onTokensChanged } from '@/lib/storage';
 
 export const SAVED_ACCOUNTS_KEY = 'aniverse_tv_saved_accounts';
 const MAX_SAVED_ACCOUNTS = 5;
+
+let tokenSyncBound = false;
+
+/** Keep the active saved-account JWT in sync when the API client refreshes tokens. */
+export function bindSavedAccountTokenSync(): void {
+  if (tokenSyncBound) return;
+  tokenSyncBound = true;
+  onTokensChanged((access, refresh) => {
+    if (!access) return;
+    void syncTokensForAccessToken(access, refresh ?? undefined);
+  });
+}
 
 export interface SavedAccount {
   id: string;
@@ -98,5 +110,38 @@ export async function persistCurrentAccount(user: Account): Promise<void> {
     avatar: typeof user.avatar === 'string' ? user.avatar : undefined,
     accessToken,
     refreshToken: (await getRefreshToken()) ?? undefined,
+  });
+}
+
+/**
+ * After silent refresh, primary storage already has new tokens.
+ * Update whichever saved account still holds the previous access token,
+ * or the most recently used account if the new access token is unknown.
+ */
+export async function syncTokensForAccessToken(
+  accessToken: string,
+  refreshToken?: string,
+): Promise<void> {
+  const accounts = await readRaw();
+  if (!accounts.length) return;
+
+  const byNew = accounts.find((account) => account.accessToken === accessToken);
+  if (byNew) {
+    if (refreshToken && byNew.refreshToken !== refreshToken) {
+      await saveAccount({ ...byNew, refreshToken, lastUsedAt: byNew.lastUsedAt });
+    }
+    return;
+  }
+
+  // Refresh replaced the access token — update the most recently used entry that
+  // still has a refresh token (or the newest overall).
+  const sorted = [...accounts].sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  const target = sorted[0];
+  if (!target) return;
+  await saveAccount({
+    ...target,
+    accessToken,
+    refreshToken: refreshToken ?? target.refreshToken,
+    lastUsedAt: target.lastUsedAt,
   });
 }

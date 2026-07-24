@@ -1,7 +1,7 @@
 {
   "name": "aniverse-tv",
   "main": "expo-router/entry",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "scripts": {
     "start": "node ./scripts/with-expo-path.js expo start",
     "android": "node ./scripts/ensure-android-variant.js phone && node ./scripts/with-expo-path.js expo run:android",
@@ -9,7 +9,11 @@
     "ios": "node ./scripts/with-expo-path.js expo run:ios",
     "web": "node ./scripts/with-expo-path.js expo start --web",
     "reset-project": "node ./scripts/reset-project.js",
-    "lint": "expo lint",
+    "lint": "expo lint --max-warnings 100",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "ota:preflight": "node ./scripts/ota-preflight.js",
     "prebuild": "node ./scripts/with-expo-path.js expo prebuild --clean",
     "prebuild:phone": "node ./scripts/with-expo-path.js expo prebuild --clean",
     "prebuild:tv": "EXPO_TV=1 node ./scripts/with-expo-path.js expo prebuild --clean",
@@ -36,6 +40,7 @@
     "@expo/metro-runtime": "~56.0.14",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.1.2",
+    "@sentry/react-native": "~7.11.0",
     "@tanstack/react-query": "^5.66.9",
     "expo": "~56.0.3",
     "expo-brightness": "~56.0.5",
@@ -50,6 +55,7 @@
     "expo-linear-gradient": "~56.0.4",
     "expo-linking": "~56.0.11",
     "expo-router": "~56.2.5",
+    "expo-secure-store": "~56.0.0",
     "expo-splash-screen": "~56.0.9",
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.5",
@@ -72,7 +78,10 @@
     "@react-native-tvos/config-tv": "^0.1.6",
     "@types/qrcode": "^1.5.6",
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^3.2.7"
   },
   "private": true
 }

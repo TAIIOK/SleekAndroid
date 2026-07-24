@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-/** Online status hook — uses fetch probe (no extra native deps). */
+import { API_BASE } from '@/lib/config';
+import { flushProgressQueue } from '@/lib/progressQueue';
+
+/** Online status hook — uses fetch probe against configured API (no NetInfo dep). */
 export function useOnline(): boolean {
   const [online, setOnline] = useState(true);
 
@@ -11,12 +14,15 @@ export function useOnline(): boolean {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 4000);
-        await fetch('https://api.taiiok.ru/api/catalog', {
+        await fetch(`${API_BASE}/api/catalog`, {
           method: 'HEAD',
           signal: controller.signal,
         });
         clearTimeout(timer);
-        if (!cancelled) setOnline(true);
+        if (!cancelled) {
+          setOnline(true);
+          void flushProgressQueue();
+        }
       } catch {
         if (!cancelled) setOnline(false);
       }

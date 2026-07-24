@@ -13,6 +13,7 @@ import { fetchMe, login as apiLogin, logout as apiLogout } from '@/api/auth';
 import { ApiError, setSubscriptionRequiredHandler, SubscriptionRequiredError } from '@/api/client';
 import {
   accountFromSaved,
+  bindSavedAccountTokenSync,
   getSavedAccount,
   getSavedAccountByAccessToken,
   persistCurrentAccount,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/savedAccounts';
 import { onSessionExpired } from '@/lib/sessionEvents';
 import { clearTokens, getToken, setTokens } from '@/lib/storage';
+import { flushProgressQueue } from '@/lib/progressQueue';
 
 interface AuthContextValue {
   user: Account | null;
@@ -98,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    bindSavedAccountTokenSync();
+  }, []);
+
+  useEffect(() => {
     setSubscriptionRequiredHandler((message) => {
       setSubscriptionBlocked(true);
       setSubscriptionMessage(message);
@@ -110,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (await getToken()) {
           await refreshUser();
+          void flushProgressQueue();
         }
       } finally {
         setLoading(false);

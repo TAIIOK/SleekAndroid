@@ -18,6 +18,13 @@ export function ProfileSettings({ onLogout }: ProfileSettingsProps) {
 
   return (
     <ProfileSection title="Настройки">
+      <TvFocusable
+        style={styles.row}
+        focusedStyle={styles.rowFocused}
+        onPress={() => router.push('/settings')}
+      >
+        <Text style={styles.rowLabel}>Параметры приложения</Text>
+      </TvFocusable>
       {!isTvUi() ? (
         <TvFocusable
           style={styles.row}
@@ -45,6 +52,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
     padding: spacing.lg,
+    marginBottom: spacing.sm,
   },
   rowFocused: {
     borderColor: tvFocus.borderColor,
@@ -58,6 +66,7 @@ const styles = StyleSheet.create({
   logoutRow: {
     borderColor: 'rgba(248,113,113,0.25)',
     backgroundColor: 'rgba(63,29,29,0.35)',
+    marginBottom: 0,
   },
   logoutFocused: {
     borderColor: tvFocus.borderColor,

@@ -75,7 +75,8 @@ export async function listInstalledExternalPlayers(): Promise<ExternalPlayerTarg
   return installed;
 }
 
-function extrasForPackage(
+/** Exported for unit tests — Intent extras that carry resume position. */
+export function extrasForPackage(
   packageName: string | undefined,
   title: string,
   positionMs: number,

@@ -11,6 +11,7 @@ const TV_ALLOWED_PREFIXES = [
   '/schedule',
   '/profile',
   '/accounts',
+  '/settings',
   '/login',
 ] as const;
 

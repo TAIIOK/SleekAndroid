@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { loadDownloadRecords, saveDownloadRecords } from './store';
 import type { DownloadJob, DownloadRecord, DownloadState, QueueState } from './types';
@@ -12,6 +13,22 @@ function newId(): string {
 
 function pickSourceUrl(job: DownloadJob): string {
   return job.sourceUrlCandidates?.[0] ?? job.sourceUrl;
+}
+
+function downloadsDir(): string | null {
+  const base = FileSystem.documentDirectory;
+  if (!base) return null;
+  return `${base}downloads/`;
+}
+
+async function ensureDownloadsDir(): Promise<string> {
+  const dir = downloadsDir();
+  if (!dir) throw new Error('Хранилище недоступно');
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  return dir;
 }
 
 class NativeDownloadService {
@@ -132,13 +149,21 @@ class NativeDownloadService {
 
   async remove(jobId: string): Promise<void> {
     await this.init();
+    const record = this.records.find((item) => item.id === jobId);
+    if (record?.localPath && Platform.OS !== 'web') {
+      try {
+        await FileSystem.deleteAsync(record.localPath, { idempotent: true });
+      } catch {
+        // ignore missing file
+      }
+    }
     const blob = this.blobUrls.get(jobId);
     if (blob) {
       URL.revokeObjectURL(blob);
       this.blobUrls.delete(jobId);
     }
     if (this.activeId === jobId) this.activeId = null;
-    this.records = this.records.filter((record) => record.id !== jobId);
+    this.records = this.records.filter((item) => item.id !== jobId);
     await this.persist();
     void this.pumpQueue();
   }
@@ -149,6 +174,13 @@ class NativeDownloadService {
       (record) => record.state === 'completed' || record.state === 'failed',
     );
     for (const record of removable) {
+      if (record.localPath && Platform.OS !== 'web') {
+        try {
+          await FileSystem.deleteAsync(record.localPath, { idempotent: true });
+        } catch {
+          // ignore
+        }
+      }
       const blob = this.blobUrls.get(record.id);
       if (blob) URL.revokeObjectURL(blob);
       this.blobUrls.delete(record.id);
@@ -163,7 +195,11 @@ class NativeDownloadService {
     await this.init();
     const record = this.records.find((item) => item.id === jobId);
     if (!record || record.state !== 'completed') return null;
-    return record.localPath ?? this.blobUrls.get(jobId) ?? null;
+    if (record.localPath) {
+      const info = await FileSystem.getInfoAsync(record.localPath);
+      if (info.exists) return record.localPath;
+    }
+    return this.blobUrls.get(jobId) ?? null;
   }
 
   private async pumpQueue(): Promise<void> {
@@ -191,7 +227,7 @@ class NativeDownloadService {
     if (record.isHls) {
       await this.patchRecord(id, {
         state: 'failed',
-        error: 'HLS-загрузки пока не поддерживаются в native',
+        error: 'HLS пока недоступен для офлайн-загрузки — выберите progressive MP4',
         progress: 0,
       });
       return;
@@ -201,62 +237,55 @@ class NativeDownloadService {
 
     try {
       const url = pickSourceUrl(record);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
 
-      const totalHeader = response.headers.get('content-length');
-      const total = totalHeader ? Number(totalHeader) : 0;
-      const reader = response.body?.getReader();
-
-      if (!reader) {
+      if (Platform.OS === 'web') {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
-        const localPath = await this.storeBlob(id, blob);
+        const objectUrl = URL.createObjectURL(blob);
+        this.blobUrls.set(id, objectUrl);
         await this.patchRecord(id, {
           state: 'completed',
           progress: 1,
           bytesTotal: blob.size,
           bytesLoaded: blob.size,
-          localPath,
+          localPath: objectUrl,
         });
         return;
       }
 
-      const chunks: Uint8Array[] = [];
-      let loaded = 0;
-      while (true) {
-        const current = this.records.find((item) => item.id === id);
-        if (!current || current.state === 'paused' || current.state === 'cancelled') return;
+      const dir = await ensureDownloadsDir();
+      const ext = guessExtension(url, record.quality);
+      const dest = `${dir}${id}.${ext}`;
 
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          chunks.push(value);
-          loaded += value.length;
-          const progress = total > 0 ? Math.min(loaded / total, 0.99) : 0.5;
-          await this.patchRecord(id, {
-            progress,
-            bytesLoaded: loaded,
-            bytesTotal: total || undefined,
-          });
+      const result = await FileSystem.downloadAsync(url, dest, {
+        sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
+      });
+
+      const current = this.records.find((item) => item.id === id);
+      if (!current || current.state === 'paused' || current.state === 'cancelled') {
+        try {
+          await FileSystem.deleteAsync(dest, { idempotent: true });
+        } catch {
+          // ignore
         }
+        return;
       }
 
-      const merged = new Uint8Array(loaded);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`HTTP ${result.status}`);
       }
-      const blob = new Blob([merged]);
-      const localPath = await this.storeBlob(id, blob);
+
+      const info = await FileSystem.getInfoAsync(dest);
+      const size = info.exists && 'size' in info ? Number(info.size) || undefined : undefined;
+
       await this.patchRecord(id, {
         state: 'completed',
         progress: 1,
-        bytesLoaded: blob.size,
-        bytesTotal: blob.size,
-        localPath,
+        bytesLoaded: size,
+        bytesTotal: size,
+        localPath: result.uri,
+        error: undefined,
       });
     } catch (err) {
       await this.patchRecord(id, {
@@ -265,45 +294,15 @@ class NativeDownloadService {
       });
     }
   }
+}
 
-  private async storeBlob(id: string, blob: Blob): Promise<string | undefined> {
-    if (Platform.OS === 'web') {
-      const objectUrl = URL.createObjectURL(blob);
-      this.blobUrls.set(id, objectUrl);
-      return objectUrl;
-    }
-
-    try {
-      // Optional native persistence when expo-file-system is installed.
-      const FileSystem = require('expo-file-system') as {
-        documentDirectory: string | null;
-        writeAsStringAsync: (
-          uri: string,
-          data: string,
-          options?: { encoding?: string },
-        ) => Promise<void>;
-        EncodingType?: { Base64: string };
-      };
-      const dir = FileSystem.documentDirectory;
-      if (!dir) return undefined;
-      const path = `${dir}downloads/${id}.mp4`;
-      const buffer = await blob.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i += 1) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = globalThis.btoa(binary);
-      await FileSystem.writeAsStringAsync(path, base64, {
-        encoding: FileSystem.EncodingType?.Base64 ?? 'base64',
-      });
-      return path;
-    } catch {
-      const objectUrl = URL.createObjectURL(blob);
-      this.blobUrls.set(id, objectUrl);
-      return objectUrl;
-    }
-  }
+function guessExtension(url: string, quality?: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes('.mkv')) return 'mkv';
+  if (lower.includes('.webm')) return 'webm';
+  if (lower.includes('.m4v')) return 'm4v';
+  if (quality?.toLowerCase().includes('mkv')) return 'mkv';
+  return 'mp4';
 }
 
 let singleton: NativeDownloadService | null = null;

@@ -81,6 +81,11 @@ export function DeviceQrLogin({ onAuthenticated, onRefreshNativeTag }: DeviceQrL
             if (err instanceof Error && /истёк|отклонён/.test(err.message)) {
               setError(err.message);
               if (pollTimer.current) clearInterval(pollTimer.current);
+              return;
+            }
+            // Transient network errors: keep polling, but surface a soft hint once.
+            if (err instanceof Error && err.message) {
+              setError((prev) => prev ?? `Сеть: ${err.message}. Повтор…`);
             }
           }
         };

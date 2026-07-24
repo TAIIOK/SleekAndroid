@@ -6,13 +6,17 @@ type AppExtra = {
   apiUrl?: string;
   watchHubUrl?: string;
   sitePublicUrl?: string;
+  boostyUrl?: string;
+  sentryDsn?: string;
+  sentryEnvironment?: string;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as AppExtra;
 
 export const API_BASE = (extra.apiUrl ?? 'https://api.taiiok.ru').replace(/\/$/, '');
 export const WATCHHUB_BASE = (extra.watchHubUrl ?? 'https://watchhub.taiiok.ru').replace(/\/$/, '');
-export const SITE_PUBLIC_URL = (extra.sitePublicUrl ?? 'https://preview.taiiok.ru').replace(/\/$/, '');
+export const SITE_PUBLIC_URL = (extra.sitePublicUrl ?? 'https://sleekapp.ru').replace(/\/$/, '');
+export const BOOSTY_URL = (extra.boostyUrl ?? 'https://boosty.to/aniverse').replace(/\/$/, '');
 
 export function apiUrl(path: string): string {
   const p = path.startsWith('/') ? path : `/${path}`;

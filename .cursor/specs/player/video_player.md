@@ -108,8 +108,8 @@ Code-verified against acceptance criteria and remote handler (device smoke still
 - [x] Watch: dubbing / quality / episodes / subtitles / settings / external overlays open and close with Back
 - [x] Phone: TextureView playback, site-like chrome show/hide, scrub, center transport, sheets, gestures
 - [x] Anime resume + auto-next; Lampa modes + source sheet startProgress
-- [ ] Device: multi-minute HLS / 4K on Television_1080p
-- [ ] Device: external Just Player / VLC launch with resume position
+- [ ] Device: multi-minute HLS / 4K on Television_1080p (checklist: `docs/DEVICE_QA_PLAYER.md`; code path verified)
+- [ ] Device: external Just Player / VLC launch with resume position (extras unit-tested; hardware smoke in checklist)
 
 ## Notes
 

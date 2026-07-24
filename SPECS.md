@@ -3,6 +3,7 @@
 | Spec | Domain | Status |
 |------|--------|--------|
 | [Session Persistence](.cursor/specs/auth/session_persistence.md) | auth | Implemented |
+| [Device QR + Catalog Deeplink](.cursor/specs/auth/device_qr_and_catalog_deeplink.md) | auth | Implemented |
 | [Continue Watching](.cursor/specs/catalog/continue_watching.md) | catalog | Implemented |
 | [Detail Screens](.cursor/specs/catalog/detail_screens.md) | catalog | Implemented |
 | [Anime Detail Dubbing Selector](.cursor/specs/catalog/anime_detail_dubbing_selector.md) | catalog | Implemented |

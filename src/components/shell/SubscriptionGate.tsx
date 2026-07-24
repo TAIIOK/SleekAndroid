@@ -1,10 +1,34 @@
-import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Linking, Modal, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { QrCodeMatrix } from '@/components/auth/QrCodeMatrix';
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { BOOSTY_URL } from '@/lib/config';
+import { isTvUi } from '@/lib/isTvUi';
 import { useAuth } from '@/providers/AuthProvider';
 
 export function Paywall402({ message }: { message?: string | null }) {
-  const { clearSubscriptionBlock } = useAuth();
+  const { clearSubscriptionBlock, refreshUser } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const subscribeUrl = BOOSTY_URL;
+  const showQr = isTvUi();
+
+  const qrSize = useMemo(() => (isTvUi() ? 180 : 140), []);
+
+  const openBoosty = () => {
+    void Linking.openURL(subscribeUrl);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshUser();
+      clearSubscriptionBlock();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Modal transparent animationType="fade" visible>
@@ -14,15 +38,41 @@ export function Paywall402({ message }: { message?: string | null }) {
           <Text style={styles.body}>
             {message ?? 'Каталог доступен по подписке Boosty после пробного периода.'}
           </Text>
-          <Pressable
+
+          {showQr ? (
+            <View style={styles.qrBlock}>
+              <QrCodeMatrix value={subscribeUrl} size={qrSize} />
+              <Text style={styles.qrHint}>Отсканируйте QR на телефоне, чтобы оформить подписку</Text>
+            </View>
+          ) : null}
+
+          <TvFocusable
+            hasTVPreferredFocus
             style={styles.primary}
-            onPress={() => void Linking.openURL('https://boosty.to')}
+            focusedStyle={styles.primaryFocused}
+            onPress={openBoosty}
           >
             <Text style={styles.primaryText}>Оформить на Boosty</Text>
-          </Pressable>
-          <Pressable style={styles.ghost} onPress={clearSubscriptionBlock}>
+          </TvFocusable>
+
+          <TvFocusable
+            style={styles.secondary}
+            focusedStyle={styles.secondaryFocused}
+            onPress={() => void onRefresh()}
+            disabled={refreshing}
+          >
+            <Text style={styles.secondaryText}>
+              {refreshing ? 'Проверяем…' : 'Уже оплатил — обновить'}
+            </Text>
+          </TvFocusable>
+
+          <TvFocusable
+            style={styles.ghost}
+            focusedStyle={styles.ghostFocused}
+            onPress={clearSubscriptionBlock}
+          >
             <Text style={styles.ghostText}>Закрыть</Text>
-          </Pressable>
+          </TvFocusable>
         </View>
       </View>
     </Modal>
@@ -45,7 +95,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 440,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.stroke,
@@ -65,23 +115,56 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  qrBlock: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  qrHint: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+  },
   primary: {
     backgroundColor: colors.brandAccent,
     borderRadius: radii.md,
     paddingVertical: 14,
     alignItems: 'center',
   },
+  primaryFocused: {
+    borderWidth: 2,
+    borderColor: tvFocus.borderColor,
+  },
   primaryText: {
     color: colors.text,
     fontWeight: '700',
     fontSize: 15,
   },
+  secondary: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
+  },
+  secondaryText: {
+    color: colors.text,
+    fontWeight: '600',
+    fontSize: 14,
+  },
   ghost: {
     paddingVertical: 10,
     alignItems: 'center',
   },
+  ghostFocused: {
+    borderRadius: radii.md,
+    backgroundColor: tvFocus.fill,
+  },
   ghostText: {
     color: colors.textSecondary,
-    fontSize: 15,
+    fontSize: 14,
   },
 });

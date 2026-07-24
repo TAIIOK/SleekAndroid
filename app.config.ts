@@ -14,7 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: isTvBuild ? 'Sleek TV' : 'Sleek',
   slug: 'sleek',
-  version: '1.0.8',
+  version: '1.0.9',
   scheme: 'sleek',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -43,7 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     predictiveBackGestureEnabled: false,
     package: isTvBuild ? 'ru.taiiok.aniverse.tv' : 'ru.taiiok.aniverse.app',
-    versionCode: 9,
+    versionCode: 10,
     intentFilters: [
       {
         action: 'VIEW',
@@ -57,6 +57,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     watchHubUrl: 'https://watchhub.taiiok.ru',
     sitePublicUrl: 'https://sleekapp.ru',
     releasesUrl: 'https://sleekapp.ru/releases/latest.json',
+    boostyUrl: 'https://boosty.to/aniverse',
+    /** Set via EAS secret / local env EXPO_PUBLIC_SENTRY_DSN when ready. */
+    sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
+    sentryEnvironment: process.env.EAS_BUILD_PROFILE ?? (isTvBuild ? 'production-tv' : 'production'),
     forceTvUi: isTvBuild,
     eas: {
       projectId: '5131c8a0-3572-4e6f-af54-5515652ca844',
@@ -68,6 +72,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    'expo-secure-store',
     [
       'expo-splash-screen',
       {

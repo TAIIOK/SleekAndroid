@@ -93,7 +93,7 @@ function topLevelNavKey(path: string): string {
   const segment = path.split('/').filter(Boolean)[0] ?? '';
   if (!segment) return '/';
   if (segment === 'library') return '/library/lists';
-  if (segment === 'accounts') return '/profile';
+  if (segment === 'accounts' || segment === 'settings') return '/profile';
   return `/${segment}`;
 }
 
