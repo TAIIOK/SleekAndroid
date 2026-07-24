@@ -27,17 +27,124 @@ export {
   type RecommendationFeedSection,
 } from '@aniverse/catalog';
 
-import { resolveLampaPosterUrl } from '@/lib/config';
+import { apiUrl, resolveLampaPosterUrl } from '@/lib/config';
+import { getImageCdnPreferenceSync } from '@/lib/imageCdn';
 import { normalizeEpisode } from '@/lib/episodeUtils';
 import {
   decodeLampaDetail,
   mergeLampaWithTmdb,
   resolveLampaTmdbId,
 } from '@/lib/lampaDetail';
+import type { AnimePosterImage } from '@/lib/poster';
 import type { LampaSkipSegment, LampaSkipSegmentsData, SkipResponse } from '@/lib/playerSkip';
+import { getToken } from '@/lib/storage';
 
 import { ApiError, request, requestData, unwrapData } from './client';
 import { fetchTmdbLampaDetail } from './lampaExtras';
+
+export interface AnimeRefreshPostersResult {
+  deletedCount: number;
+  refreshed: boolean;
+  animeUpdated: boolean;
+  cooldown: boolean;
+  retryAfterSeconds: number;
+  postersCreated: number;
+  posters: AnimePosterImage[];
+}
+
+export class RefreshPostersRateLimitedError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super('Rate limit exceeded');
+    this.name = 'RefreshPostersRateLimitedError';
+  }
+}
+
+function asFiniteInt(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return Math.trunc(parsed);
+  }
+  return fallback;
+}
+
+function normalizeRefreshPostersResult(payload: unknown): AnimeRefreshPostersResult {
+  const data =
+    payload && typeof payload === 'object' && 'data' in payload
+      ? (payload as { data: unknown }).data
+      : payload;
+  const row = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const postersRaw = Array.isArray(row.posters) ? row.posters : [];
+  return {
+    deletedCount: asFiniteInt(row.deletedCount),
+    refreshed: Boolean(row.refreshed),
+    animeUpdated: Boolean(row.animeUpdated),
+    cooldown: Boolean(row.cooldown),
+    retryAfterSeconds: Math.max(0, asFiniteInt(row.retryAfterSeconds)),
+    postersCreated: asFiniteInt(row.postersCreated),
+    posters: postersRaw.filter(
+      (entry): entry is AnimePosterImage => !!entry && typeof entry === 'object',
+    ),
+  };
+}
+
+function parseRetryAfterSeconds(res: Response, body: unknown): number {
+  const header = res.headers.get('Retry-After')?.trim();
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds) && seconds > 0) return Math.trunc(seconds);
+  }
+  if (body && typeof body === 'object') {
+    const retry = (body as { retry_after?: unknown; retryAfterSeconds?: unknown }).retry_after
+      ?? (body as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+    const seconds = asFiniteInt(retry, 0);
+    if (seconds > 0) return seconds;
+  }
+  return 60;
+}
+
+/**
+ * Ask backend to verify/repair dead anime posters.
+ * Auth optional. Throws RefreshPostersRateLimitedError on HTTP 429.
+ */
+export async function refreshAnimePosters(animeId: number): Promise<AnimeRefreshPostersResult> {
+  if (!Number.isFinite(animeId) || animeId <= 0) {
+    throw new ApiError('invalid animeId', 400);
+  }
+
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const token = await getToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const cdn = getImageCdnPreferenceSync();
+  if (cdn === 'static' || cdn === 'imgproxy') {
+    headers.set('X-Image-CDN', cdn);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(`/api/animes/${animeId}/refresh-posters`), {
+      method: 'POST',
+      headers,
+    });
+  } catch {
+    throw new ApiError('Сеть недоступна', 0, 'network_error');
+  }
+
+  const body = await res.json().catch(() => ({}));
+
+  if (res.status === 429) {
+    throw new RefreshPostersRateLimitedError(parseRetryAfterSeconds(res, body));
+  }
+
+  if (!res.ok) {
+    throw new ApiError(
+      (body as { error?: string }).error ?? res.statusText,
+      res.status,
+    );
+  }
+
+  return normalizeRefreshPostersResult(body);
+}
 
 export type LampaItem = LampaListItem;
 
@@ -449,8 +556,8 @@ export function mapLampaToRailItem(item: LampaItem) {
   return {
     id: item.id,
     title: lampaItemTitle(item),
-    // Resolve here so cards always get a full WatchHub/TMDB URL (w185 for dense rails).
-    poster: posterPath ? resolveLampaPosterUrl(posterPath, 'w185') : undefined,
+    // Resolve here so cards always get a full WatchHub/TMDB URL (w500 for sharp TV rails).
+    poster: posterPath ? resolveLampaPosterUrl(posterPath, 'w500') : undefined,
     score:
       item.vote_average ??
       (typeof (item as { voteAverage?: number }).voteAverage === 'number'

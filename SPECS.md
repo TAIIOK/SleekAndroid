@@ -24,3 +24,5 @@
 | [TV Catalog Focus and Scroll](.cursor/specs/shell/tv_catalog_focus_and_scroll.md) | shell | Implemented |
 | [Mobile Chrome Scroll](.cursor/specs/shell/mobile_chrome_scroll.md) | shell | Implemented |
 | [OTA Updates (EAS Update)](.cursor/specs/infra/ota_updates.md) | infra | Partial (ship OTA-enabled APK; binary check via latest.json) |
+| [Client Image CDN](.cursor/specs/infra/client_image_cdn.md) | infra | Implemented |
+| [Client Refresh Posters](.cursor/specs/infra/client_refresh_posters.md) | infra | Implemented |

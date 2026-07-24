@@ -1,6 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { putAnimeProgress, putLampaProgress } from '@/api/progress';
+import {
+  fetchAnimeProgress,
+  fetchLampaProgress,
+  putAnimeProgress,
+  putLampaProgress,
+} from '@/api/progress';
 import type { AnimeProgressPut, LampaProgressPut } from '@/types/progress';
 
 const QUEUE_KEY = 'aniverse_progress_retry_queue';
@@ -32,6 +37,38 @@ function dedupeKey(item: ProgressQueueItem): string {
   return `l:${item.payload.lampaId}:${item.payload.seasonOrdinal}:${item.payload.episodeOrdinal}`;
 }
 
+function parseUpdatedAtMs(value?: string): number {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** True when server already has newer activity for this title than when we queued. */
+function serverIsNewerThanQueue(
+  rows: { updatedAt?: string }[],
+  enqueuedAt: number,
+): boolean {
+  return rows.some((row) => parseUpdatedAtMs(row.updatedAt) > enqueuedAt);
+}
+
+async function isQueueItemStale(item: ProgressQueueItem): Promise<boolean> {
+  try {
+    if (item.kind === 'anime') {
+      const animeId = item.payload.animeId;
+      if (animeId == null || !Number.isFinite(animeId)) return false;
+      const rows = await fetchAnimeProgress(animeId);
+      return serverIsNewerThanQueue(rows, item.enqueuedAt);
+    }
+    const lampaId = item.payload.lampaId?.trim();
+    if (!lampaId) return false;
+    const rows = await fetchLampaProgress(lampaId);
+    return serverIsNewerThanQueue(rows, item.enqueuedAt);
+  } catch {
+    // If freshness check fails, still attempt the PUT.
+    return false;
+  }
+}
+
 async function enqueue(item: ProgressQueueItem): Promise<void> {
   const queue = await readQueue();
   const key = dedupeKey(item);
@@ -58,6 +95,10 @@ export async function flushProgressQueue(): Promise<number> {
 
   for (const item of queue) {
     try {
+      if (await isQueueItemStale(item)) {
+        ok += 1;
+        continue;
+      }
       if (item.kind === 'anime') {
         const result = await putAnimeProgress(item.payload, { enqueueOnFail: false });
         if (result === undefined) remaining.push(item);

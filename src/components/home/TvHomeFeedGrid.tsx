@@ -57,6 +57,7 @@ export function TvHomeFeedGrid({
               width={cardWidth}
               title={item.title}
               poster={item.poster}
+              animeId={item.animeId}
               subtitle={item.subtitle}
               rating={item.score}
               onPress={() => openItem(item)}

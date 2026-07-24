@@ -17,6 +17,7 @@ import {
   type CatalogHomeConfig,
 } from '@/lib/homeSettings';
 import { mapAnimeToRailItem } from '@/lib/poster';
+import { uniqueById } from '@/lib/searchConfig';
 import type { TvHomeFeedSource } from '@/lib/tvHomeFeeds';
 
 export function useTvHomeFeedSource(
@@ -68,10 +69,11 @@ export function useTvHomeFeedSource(
 
   const items: RailItem[] = useMemo(() => {
     const pages = query.data?.pages ?? [];
-    if (source.kind === 'anime') {
-      return pages.flatMap((page) => (page as AnimeListItem[]).map(mapAnimeToRailItem));
-    }
-    return pages.flatMap((page) => (page as LampaItem[]).map(mapLampaToRailItem));
+    const mapped =
+      source.kind === 'anime'
+        ? pages.flatMap((page) => (page as AnimeListItem[]).map(mapAnimeToRailItem))
+        : pages.flatMap((page) => (page as LampaItem[]).map(mapLampaToRailItem));
+    return uniqueById(mapped);
   }, [query.data, source.kind]);
 
   const openItem = (item: RailItem) => {

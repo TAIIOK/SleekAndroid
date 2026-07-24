@@ -89,6 +89,7 @@ export function MyListsContent({
               width={cardWidth}
               title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
               poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
+              animeId={item.animeId}
               subtitle="Аниме"
               onPress={() => router.push(`/anime/${item.animeId}` as '/')}
               railStart={index === 0}
@@ -150,6 +151,7 @@ export function MyListsContent({
                     width={cardWidth}
                     title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
                     poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
+                    animeId={item.animeId}
                     subtitle="Аниме"
                     onPress={() => router.push(`/anime/${item.animeId}` as '/')}
                     railStart={index === 0}

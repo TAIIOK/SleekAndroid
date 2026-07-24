@@ -5,11 +5,13 @@ import '@/global.css';
 import { GlobalShell } from '@/components/shell/GlobalShell';
 import { RootErrorBoundary } from '@/components/shell/RootErrorBoundary';
 import { initCrashReporting } from '@/lib/crashReporting';
+import { ensureImageCdnPreference } from '@/lib/imageCdn';
 import { isTvUi } from '@/lib/isTvUi';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { QueryProvider } from '@/providers/QueryProvider';
 
 initCrashReporting();
+void ensureImageCdnPreference();
 
 export default function RootLayout() {
   const watchScreenOptions = isTvUi()

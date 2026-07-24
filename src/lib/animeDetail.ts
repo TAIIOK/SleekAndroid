@@ -91,10 +91,10 @@ export function episodeThumbnail(ep: AnimeEpisode): string | undefined {
     thumbnail?: unknown;
   };
   return (
-    extractPosterPath(raw.screenshot, true) ??
-    extractPosterPath(raw.poster, true) ??
-    extractPosterPath(raw.image, true) ??
-    extractPosterPath(raw.thumbnail, true)
+    extractPosterPath(raw.screenshot) ??
+    extractPosterPath(raw.poster) ??
+    extractPosterPath(raw.image) ??
+    extractPosterPath(raw.thumbnail)
   );
 }
 

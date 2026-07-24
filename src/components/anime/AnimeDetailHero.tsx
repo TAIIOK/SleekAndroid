@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ImageBackground,
   StyleSheet,
@@ -21,9 +21,21 @@ import {
   localizedAnimeStatus,
   localizedAnimeType,
 } from '@/lib/animeDetail';
+import {
+  reportDeadPoster,
+  subscribeAnimePosterRefresh,
+} from '@/lib/animePosterRefresh';
 import { resolveAnimePosterUrl } from '@/lib/config';
+import {
+  reportYaniPosterLoadError,
+  reportYaniPosterLoadSuccess,
+} from '@/lib/imageCdn';
 import type { UserListStatus } from '@/lib/libraryStatus';
-import { animePoster } from '@/lib/poster';
+import {
+  animePoster,
+  isPlausibleImageURL,
+  normalizedAbsoluteURLString,
+} from '@/lib/poster';
 import type { CollectionItemInput } from '@/types/collection';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
@@ -72,6 +84,7 @@ export function AnimeDetailHero({
 }: AnimeDetailHeroProps) {
   const tv = isTvUi();
   const [overviewExpanded, setOverviewExpanded] = useState(false);
+  const [overrideBackdrop, setOverrideBackdrop] = useState<string | null>(null);
   const title = detail.title ?? 'Аниме';
   const alt = animeAltTitle(detail);
   const score = animeScore(detail);
@@ -80,8 +93,32 @@ export function AnimeDetailHero({
   const year = detail.year ? String(detail.year) : undefined;
   const genres = animeGenreNames(detail.genres).slice(0, 4);
   const infoRows = buildAnimeHeroInfoRows(detail, episodesTotal);
-  const backdrop = resolveAnimePosterUrl(animeHeroImageCandidates(detail)[0]);
+  const rawBackdrop = overrideBackdrop ?? animeHeroImageCandidates(detail)[0];
+  const backdrop = resolveAnimePosterUrl(rawBackdrop);
   const canPlay = Boolean(resumeEpisode) && !resumeLoading;
+
+  useEffect(() => {
+    setOverrideBackdrop(null);
+  }, [detail.id]);
+
+  useEffect(() => {
+    return subscribeAnimePosterRefresh((event) => {
+      if (event.animeId !== detail.id) return;
+      setOverrideBackdrop(event.posterURLString);
+    });
+  }, [detail.id]);
+
+  useEffect(() => {
+    if (!rawBackdrop?.trim()) return;
+    const isAbsolute =
+      rawBackdrop.startsWith('http://') ||
+      rawBackdrop.startsWith('https://') ||
+      rawBackdrop.startsWith('//');
+    if (!isAbsolute) return;
+    const normalized = normalizedAbsoluteURLString(rawBackdrop);
+    if (normalized && isPlausibleImageURL(normalized)) return;
+    reportDeadPoster({ animeId: detail.id, failedUrl: null, rawPath: rawBackdrop });
+  }, [detail.id, rawBackdrop]);
   const overview = (detail.description ?? '').trim();
   const truncated = truncateOverview(overview, HERO_OVERVIEW_LIMIT);
   const overviewText =
@@ -268,6 +305,15 @@ export function AnimeDetailHero({
           source={{ uri: backdrop }}
           style={styles.backdrop}
           imageStyle={styles.backdropImage}
+          onLoad={() => reportYaniPosterLoadSuccess()}
+          onError={() => {
+            reportYaniPosterLoadError(backdrop);
+            reportDeadPoster({
+              animeId: detail.id,
+              failedUrl: backdrop,
+              rawPath: rawBackdrop,
+            });
+          }}
         >
           {body}
         </ImageBackground>

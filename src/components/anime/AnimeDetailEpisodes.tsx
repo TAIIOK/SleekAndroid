@@ -18,6 +18,10 @@ import {
   isRedundantEpisodeTitle,
 } from '@/lib/animeDetail';
 import { resolveAnimePosterUrl } from '@/lib/config';
+import {
+  reportYaniPosterLoadError,
+  reportYaniPosterLoadSuccess,
+} from '@/lib/imageCdn';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -123,6 +127,8 @@ export function AnimeDetailEpisodes({
               contentFit="cover"
               cachePolicy="memory-disk"
               recyclingKey={thumb}
+              onLoad={() => reportYaniPosterLoadSuccess()}
+              onError={() => reportYaniPosterLoadError(thumb)}
             />
           ) : (
             <View style={styles.thumbFallback} />

@@ -72,6 +72,7 @@ export function groupScheduleByDay(
 
     group.items.push({
       id: animeId,
+      animeId,
       title: anime?.title ?? 'Без названия',
       poster: anime ? animePoster(anime) : undefined,
       score: typeof anime?.score === 'number' ? anime.score : undefined,

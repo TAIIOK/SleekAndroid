@@ -23,6 +23,7 @@ import {
 } from '@/lib/homeSettings';
 import type { ContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
+import { uniqueById } from '@/lib/searchConfig';
 import type { CatalogHomeConfig } from '@/types/homeConfig';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -89,7 +90,7 @@ function LampaSectionRail({
     retry: isRecommendation ? false : 1,
   });
 
-  const rawItems = useMemo(() => (data?.pages ?? []).flat(), [data]);
+  const rawItems = useMemo(() => uniqueById((data?.pages ?? []).flat()), [data]);
   const settledOnceRef = useRef(false);
 
   useEffect(() => {

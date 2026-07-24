@@ -1,6 +1,7 @@
 import { createApiClient, ApiError, SubscriptionRequiredError } from '@aniverse/api';
 
 import { apiUrl } from '@/lib/config';
+import { getImageCdnPreferenceSync } from '@/lib/imageCdn';
 import { notifySessionExpired } from '@/lib/sessionEvents';
 import { clearTokens, getRefreshToken, getToken, setTokens } from '@/lib/storage';
 
@@ -20,6 +21,7 @@ const api = createApiClient({
     setTokens,
     clearTokens,
   },
+  getImageCdnPreference: () => getImageCdnPreferenceSync(),
   onSessionExpired: notifySessionExpired,
   onSubscriptionRequired: (message) => subscriptionHandler?.(message),
 });

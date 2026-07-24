@@ -1,10 +1,11 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { type View } from 'react-native';
 
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PaginatedContentRow } from '@/components/catalog/PaginatedContentRow';
 import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
+import { uniqueById } from '@/lib/searchConfig';
 import {
   setCatalogActiveFocus,
   takePendingCatalogFocusRestore,
@@ -17,6 +18,8 @@ export interface RailItem {
   poster?: string | null;
   subtitle?: string;
   score?: number | null;
+  /** Set only for anime catalog items — enables refresh-posters on dead images. */
+  animeId?: number;
 }
 
 interface PosterRailProps {
@@ -60,12 +63,14 @@ export function PosterRail({
   restorePath,
   restoreRailKey,
 }: PosterRailProps) {
-  const { bindItem } = useTvRailFocusRestore(items.length);
+  // API pages (and some feeds) can repeat the same TMDB/anime id — keys must stay unique.
+  const uniqueItems = useMemo(() => uniqueById(items), [items]);
+  const { bindItem } = useTvRailFocusRestore(uniqueItems.length);
   const railKey = restoreRailKey ?? title;
   const hostsRef = useRef(new Map<number, View | null>());
-  const itemsLengthRef = useRef(items.length);
+  const itemsLengthRef = useRef(uniqueItems.length);
   const screenFocusedRef = useRef(false);
-  itemsLengthRef.current = items.length;
+  itemsLengthRef.current = uniqueItems.length;
 
   const tryRestoreFocus = useCallback(() => {
     if (!isTvUi() || !restorePath || itemsLengthRef.current <= 0) return null;
@@ -105,18 +110,18 @@ export function PosterRail({
 
   // Progressive rails: pending may be set before this rail has items.
   useEffect(() => {
-    if (!screenFocusedRef.current || !items.length) return;
+    if (!screenFocusedRef.current || !uniqueItems.length) return;
     const focusTimer = tryRestoreFocus();
     return () => {
       if (focusTimer != null) clearTimeout(focusTimer);
     };
-  }, [items.length, tryRestoreFocus]);
+  }, [uniqueItems.length, tryRestoreFocus]);
 
   return (
     <PaginatedContentRow
       title={title}
       subtitle={subtitle}
-      items={items}
+      items={uniqueItems}
       getItemKey={(item) => item.id}
       isLoading={loading}
       isError={Boolean(errorMessage)}
@@ -136,6 +141,7 @@ export function PosterRail({
             }}
             title={item.title}
             poster={item.poster}
+            animeId={item.animeId}
             subtitle={item.subtitle}
             rating={item.score}
             onPress={() => onItemPress?.(item)}

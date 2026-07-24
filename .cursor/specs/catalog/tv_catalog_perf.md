@@ -8,7 +8,7 @@ Release builds on Android TV / Fire TV must keep home and catalog screens light:
 
 1. [x] Home does not fetch Quick Actions *counts* on TV (`library-*`, `history`, `collections` gated with `enabled: !Platform.isTV`); Quick Actions UI is hidden on TV (see `tv_home_top_nav.md`).
 2. [x] Catalog rails fetch at most 12 items per page on TV (`CATALOG_RAIL_PAGE_SIZE`) and load more near the right edge via `onLoadMore`.
-3. [x] Lampa rail posters resolve at TMDB `w185`; anime rails prefer `thumbnail` / `preview` over full `source`.
+3. [x] Lampa rail posters resolve at TMDB `w500`; anime posters prefer `source` / `optimized` over `thumbnail` / `preview` everywhere (including rails).
 4. [x] `PosterCard` / continue posters use `expo-image` `cachePolicy="memory-disk"` and `recyclingKey`.
 5. [x] Skeleton placeholders on TV are static (no `Animated.loop`); loading rails show at most 4 skeletons on TV.
 6. [x] Continue watching is capped at 10 items on TV before episode ordinal N+1 fetches.

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { forwardRef, useCallback, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
   findNodeHandle,
   Pressable,
@@ -9,13 +9,27 @@ import {
 } from 'react-native';
 
 import { colors, layout, radii, tvFocus, typography } from '@/constants/aniverse';
+import {
+  reportDeadPoster,
+  subscribeAnimePosterRefresh,
+} from '@/lib/animePosterRefresh';
 import { resolvePosterUrl } from '@/lib/config';
+import {
+  reportYaniPosterLoadError,
+  reportYaniPosterLoadSuccess,
+} from '@/lib/imageCdn';
+import {
+  isPlausibleImageURL,
+  normalizedAbsoluteURLString,
+} from '@/lib/poster';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
 import { isTvUi } from '@/lib/isTvUi';
 
 export interface PosterCardProps {
   title: string;
   poster?: string | null;
+  /** When set, dead anime posters can trigger refresh-posters. */
+  animeId?: number | null;
   subtitle?: string;
   score?: number | null;
   onPress?: () => void;
@@ -34,10 +48,25 @@ export interface PosterCardProps {
   pinVerticalFocus?: boolean;
 }
 
+function resolveDisplayPosterUrl(poster?: string | null): string | undefined {
+  if (typeof poster !== 'string') return undefined;
+  if (
+    poster.startsWith('http://') ||
+    poster.startsWith('https://') ||
+    poster.startsWith('//')
+  ) {
+    const normalized = normalizedAbsoluteURLString(poster);
+    if (!normalized || !isPlausibleImageURL(normalized)) return undefined;
+    return normalized;
+  }
+  return resolvePosterUrl(poster);
+}
+
 export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
   {
     title,
     poster,
+    animeId,
     subtitle,
     score,
     onPress,
@@ -53,23 +82,46 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
 ) {
   const [focused, setFocused] = useState(false);
   const [selfTag, setSelfTag] = useState<number | undefined>();
+  const [overridePoster, setOverridePoster] = useState<string | null>(null);
+  const didReportUnresolvedRef = useRef(false);
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<View | null>(null);
   const displayTitle = title.trim() || 'Без названия';
   const cardWidth = width ?? (variant === 'grid' ? undefined : layout.posterWidthRail);
-  const imageUrl =
-    typeof poster === 'string' &&
-    (poster.startsWith('http://') || poster.startsWith('https://') || poster.startsWith('//'))
-      ? poster.startsWith('//')
-        ? `https:${poster}`
-        : poster
-      : resolvePosterUrl(poster ?? undefined);
+  const imageUrl = resolveDisplayPosterUrl(overridePoster ?? poster);
   const ratingLabel = score != null && Number.isFinite(score) ? score.toFixed(1) : undefined;
   const exitLeft = isTvUi() && railStart;
   const exitUp = isTvUi() && contentEntry;
   const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
   const pinVertical =
     isTvUi() && variant === 'rail' && focused && pinVerticalFocus && selfTag != null;
+
+  useEffect(() => {
+    setOverridePoster(null);
+    didReportUnresolvedRef.current = false;
+  }, [poster, animeId]);
+
+  useEffect(() => {
+    if (animeId == null || !Number.isFinite(animeId) || animeId <= 0) return;
+    return subscribeAnimePosterRefresh((event) => {
+      if (event.animeId !== animeId) return;
+      setOverridePoster(event.posterURLString);
+    });
+  }, [animeId]);
+
+  useEffect(() => {
+    if (didReportUnresolvedRef.current) return;
+    if (animeId == null || !Number.isFinite(animeId) || animeId <= 0) return;
+    const raw = (overridePoster ?? poster)?.trim();
+    if (!raw) return;
+    const isAbsolute =
+      raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('//');
+    if (!isAbsolute) return;
+    const normalized = normalizedAbsoluteURLString(raw);
+    if (normalized && isPlausibleImageURL(normalized)) return;
+    didReportUnresolvedRef.current = true;
+    reportDeadPoster({ animeId, failedUrl: null, rawPath: raw });
+  }, [animeId, poster, overridePoster]);
 
   const setRefs = useCallback(
     (node: View | null) => {
@@ -133,6 +185,17 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
               contentFit="cover"
               cachePolicy="memory-disk"
               recyclingKey={imageUrl}
+              onLoad={() => reportYaniPosterLoadSuccess()}
+              onError={() => {
+                reportYaniPosterLoadError(imageUrl);
+                if (animeId != null) {
+                  reportDeadPoster({
+                    animeId,
+                    failedUrl: imageUrl,
+                    rawPath: overridePoster ?? poster,
+                  });
+                }
+              }}
             />
           ) : (
             <Text style={styles.fallback}>{displayTitle.slice(0, 1) || '?'}</Text>

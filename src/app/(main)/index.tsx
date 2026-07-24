@@ -31,6 +31,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, spacing } from '@/constants/aniverse';
 import { useContinueWatching } from '@/hooks/useContinueWatching';
 import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
+import { useRefreshProgressOnResume } from '@/hooks/useRefreshProgressOnResume';
 import { useTvCatalogScrollRestore } from '@/hooks/useTvCatalogScrollRestore';
 import { buildContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
 import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
@@ -61,6 +62,7 @@ export default function HomeScreen() {
     isTvUi() && styles.contentTv,
   ]);
   const { items: continueItems, ready: continueReady } = useContinueWatching();
+  useRefreshProgressOnResume();
   const continueWatchingDedupe = useMemo(
     () => buildContinueWatchingDedupeKeys(continueItems),
     [continueItems],

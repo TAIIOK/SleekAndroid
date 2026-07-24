@@ -2,9 +2,12 @@ import { NativeApkUpdatePrompt } from '@/components/shell/NativeApkUpdatePrompt'
 import { OfflineBanner } from '@/components/shell/OfflineBanner';
 import { OtaUpdatePrompt } from '@/components/shell/OtaUpdatePrompt';
 import { SubscriptionGate } from '@/components/shell/SubscriptionGate';
+import { useImageCdnReprobe } from '@/hooks/useImageCdnReprobe';
 
 /** Global overlays: offline, OTA (JS), APK binary update, subscription paywall. */
 export function GlobalShell() {
+  useImageCdnReprobe();
+
   return (
     <>
       <OfflineBanner />

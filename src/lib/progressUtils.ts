@@ -44,11 +44,38 @@ function pickLatestByUpdatedAt<T extends { updatedAt?: string; progress: number 
   });
 }
 
+/** True when the row reflects real watch activity (stub opens excluded). */
+function hasMeaningfulProgress(progress: number, completed?: boolean): boolean {
+  if (completed) return true;
+  return normalizeProgress(progress) > IN_PROGRESS_MIN;
+}
+
+/**
+ * Resume / continue-watching picker.
+ * Ignores unfinished rows superseded by a later completed (or otherwise finished)
+ * watch — e.g. TV left episode 3 at 40%, phone finished episodes 4–8.
+ * Among remaining unfinished rows, prefers substantial progress over tiny stubs.
+ */
 function pickLatestUnfinishedRow<T extends { progress: number; completed: boolean; updatedAt?: string }>(
   rows: T[],
 ): T | undefined {
-  const unfinished = rows.filter((row) => isUnfinishedProgress(row.progress, row.completed));
+  const meaningful = rows.filter((row) => hasMeaningfulProgress(row.progress, row.completed));
+  if (!meaningful.length) return undefined;
+
+  const finished = meaningful.filter(
+    (row) => !isUnfinishedProgress(row.progress, row.completed),
+  );
+  const finishedMs = finished.length
+    ? parseProgressUpdatedAtMs(pickLatestByUpdatedAt(finished).updatedAt)
+    : 0;
+
+  const unfinished = meaningful.filter(
+    (row) =>
+      isUnfinishedProgress(row.progress, row.completed) &&
+      parseProgressUpdatedAtMs(row.updatedAt) >= finishedMs,
+  );
   if (!unfinished.length) return undefined;
+
   const substantial = unfinished.filter(
     (row) => normalizeProgress(row.progress) >= SUBSTANTIAL_PROGRESS_MIN,
   );

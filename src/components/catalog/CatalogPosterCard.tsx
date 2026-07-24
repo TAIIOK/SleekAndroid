@@ -19,6 +19,7 @@ export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
     {
       title,
       poster,
+      animeId,
       subtitle,
       rating,
       score,
@@ -38,6 +39,7 @@ export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
         ref={ref}
         title={title}
         poster={poster}
+        animeId={animeId}
         subtitle={subtitle}
         score={rating ?? score}
         onPress={onPress}

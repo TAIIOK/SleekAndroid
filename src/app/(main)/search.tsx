@@ -113,6 +113,7 @@ export default function SearchScreen() {
         uniqueById(
           (result.anime ?? []).map((item) => ({
             id: item.id,
+            animeId: typeof item.id === 'number' && item.id > 0 ? item.id : undefined,
             title: animeTitle(item),
             poster: animePoster(item),
             score: item.score,
