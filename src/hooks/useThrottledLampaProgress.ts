@@ -7,6 +7,20 @@ import type { LampaProgressPut } from '@/types/progress';
 
 const DEFAULT_SYNC_INTERVAL_MS = 20_000;
 
+function sameLampaCoords(
+  a: LampaProgressPut | null,
+  seasonOrdinal: number,
+  episodeOrdinal: number,
+  lampaId: string,
+): boolean {
+  if (!a) return false;
+  return (
+    a.lampaId === lampaId &&
+    a.seasonOrdinal === seasonOrdinal &&
+    a.episodeOrdinal === episodeOrdinal
+  );
+}
+
 export function useThrottledLampaProgress(
   enabled: boolean,
   lampaId: string,
@@ -18,12 +32,27 @@ export function useThrottledLampaProgress(
   const lastSyncRef = useRef(0);
   const pendingRef = useRef<LampaProgressPut | null>(null);
   const completedSentRef = useRef(false);
+  /** After episode switch, ignore near-end ticks from the previous source. */
+  const awaitingFreshRef = useRef(false);
+  const enabledRef = useRef(enabled);
+
+  enabledRef.current = enabled;
 
   useEffect(() => {
+    const coords = lampaSeasonEpisodeForWatch(isSerial, season, episode);
+    const pending = pendingRef.current;
+    if (
+      pending &&
+      coords &&
+      !sameLampaCoords(pending, coords.seasonOrdinal, coords.episodeOrdinal, lampaId.trim())
+    ) {
+      void putLampaProgress(pending);
+    }
     lastSyncRef.current = 0;
     pendingRef.current = null;
     completedSentRef.current = false;
-  }, [lampaId, season, episode]);
+    awaitingFreshRef.current = true;
+  }, [lampaId, isSerial, season, episode]);
 
   useEffect(() => {
     return () => {
@@ -35,7 +64,15 @@ export function useThrottledLampaProgress(
     };
   }, []);
 
-  return useCallback(
+  const flush = useCallback(() => {
+    if (!enabledRef.current) return;
+    const pending = pendingRef.current;
+    if (!pending) return;
+    lastSyncRef.current = Date.now();
+    void putLampaProgress(pending);
+  }, []);
+
+  const sync = useCallback(
     (current: number, duration: number) => {
       if (!enabled || !lampaId.trim()) return;
       // Never invent duration (old 1440s fallback inflated continue-watching %).
@@ -45,6 +82,14 @@ export function useThrottledLampaProgress(
       if (!coords) return;
 
       const progress = Math.min(1, Math.max(0, current / duration));
+
+      // Auto-next can leave the player emitting the previous episode's end position
+      // under the new season/episode — never write that as an initial/completed sync.
+      if (awaitingFreshRef.current) {
+        if (isEpisodeCompleted(progress)) return;
+        awaitingFreshRef.current = false;
+      }
+
       const completed = isEpisodeCompleted(progress);
       const payload: LampaProgressPut = {
         lampaId: lampaId.trim(),
@@ -70,4 +115,6 @@ export function useThrottledLampaProgress(
     },
     [enabled, lampaId, isSerial, season, episode, intervalMs],
   );
+
+  return { sync, flush };
 }

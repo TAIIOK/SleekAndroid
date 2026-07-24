@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fetchLampaSkipSegments } from '@/api/catalog';
-import { fetchLampaProgress, putLampaProgress } from '@/api/progress';
+import { fetchLampaProgress } from '@/api/progress';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import type { PlaybackErrorInfo, PlayerEpisodeNav } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
@@ -29,11 +29,7 @@ import {
 } from '@/lib/lampaPlaybackOptions';
 import { saveLampaLastSelection } from '@/lib/lampaLastSelection';
 import { buildLampaSkipSegments, buildSkipSegments } from '@/lib/playerSkip';
-import {
-  isEpisodeCompleted,
-  lampaResumeProgress,
-  lampaSeasonEpisodeForWatch,
-} from '@/lib/progressUtils';
+import { lampaResumeProgress } from '@/lib/progressUtils';
 import {
   consumeLampaWatchPayload,
   lampaEpisodeNavId,
@@ -255,7 +251,7 @@ export default function WatchLampaScreen() {
     return parts.join(' · ');
   }, [payload, season, episode, qualityOptionsList, lampaQuality, lampaConnection, lampaDelivery]);
 
-  const syncProgress = useThrottledLampaProgress(
+  const { sync: syncProgress, flush: flushPendingProgress } = useThrottledLampaProgress(
     isAuthenticated && !!lampaId,
     lampaId,
     isSerial,
@@ -264,21 +260,13 @@ export default function WatchLampaScreen() {
   );
 
   const flushProgress = useCallback(() => {
-    if (!isAuthenticated || !lampaId.trim()) return;
-    const coords = lampaSeasonEpisodeForWatch(isSerial, season, episode);
-    if (!coords) return;
     const current = playbackTimeRef.current;
     const duration = durationRef.current;
-    if (!(duration > 1) || !(current > 0)) return;
-    const progress = Math.min(1, Math.max(0, current / duration));
-    void putLampaProgress({
-      lampaId: lampaId.trim(),
-      seasonOrdinal: coords.seasonOrdinal,
-      episodeOrdinal: coords.episodeOrdinal,
-      progress,
-      completed: isEpisodeCompleted(progress),
-    });
-  }, [isAuthenticated, lampaId, isSerial, season, episode]);
+    if (duration > 1 && current > 0) {
+      syncProgress(current, duration);
+    }
+    flushPendingProgress();
+  }, [syncProgress, flushPendingProgress]);
 
   const episodeItems = useMemo(() => {
     if (!canNavigateEpisodes || !payload?.seasons) return [];

@@ -208,7 +208,7 @@ export default function WatchAnimeScreen() {
     };
   }, [numericAnimeId, episodeOrdinal, episode, videos]);
 
-  const syncProgress = useThrottledEpisodeProgress(
+  const { sync: syncProgress, flush: flushProgress } = useThrottledEpisodeProgress(
     isAuthenticated,
     numericAnimeId,
     numericEpisodeId,
@@ -224,6 +224,7 @@ export default function WatchAnimeScreen() {
 
   const navigateToEpisode = useCallback(
     (targetEpisodeId: number) => {
+      flushProgress();
       router.replace({
         pathname: '/watch/anime/[animeId]/[episodeId]',
         params: {
@@ -234,7 +235,7 @@ export default function WatchAnimeScreen() {
         },
       });
     },
-    [router, numericAnimeId, title, selectedDubbing],
+    [router, numericAnimeId, title, selectedDubbing, flushProgress],
   );
 
   if (authLoading) {

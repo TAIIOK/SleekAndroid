@@ -4,7 +4,10 @@ import {
   animeProgressByEpisodeId,
   groupAnimeProgressByAnimeId,
   groupLampaProgressById,
+  isUnfinishedProgress,
   normalizeProgress,
+  pickLatestUnfinishedAnimeRow,
+  pickLatestUnfinishedLampaRow,
 } from '@/lib/progressUtils';
 import { extractPosterPath } from '@/lib/poster';
 import type { SavedAnimeItem } from '@/types/progress';
@@ -54,17 +57,8 @@ function parseDateMs(value?: string): number {
   return Number.isFinite(ms) ? ms : 0;
 }
 
-function pickLatestProgressRow<T extends { updatedAt?: string; progress: number }>(rows: T[]): T {
-  return rows.reduce((best, row) => {
-    const bestTime = parseDateMs(best.updatedAt);
-    const rowTime = parseDateMs(row.updatedAt);
-    if (rowTime !== bestTime) return rowTime > bestTime ? row : best;
-    return row.progress >= best.progress ? row : best;
-  });
-}
-
-function hasWatchProgress(progress: number): boolean {
-  return normalizeProgress(progress) > 0.01;
+function hasWatchProgress(progress: number, completed?: boolean): boolean {
+  return isUnfinishedProgress(progress, completed);
 }
 
 function indexSavedLampa(savedLampa: unknown[]): Map<string, Record<string, unknown>> {
@@ -258,13 +252,12 @@ function pickAnimeContinueFromProgress(
   progressRows: UserAnimeProgress[],
   saved?: SavedAnimeItem,
 ): ContinueWatchingItem | null {
-  const inProgress = progressRows.filter((row) => hasWatchProgress(row.progress));
-  if (!inProgress.length) {
+  const latest = pickLatestUnfinishedAnimeRow(progressRows);
+  if (!latest) {
     if (saved?.status !== 'watching') return null;
     return pickAnimeContinue(saved, progressRows);
   }
 
-  const latest = pickLatestProgressRow(inProgress);
   const progress = normalizeProgress(latest.progress);
   const detail = saved?.anime;
   const title = resolveAnimeListTitle(detail) ?? saved?.title ?? `Аниме ${animeId}`;
@@ -297,7 +290,7 @@ function pickAnimeContinue(
   let bestProgress = 0;
 
   for (const [epId, value] of Object.entries(progressMap)) {
-    if (value <= 0.01) continue;
+    if (!hasWatchProgress(value)) continue;
     if (value >= bestProgress) {
       bestProgress = value;
       bestEpisodeId = Number(epId);
@@ -344,8 +337,8 @@ function pickLampaContinueFromProgress(
     status: savedMeta.status,
   };
 
-  const inProgress = progressRows.filter((row) => hasWatchProgress(row.progress));
-  if (!inProgress.length) {
+  const latest = pickLatestUnfinishedLampaRow(progressRows);
+  if (!latest) {
     if (meta.status !== 'watching') return null;
     const kind = inferLampaKind(progressRows, meta);
     const href = resolveLampaHref(kind, lampaId, meta);
@@ -369,7 +362,6 @@ function pickLampaContinueFromProgress(
     };
   }
 
-  const latest = pickLatestProgressRow(inProgress);
   const progress = normalizeProgress(latest.progress);
   const kind = inferLampaKind(progressRows, meta);
   const href = resolveLampaHref(kind, lampaId, meta);

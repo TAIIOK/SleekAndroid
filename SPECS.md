@@ -2,6 +2,7 @@
 
 | Spec | Domain | Status |
 |------|--------|--------|
+| [Session Persistence](.cursor/specs/auth/session_persistence.md) | auth | Implemented |
 | [Continue Watching](.cursor/specs/catalog/continue_watching.md) | catalog | Implemented |
 | [Detail Screens](.cursor/specs/catalog/detail_screens.md) | catalog | Implemented |
 | [Anime Detail Dubbing Selector](.cursor/specs/catalog/anime_detail_dubbing_selector.md) | catalog | Implemented |
@@ -16,6 +17,7 @@
 | [TV Home Top Navigation](.cursor/specs/catalog/tv_home_top_nav.md) | catalog | Implemented |
 | [Video Player](.cursor/specs/player/video_player.md) | player | Implemented |
 | [Episode Picker + Lampa Dubbing](.cursor/specs/player/episode_picker_and_lampa_dubbing.md) | player | Implemented |
+| [Episode Progress Resume](.cursor/specs/playback/episode_progress_resume.md) | playback | Implemented |
 | [TV Density](.cursor/specs/shell/tv_density.md) | shell | Implemented |
 | [TV Focus Navigation](.cursor/specs/shell/tv_focus_navigation.md) | shell | Implemented |
 | [TV Catalog Focus and Scroll](.cursor/specs/shell/tv_catalog_focus_and_scroll.md) | shell | Implemented |

@@ -10,9 +10,11 @@ import {
 } from 'react';
 
 import { fetchMe, login as apiLogin, logout as apiLogout } from '@/api/auth';
-import { setSubscriptionRequiredHandler, SubscriptionRequiredError } from '@/api/client';
+import { ApiError, setSubscriptionRequiredHandler, SubscriptionRequiredError } from '@/api/client';
 import {
+  accountFromSaved,
   getSavedAccount,
+  getSavedAccountByAccessToken,
   persistCurrentAccount,
   removeSavedAccount,
   touchSavedAccount,
@@ -35,6 +37,15 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+async function hydrateUserFromSaved(accessToken: string): Promise<Account | null> {
+  const saved = await getSavedAccountByAccessToken(accessToken);
+  return saved ? accountFromSaved(saved) : null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Account | null>(null);
@@ -61,7 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshUser = useCallback(async () => {
-    if (!(await getToken())) {
+    const token = await getToken();
+    if (!token) {
       setUser(null);
       setAuthenticated(false);
       return;
@@ -71,10 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(me);
       setAuthenticated(true);
       await persistCurrentAccount(me);
-    } catch {
-      setUser(null);
-      setAuthenticated(false);
-      await clearTokens();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setUser(null);
+        setAuthenticated(false);
+        await clearTokens();
+        return;
+      }
+      // Network / transient errors: keep session, hydrate from cache if possible.
+      setAuthenticated(true);
+      const cached = await hydrateUserFromSaved(token);
+      if (cached) setUser(cached);
     }
   }, []);
 
@@ -139,12 +158,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthenticated(true);
         await persistCurrentAccount(me);
         await touchSavedAccount(accountId);
-      } catch {
-        await removeSavedAccount(accountId);
-        await clearTokens();
-        setUser(null);
-        setAuthenticated(false);
-        throw new Error('Сессия истекла — войдите снова');
+      } catch (error) {
+        if (isUnauthorized(error)) {
+          await removeSavedAccount(accountId);
+          await clearTokens();
+          setUser(null);
+          setAuthenticated(false);
+          throw new Error('Сессия истекла — войдите снова');
+        }
+        // Offline / transient: keep tokens and saved account, use cached profile.
+        setUser(accountFromSaved(saved));
+        setAuthenticated(true);
+        await touchSavedAccount(accountId);
       }
     },
     [syncAuthState],

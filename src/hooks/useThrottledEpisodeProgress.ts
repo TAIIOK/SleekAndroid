@@ -17,11 +17,21 @@ export function useThrottledEpisodeProgress(
   const lastSyncRef = useRef(0);
   const pendingRef = useRef<AnimeProgressPut | null>(null);
   const completedSentRef = useRef(false);
+  /** After episode switch, ignore near-end ticks from the previous source. */
+  const awaitingFreshRef = useRef(false);
+  const enabledRef = useRef(enabled);
+
+  enabledRef.current = enabled;
 
   useEffect(() => {
+    const pending = pendingRef.current;
+    if (pending && pending.episodeId !== episodeId) {
+      void putAnimeProgress(pending);
+    }
     lastSyncRef.current = 0;
     pendingRef.current = null;
     completedSentRef.current = false;
+    awaitingFreshRef.current = true;
   }, [episodeId]);
 
   useEffect(() => {
@@ -34,12 +44,28 @@ export function useThrottledEpisodeProgress(
     };
   }, []);
 
-  return useCallback(
+  const flush = useCallback(() => {
+    if (!enabledRef.current) return;
+    const pending = pendingRef.current;
+    if (!pending) return;
+    lastSyncRef.current = Date.now();
+    void putAnimeProgress(pending);
+  }, []);
+
+  const sync = useCallback(
     (current: number, duration: number) => {
       // Require real media duration — never sync against buffer/seekable guesses.
       if (!enabled || !(duration > 1) || !(current >= 0)) return;
 
       const progress = Math.min(1, Math.max(0, current / duration));
+
+      // Auto-next can leave the player emitting the previous episode's end position
+      // under the new episodeId — never write that as an initial/completed sync.
+      if (awaitingFreshRef.current) {
+        if (isEpisodeCompleted(progress)) return;
+        awaitingFreshRef.current = false;
+      }
+
       const completed = isEpisodeCompleted(progress);
       const payload: AnimeProgressPut = {
         animeId,
@@ -65,4 +91,6 @@ export function useThrottledEpisodeProgress(
     },
     [enabled, animeId, episodeId, episodeOrdinal, intervalMs],
   );
+
+  return { sync, flush };
 }

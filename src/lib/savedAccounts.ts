@@ -49,6 +49,23 @@ export async function getSavedAccount(id: string): Promise<SavedAccount | undefi
   return accounts.find((account) => account.id === id);
 }
 
+export async function getSavedAccountByAccessToken(
+  accessToken: string,
+): Promise<SavedAccount | undefined> {
+  const accounts = await readRaw();
+  return accounts.find((account) => account.accessToken === accessToken);
+}
+
+export function accountFromSaved(saved: SavedAccount): Account {
+  const numericId = Number(saved.id);
+  return {
+    id: Number.isFinite(numericId) ? numericId : 0,
+    nickname: saved.nickname,
+    email: saved.email,
+    avatar: saved.avatar,
+  };
+}
+
 export async function saveAccount(
   entry: Omit<SavedAccount, 'lastUsedAt'> & { lastUsedAt?: number },
 ): Promise<void> {
