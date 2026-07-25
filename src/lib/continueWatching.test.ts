@@ -32,7 +32,7 @@ describe('buildContinueWatchingItems', () => {
       {
         episodeId: 11,
         animeId: 5,
-        progress: 0.95,
+        progress: 0.99,
         completed: true,
         updatedAt: '2026-07-24T10:00:00.000Z',
       },
@@ -58,6 +58,47 @@ describe('buildContinueWatchingItems', () => {
     expect(items.some((item) => item.kind === 'anime' && item.episodeId === 10)).toBe(false);
     const animeItem = items.find((item) => item.kind === 'anime' && item.animeId === 5);
     expect(animeItem?.episodeId).toBe(11);
+    // Near-end episode still opens the player (auto-next / fresh start), not detail.
+    expect(animeItem?.startProgress).toBeUndefined();
+    expect(animeItem?.href).toBe('/watch/anime/5/11');
+    expect(animeItem?.progress).toBe(0.99);
+  });
+
+  it('keeps anime on the rail after completing the only watched episode', () => {
+    const progress: UserAnimeProgress[] = [
+      {
+        episodeId: 42,
+        animeId: 9,
+        progress: 0.99,
+        completed: true,
+        updatedAt: '2026-07-24T10:00:00.000Z',
+      },
+    ];
+
+    const items = buildContinueWatchingItems([], [], progress, [], []);
+    const animeItem = items.find((item) => item.kind === 'anime' && item.animeId === 9);
+    expect(animeItem).toBeTruthy();
+    expect(animeItem?.href).toBe('/watch/anime/9/42');
+    expect(animeItem?.startProgress).toBeUndefined();
+    expect(animeItem?.progress).toBe(0.99);
+  });
+
+  it('shows real percent for 90%+ that is still resumable', () => {
+    const progress: UserAnimeProgress[] = [
+      {
+        episodeId: 7,
+        animeId: 3,
+        progress: 0.92,
+        completed: true,
+        updatedAt: '2026-07-24T10:00:00.000Z',
+      },
+    ];
+
+    const items = buildContinueWatchingItems([], [], progress, [], []);
+    const animeItem = items.find((item) => item.kind === 'anime' && item.animeId === 3);
+    expect(animeItem?.progress).toBe(0.92);
+    expect(animeItem?.startProgress).toBe(0.92);
+    expect(animeItem?.href).toBe('/watch/anime/3/7');
   });
 
   it('does not keep Lampa S1E3 when a later episode was completed on another device', () => {

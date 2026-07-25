@@ -16,13 +16,17 @@ export function normalizeProgress(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+/** API / history “watched” mark (server uses ~90%). */
 export function isEpisodeCompleted(progress: number, completed?: boolean): boolean {
   return !!completed || progress >= COMPLETED_THRESHOLD;
 }
 
-/** True when the user can still resume this row (excludes stubs and completed). */
-export function isUnfinishedProgress(progress: number, completed?: boolean): boolean {
-  if (completed) return false;
+/**
+ * True when the user can still resume this row.
+ * Uses near-end (98%), not the API 90% completed flag — otherwise 92% shows as 100%
+ * and jumps to detail instead of resume.
+ */
+export function isUnfinishedProgress(progress: number, _completed?: boolean): boolean {
   const value = normalizeProgress(progress);
   return value > IN_PROGRESS_MIN && value < IN_PROGRESS_MAX;
 }
@@ -30,7 +34,7 @@ export function isUnfinishedProgress(progress: number, completed?: boolean): boo
 /** Label for episode progress chip; null when progress is absent / stub. */
 export function formatProgressLabel(progress: number): string | null {
   const p = normalizeProgress(progress);
-  if (p >= COMPLETED_THRESHOLD) return 'Просмотрено';
+  if (p >= IN_PROGRESS_MAX) return 'Просмотрено';
   if (p > IN_PROGRESS_MIN) return `${Math.max(1, Math.round(p * 100))}%`;
   return null;
 }
@@ -191,6 +195,33 @@ export function pickLatestUnfinishedLampaRow(
   return pickLatestUnfinishedRow(rows);
 }
 
+/**
+ * Continue Watching picker: prefer unfinished mid-progress, but keep the title
+ * when the latest activity is a completed episode (series should stay on the rail).
+ */
+function pickLatestContinueRow<T extends { progress: number; completed: boolean; updatedAt?: string }>(
+  rows: T[],
+): T | undefined {
+  const unfinished = pickLatestUnfinishedRow(rows);
+  if (unfinished) return unfinished;
+
+  const meaningful = rows.filter((row) => hasMeaningfulProgress(row.progress, row.completed));
+  if (!meaningful.length) return undefined;
+  return pickLatestByUpdatedAt(meaningful);
+}
+
+export function pickLatestContinueAnimeRow(
+  rows: UserAnimeProgress[],
+): UserAnimeProgress | undefined {
+  return pickLatestContinueRow(rows);
+}
+
+export function pickLatestContinueLampaRow(
+  rows: UserLampaProgress[],
+): UserLampaProgress | undefined {
+  return pickLatestContinueRow(rows);
+}
+
 export function lampaSeasonEpisodeForWatch(
   isSerial: boolean,
   season?: number,
@@ -318,18 +349,17 @@ export function buildAnimePlaybackState(
 ): SavedAnimePlaybackState {
   const item = saved.find((s) => (s.animeId ?? s.id) === animeId);
   const progressByEpisodeId = animeProgressByEpisodeId(progressRows, animeId);
-  const latestUnfinished = pickLatestUnfinishedAnimeRow(
-    progressRows.filter((row) => row.animeId == null || row.animeId === animeId),
-  );
+  const scoped = progressRows.filter((row) => row.animeId == null || row.animeId === animeId);
+  const latestContinue = pickLatestContinueAnimeRow(scoped);
 
-  let lastEpisodeId = latestUnfinished?.episodeId;
-  let lastProgress = latestUnfinished ? normalizeProgress(latestUnfinished.progress) : 0;
+  let lastEpisodeId = latestContinue?.episodeId;
+  let lastProgress = latestContinue ? normalizeProgress(latestContinue.progress) : 0;
 
-  // Library lastWatchingEpisode only when there is no unfinished progress row.
+  // Library lastWatchingEpisode only when there is no progress-driven resume target.
   if (!lastEpisodeId && item?.lastWatchingEpisode) {
     const libraryId = item.lastWatchingEpisode;
     const libraryProgress = progressByEpisodeId[libraryId] ?? 0;
-    if (isUnfinishedProgress(libraryProgress)) {
+    if (libraryProgress > IN_PROGRESS_MIN) {
       lastEpisodeId = libraryId;
       lastProgress = libraryProgress;
     } else if (item.status === 'watching') {
@@ -345,7 +375,7 @@ export function buildAnimePlaybackState(
     lastProgress,
     hasHistory:
       !!lastEpisodeId &&
-      (isUnfinishedProgress(lastProgress) || item?.status === 'watching'),
+      (lastProgress > IN_PROGRESS_MIN || item?.status === 'watching'),
     isFavorite: !!item?.isFavorite,
   };
 }

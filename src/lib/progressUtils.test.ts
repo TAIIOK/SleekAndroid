@@ -24,15 +24,15 @@ import type { UserAnimeProgress, UserLampaProgress } from '../types/progress';
 import type { LampaDetail } from '@/api/catalog';
 
 describe('isUnfinishedProgress', () => {
-  it('rejects stubs and completed', () => {
+  it('rejects stubs and near-end', () => {
     expect(isUnfinishedProgress(0.0004)).toBe(false);
     expect(isUnfinishedProgress(0.99)).toBe(false);
-    expect(isUnfinishedProgress(0.5, true)).toBe(false);
   });
 
-  it('accepts mid progress', () => {
+  it('accepts mid progress even when API completed flag is set at 90%', () => {
     expect(isUnfinishedProgress(0.4)).toBe(true);
     expect(isUnfinishedProgress(0.002)).toBe(true);
+    expect(isUnfinishedProgress(0.92, true)).toBe(true);
   });
 });
 
@@ -150,7 +150,7 @@ describe('buildAnimePlaybackState', () => {
     expect(state.lastProgress).toBeCloseTo(0.42);
   });
 
-  it('falls back to library when unfinished is superseded by completed', () => {
+  it('keeps latest completed episode as resume target for Continue CTA', () => {
     const state = buildAnimePlaybackState(
       [
         {
@@ -180,7 +180,8 @@ describe('buildAnimePlaybackState', () => {
       ],
     );
     expect(state.lastEpisodeId).toBe(8);
-    expect(state.lastProgress).toBe(0);
+    expect(state.lastProgress).toBe(1);
+    expect(state.hasHistory).toBe(true);
   });
 });
 
@@ -189,7 +190,8 @@ describe('formatProgressLabel', () => {
     expect(formatProgressLabel(0)).toBeNull();
     expect(formatProgressLabel(0.0004)).toBeNull();
     expect(formatProgressLabel(0.42)).toBe('42%');
-    expect(formatProgressLabel(0.9)).toBe('Просмотрено');
+    expect(formatProgressLabel(0.92)).toBe('92%');
+    expect(formatProgressLabel(0.98)).toBe('Просмотрено');
   });
 });
 

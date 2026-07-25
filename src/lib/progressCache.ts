@@ -6,7 +6,13 @@ import type {
   UserLampaProgress,
 } from '@/types/progress';
 
-/** Patch React Query so Continue Watching can render before the next GET. */
+/**
+ * Patch React Query so Continue Watching can render before the next GET.
+ *
+ * Never seed an empty/missing *global* list with a singleton row — after GC
+ * that would wipe every other title from the continue rail until a full refetch.
+ * Scoped keys (`['anime-progress', id]`) may still be seeded.
+ */
 export function patchAnimeProgressCache(payload: AnimeProgressPut): void {
   const updatedAt = new Date().toISOString();
   const nextRow: UserAnimeProgress = {
@@ -18,8 +24,7 @@ export function patchAnimeProgressCache(payload: AnimeProgressPut): void {
     updatedAt,
   };
 
-  const merge = (prev: UserAnimeProgress[] | undefined): UserAnimeProgress[] => {
-    if (!prev?.length) return [nextRow];
+  const mergeInto = (prev: UserAnimeProgress[]): UserAnimeProgress[] => {
     const idx = prev.findIndex((row) => row.episodeId === payload.episodeId);
     if (idx < 0) return [nextRow, ...prev];
     const existing = prev[idx];
@@ -29,9 +34,16 @@ export function patchAnimeProgressCache(payload: AnimeProgressPut): void {
     return copy;
   };
 
-  queryClient.setQueryData<UserAnimeProgress[]>(['anime-progress'], merge);
+  queryClient.setQueryData<UserAnimeProgress[]>(['anime-progress'], (prev) => {
+    if (!prev?.length) return prev; // no-op: keep undefined/[] so we don't invent a 1-row list
+    return mergeInto(prev);
+  });
+
   if (payload.animeId != null) {
-    queryClient.setQueryData<UserAnimeProgress[]>(['anime-progress', payload.animeId], merge);
+    queryClient.setQueryData<UserAnimeProgress[]>(['anime-progress', payload.animeId], (prev) => {
+      if (!prev?.length) return [nextRow];
+      return mergeInto(prev);
+    });
   }
 }
 
@@ -53,8 +65,7 @@ export function patchLampaProgressCache(payload: LampaProgressPut): void {
     row.seasonOrdinal === seasonOrdinal &&
     row.episodeOrdinal === episodeOrdinal;
 
-  const merge = (prev: UserLampaProgress[] | undefined): UserLampaProgress[] => {
-    if (!prev?.length) return [nextRow];
+  const mergeInto = (prev: UserLampaProgress[]): UserLampaProgress[] => {
     const idx = prev.findIndex(sameCoords);
     if (idx < 0) return [nextRow, ...prev];
     const existing = prev[idx];
@@ -64,6 +75,13 @@ export function patchLampaProgressCache(payload: LampaProgressPut): void {
     return copy;
   };
 
-  queryClient.setQueryData<UserLampaProgress[]>(['lampa-progress'], merge);
-  queryClient.setQueryData<UserLampaProgress[]>(['lampa-progress', payload.lampaId], merge);
+  queryClient.setQueryData<UserLampaProgress[]>(['lampa-progress'], (prev) => {
+    if (!prev?.length) return prev;
+    return mergeInto(prev);
+  });
+
+  queryClient.setQueryData<UserLampaProgress[]>(['lampa-progress', payload.lampaId], (prev) => {
+    if (!prev?.length) return [nextRow];
+    return mergeInto(prev);
+  });
 }

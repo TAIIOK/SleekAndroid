@@ -559,7 +559,7 @@ export function LampaSourceSheet({
                             tmdbEpisode={tmdbEpisodeByNumber.get(ep.episode)}
                             progress={progress}
                             highlight={
-                              isResumeTarget && (progress > 0.02 || progress >= 0.9)
+                              isResumeTarget && (progress > 0.02 || progress >= 0.98)
                             }
                             onPress={() => void playSelection(ep.season, ep.episode)}
                           />
@@ -621,7 +621,7 @@ function SourceEpisodeRow({
   const airDate = formatRuDate(tmdbEpisode?.airDate);
   const still = resolveLampaPosterUrl(tmdbEpisode?.stillPath, 'w342');
   const progressLabel = formatProgressLabel(progress);
-  const watched = progress >= 0.9;
+  const watched = progress >= 0.98;
   const progressWidth = watched
     ? 100
     : Math.round(Math.min(1, Math.max(0, progress)) * 100);

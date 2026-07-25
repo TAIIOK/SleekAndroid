@@ -5,6 +5,7 @@ import { putLampaProgress } from '@/api/progress';
 import { patchLampaProgressCache } from '@/lib/progressCache';
 import {
   lampaPlaybackDurationKey,
+  getPlaybackDuration,
   rememberPlaybackDuration,
 } from '@/lib/playbackDurationStore';
 import { isEpisodeCompleted, lampaSeasonEpisodeForWatch } from '@/lib/progressUtils';
@@ -13,6 +14,8 @@ import type { LampaProgressPut } from '@/types/progress';
 
 /** Frequent enough for short sessions; exit/background flush covers the rest. */
 const DEFAULT_SYNC_INTERVAL_MS = 5_000;
+/** Cap for duration-unknown heuristic — never mark completed from a guess. */
+const HEURISTIC_PROGRESS_CAP = 0.89;
 
 function invalidateLampaProgress(): void {
   void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
@@ -123,8 +126,15 @@ export function useThrottledLampaProgress(
           duration,
         );
       } else if (current > 1) {
-        // iOS parity when media duration is briefly unknown.
-        progress = Math.min(0.95, Math.max(0, current / 1440));
+        const stored = getPlaybackDuration(
+          lampaPlaybackDurationKey(lampaId.trim(), coords.seasonOrdinal, coords.episodeOrdinal),
+        );
+        if (stored != null && stored > 1) {
+          progress = Math.min(1, Math.max(0, current / stored));
+        } else {
+          // Duration briefly unknown — never complete from guess.
+          progress = Math.min(HEURISTIC_PROGRESS_CAP, Math.max(0, current / 1440));
+        }
       } else {
         return;
       }

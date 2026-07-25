@@ -11,8 +11,8 @@ import {
   groupLampaProgressById,
   isUnfinishedProgress,
   normalizeProgress,
-  pickLatestUnfinishedAnimeRow,
-  pickLatestUnfinishedLampaRow,
+  pickLatestContinueAnimeRow,
+  pickLatestContinueLampaRow,
 } from '@/lib/progressUtils';
 import { extractPosterPath } from '@/lib/poster';
 import type { SavedAnimeItem } from '@/types/progress';
@@ -259,13 +259,14 @@ function pickAnimeContinueFromProgress(
   progressRows: UserAnimeProgress[],
   saved?: SavedAnimeItem,
 ): ContinueWatchingItem | null {
-  const latest = pickLatestUnfinishedAnimeRow(progressRows);
+  const latest = pickLatestContinueAnimeRow(progressRows);
   if (!latest) {
     if (saved?.status !== 'watching') return null;
     return pickAnimeContinue(saved, progressRows);
   }
 
   const progress = normalizeProgress(latest.progress);
+  const unfinished = isUnfinishedProgress(latest.progress, latest.completed);
   const detail = saved?.anime;
   const title = resolveAnimeListTitle(detail) ?? saved?.title ?? `Аниме ${animeId}`;
   const poster = detail ? extractPosterPath(detail.poster) : saved?.poster;
@@ -274,11 +275,12 @@ function pickAnimeContinueFromProgress(
     id: `anime-${animeId}`,
     title,
     poster: poster ? resolvePosterUrl(poster) : undefined,
-    subtitle: 'Продолжить',
+    subtitle: unfinished ? 'Продолжить' : 'Смотреть дальше',
     progress,
     durationSec: getPlaybackDuration(animePlaybackDurationKey(animeId, latest.episodeId)),
+    // Always open the player — never the detail page from Continue Watching.
     href: `/watch/anime/${animeId}/${latest.episodeId}`,
-    startProgress: progress,
+    startProgress: unfinished ? progress : undefined,
     kind: 'anime',
     animeId,
     episodeId: latest.episodeId,
@@ -349,7 +351,7 @@ function pickLampaContinueFromProgress(
     status: savedMeta.status,
   };
 
-  const latest = pickLatestUnfinishedLampaRow(progressRows);
+  const latest = pickLatestContinueLampaRow(progressRows);
   if (!latest) {
     if (meta.status !== 'watching') return null;
     const kind = inferLampaKind(progressRows, meta);
@@ -375,6 +377,7 @@ function pickLampaContinueFromProgress(
   }
 
   const progress = normalizeProgress(latest.progress);
+  const unfinished = isUnfinishedProgress(latest.progress, latest.completed);
   const kind = inferLampaKind(progressRows, meta);
   const href = resolveLampaHref(kind, lampaId, meta);
   if (!href) return null;
@@ -393,13 +396,15 @@ function pickLampaContinueFromProgress(
     subtitle:
       kind === 'tv' && season != null && episode != null
         ? `Сезон ${season} · Эпизод ${episode}`
-        : 'Продолжить',
+        : unfinished
+          ? 'Продолжить'
+          : 'Смотреть дальше',
     progress,
     durationSec: getPlaybackDuration(
       lampaPlaybackDurationKey(lampaId, latest.seasonOrdinal, latest.episodeOrdinal),
     ),
     href,
-    startProgress: progress,
+    startProgress: unfinished ? progress : undefined,
     kind,
     routeId,
     season: season ?? undefined,

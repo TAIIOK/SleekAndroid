@@ -146,7 +146,7 @@ async function openItem(
           routeId,
           season: item.season,
           episode: item.episode,
-          startProgress: item.startProgress ?? item.progress,
+          startProgress: item.startProgress,
         });
         if (resumed) {
           router.push('/watch/lampa');
