@@ -69,6 +69,9 @@ export default function WatchLampaScreen() {
   );
   const playbackTimeRef = useRef(0);
   const durationRef = useRef(0);
+  const playbackCaptureRef = useRef<(() => { currentTime: number; duration: number }) | null>(
+    null,
+  );
   const httpFallbackTriedRef = useRef(false);
   const hasSwitchedEpisodeRef = useRef(false);
   const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
@@ -259,13 +262,15 @@ export default function WatchLampaScreen() {
     episode,
   );
 
-  const flushProgress = useCallback(() => {
-    const current = playbackTimeRef.current;
-    const duration = durationRef.current;
-    if (duration > 1 && current > 0) {
-      syncProgress(current, duration);
+  const flushProgress = useCallback(async () => {
+    const snap = playbackCaptureRef.current?.() ?? {
+      currentTime: playbackTimeRef.current,
+      duration: durationRef.current,
+    };
+    if (snap.currentTime > 0) {
+      syncProgress(snap.currentTime, snap.duration);
     }
-    flushPendingProgress();
+    await flushPendingProgress();
   }, [syncProgress, flushPendingProgress]);
 
   const episodeItems = useMemo(() => {
@@ -360,7 +365,7 @@ export default function WatchLampaScreen() {
       if (nextSeason === season && nextEpisodeNum === episode) return;
       if (switchingEpisode) return;
 
-      flushProgress();
+      await flushProgress();
       setSwitchingEpisode(true);
       setSwitchError(null);
       try {
@@ -535,7 +540,10 @@ export default function WatchLampaScreen() {
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
         skipSegments={skipSegments}
-        onBack={() => router.back()}
+        playbackCaptureRef={playbackCaptureRef}
+        onBack={() => {
+          void flushProgress().finally(() => router.back());
+        }}
         dubbingOptions={dubbingOptions}
         qualityOptions={qualityOptions}
         connectionOptions={connectionOptions}
@@ -549,7 +557,7 @@ export default function WatchLampaScreen() {
         onPlaybackError={handlePlaybackError}
         onProgress={(current, duration) => {
           playbackTimeRef.current = current;
-          durationRef.current = duration;
+          if (duration > 1) durationRef.current = duration;
           syncProgress(current, duration);
         }}
       />

@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { putLampaProgress } from '@/api/progress';
+import { patchLampaProgressCache } from '@/lib/progressCache';
+import {
+  lampaPlaybackDurationKey,
+  rememberPlaybackDuration,
+} from '@/lib/playbackDurationStore';
 import { isEpisodeCompleted, lampaSeasonEpisodeForWatch } from '@/lib/progressUtils';
 import { queryClient } from '@/providers/QueryProvider';
 import type { LampaProgressPut } from '@/types/progress';
 
-const DEFAULT_SYNC_INTERVAL_MS = 20_000;
+/** Frequent enough for short sessions; exit/background flush covers the rest. */
+const DEFAULT_SYNC_INTERVAL_MS = 5_000;
+
+function invalidateLampaProgress(): void {
+  void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
+}
 
 function sameLampaCoords(
   a: LampaProgressPut | null,
@@ -19,6 +30,12 @@ function sameLampaCoords(
     a.seasonOrdinal === seasonOrdinal &&
     a.episodeOrdinal === episodeOrdinal
   );
+}
+
+async function writeLampaProgress(payload: LampaProgressPut, invalidate: boolean): Promise<void> {
+  patchLampaProgressCache(payload);
+  await putLampaProgress(payload);
+  if (invalidate) invalidateLampaProgress();
 }
 
 export function useThrottledLampaProgress(
@@ -35,6 +52,7 @@ export function useThrottledLampaProgress(
   /** After episode switch, ignore near-end ticks from the previous source. */
   const awaitingFreshRef = useRef(false);
   const enabledRef = useRef(enabled);
+  const writingRef = useRef<Promise<void> | null>(null);
 
   enabledRef.current = enabled;
 
@@ -46,7 +64,7 @@ export function useThrottledLampaProgress(
       coords &&
       !sameLampaCoords(pending, coords.seasonOrdinal, coords.episodeOrdinal, lampaId.trim())
     ) {
-      void putLampaProgress(pending);
+      void writeLampaProgress(pending, true);
     }
     lastSyncRef.current = 0;
     pendingRef.current = null;
@@ -54,34 +72,62 @@ export function useThrottledLampaProgress(
     awaitingFreshRef.current = true;
   }, [lampaId, isSerial, season, episode]);
 
+  const flush = useCallback(async () => {
+    if (!enabledRef.current) return;
+    const pending = pendingRef.current;
+    if (!pending) {
+      if (writingRef.current) await writingRef.current;
+      return;
+    }
+    lastSyncRef.current = Date.now();
+    const write = writeLampaProgress(pending, true);
+    writingRef.current = write;
+    try {
+      await write;
+    } finally {
+      if (writingRef.current === write) writingRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (pendingRef.current) {
-        void putLampaProgress(pendingRef.current).finally(() => {
-          void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
-        });
+        void writeLampaProgress(pendingRef.current, true);
       }
     };
   }, []);
 
-  const flush = useCallback(() => {
-    if (!enabledRef.current) return;
-    const pending = pendingRef.current;
-    if (!pending) return;
-    lastSyncRef.current = Date.now();
-    void putLampaProgress(pending);
-  }, []);
+  useEffect(() => {
+    const onChange = (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        void flush();
+      }
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [flush]);
 
   const sync = useCallback(
     (current: number, duration: number) => {
       if (!enabled || !lampaId.trim()) return;
-      // Never invent duration (old 1440s fallback inflated continue-watching %).
-      if (!(duration > 1) || !(current >= 0)) return;
+      if (!(current >= 0) || !Number.isFinite(current)) return;
 
       const coords = lampaSeasonEpisodeForWatch(isSerial, season, episode);
       if (!coords) return;
 
-      const progress = Math.min(1, Math.max(0, current / duration));
+      let progress: number;
+      if (duration > 1) {
+        progress = Math.min(1, Math.max(0, current / duration));
+        rememberPlaybackDuration(
+          lampaPlaybackDurationKey(lampaId.trim(), coords.seasonOrdinal, coords.episodeOrdinal),
+          duration,
+        );
+      } else if (current > 1) {
+        // iOS parity when media duration is briefly unknown.
+        progress = Math.min(0.95, Math.max(0, current / 1440));
+      } else {
+        return;
+      }
 
       // Auto-next can leave the player emitting the previous episode's end position
       // under the new season/episode — never write that as an initial/completed sync.
@@ -108,9 +154,7 @@ export function useThrottledLampaProgress(
       if (shouldSyncInitial || shouldSyncCompleted || shouldSyncInterval) {
         lastSyncRef.current = now;
         if (completed) completedSentRef.current = true;
-        // Do not invalidate queries while watching — refetches compete with 4K I/O.
-        // Cache refresh happens on unmount flush below.
-        void putLampaProgress(payload);
+        void putLampaProgress(payload).then(() => patchLampaProgressCache(payload));
       }
     },
     [enabled, lampaId, isSerial, season, episode, intervalMs],

@@ -14,6 +14,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
 import type { ContinueWatchingItem } from '@/lib/continueWatching';
+import { formatContinueProgressLabel } from '@/lib/continueWatching';
 import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { setCatalogActiveFocus } from '@/lib/tvCatalogScrollRestore';
@@ -266,7 +267,9 @@ const ContinueCard = forwardRef<
         </Text>
         <Text style={[styles.subtitle, focused && styles.subtitleFocused]} numberOfLines={1}>
           {item.subtitle}
-          {item.progress > 0 ? ` · ${Math.round(item.progress * 100)}%` : ''}
+          {item.progress > 0
+            ? ` · ${formatContinueProgressLabel(item.progress, item.durationSec)}`
+            : ''}
         </Text>
       </View>
     </Pressable>

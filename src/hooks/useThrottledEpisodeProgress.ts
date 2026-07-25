@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { putAnimeProgress } from '@/api/progress';
+import { patchAnimeProgressCache } from '@/lib/progressCache';
+import {
+  animePlaybackDurationKey,
+  rememberPlaybackDuration,
+} from '@/lib/playbackDurationStore';
 import { isEpisodeCompleted } from '@/lib/progressUtils';
 import { queryClient } from '@/providers/QueryProvider';
 import type { AnimeProgressPut } from '@/types/progress';
 
-const DEFAULT_SYNC_INTERVAL_MS = 20_000;
+/** Frequent enough for short sessions; exit/background flush covers the rest. */
+const DEFAULT_SYNC_INTERVAL_MS = 5_000;
+
+function invalidateAnimeProgress(): void {
+  void queryClient.invalidateQueries({ queryKey: ['anime-progress'] });
+}
+
+async function writeAnimeProgress(payload: AnimeProgressPut, invalidate: boolean): Promise<void> {
+  patchAnimeProgressCache(payload);
+  await putAnimeProgress(payload);
+  if (invalidate) invalidateAnimeProgress();
+}
 
 export function useThrottledEpisodeProgress(
   enabled: boolean,
@@ -20,13 +37,14 @@ export function useThrottledEpisodeProgress(
   /** After episode switch, ignore near-end ticks from the previous source. */
   const awaitingFreshRef = useRef(false);
   const enabledRef = useRef(enabled);
+  const writingRef = useRef<Promise<void> | null>(null);
 
   enabledRef.current = enabled;
 
   useEffect(() => {
     const pending = pendingRef.current;
     if (pending && pending.episodeId !== episodeId) {
-      void putAnimeProgress(pending);
+      void writeAnimeProgress(pending, true);
     }
     lastSyncRef.current = 0;
     pendingRef.current = null;
@@ -34,30 +52,55 @@ export function useThrottledEpisodeProgress(
     awaitingFreshRef.current = true;
   }, [episodeId]);
 
+  const flush = useCallback(async () => {
+    if (!enabledRef.current) return;
+    const pending = pendingRef.current;
+    if (!pending) {
+      if (writingRef.current) await writingRef.current;
+      return;
+    }
+    lastSyncRef.current = Date.now();
+    const write = writeAnimeProgress(pending, true);
+    writingRef.current = write;
+    try {
+      await write;
+    } finally {
+      if (writingRef.current === write) writingRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (pendingRef.current) {
-        void putAnimeProgress(pendingRef.current).finally(() => {
-          void queryClient.invalidateQueries({ queryKey: ['anime-progress'] });
-        });
+        void writeAnimeProgress(pendingRef.current, true);
       }
     };
   }, []);
 
-  const flush = useCallback(() => {
-    if (!enabledRef.current) return;
-    const pending = pendingRef.current;
-    if (!pending) return;
-    lastSyncRef.current = Date.now();
-    void putAnimeProgress(pending);
-  }, []);
+  useEffect(() => {
+    const onChange = (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        void flush();
+      }
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [flush]);
 
   const sync = useCallback(
     (current: number, duration: number) => {
-      // Require real media duration — never sync against buffer/seekable guesses.
-      if (!enabled || !(duration > 1) || !(current >= 0)) return;
+      if (!enabled || !(current >= 0) || !Number.isFinite(current)) return;
 
-      const progress = Math.min(1, Math.max(0, current / duration));
+      let progress: number;
+      if (duration > 1) {
+        progress = Math.min(1, Math.max(0, current / duration));
+        rememberPlaybackDuration(animePlaybackDurationKey(animeId, episodeId), duration);
+      } else if (current > 1) {
+        // iOS parity when media duration is briefly unknown (quality reload / HLS).
+        progress = Math.min(0.95, Math.max(0, current / 1440));
+      } else {
+        return;
+      }
 
       // Auto-next can leave the player emitting the previous episode's end position
       // under the new episodeId — never write that as an initial/completed sync.
@@ -85,8 +128,7 @@ export function useThrottledEpisodeProgress(
         lastSyncRef.current = now;
         if (completed) completedSentRef.current = true;
         // Do not invalidate queries while watching — refetches compete with 4K I/O.
-        // Cache refresh happens on unmount flush below.
-        void putAnimeProgress(payload);
+        void putAnimeProgress(payload).then(() => patchAnimeProgressCache(payload));
       }
     },
     [enabled, animeId, episodeId, episodeOrdinal, intervalMs],

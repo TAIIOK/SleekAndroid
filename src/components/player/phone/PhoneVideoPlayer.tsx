@@ -71,6 +71,7 @@ export function PhoneVideoPlayer({
   qualityOptions,
   connectionOptions,
   deliveryOptions,
+  playbackCaptureRef,
 }: VideoPlayerProps) {
   const insets = useSafeAreaInsets();
   const engine = useRNVideoEngine({
@@ -84,6 +85,14 @@ export function PhoneVideoPlayer({
     onAutoPlayNext,
     onPlaybackError,
   });
+
+  useEffect(() => {
+    if (!playbackCaptureRef) return;
+    playbackCaptureRef.current = engine.getPlaybackCapture;
+    return () => {
+      playbackCaptureRef.current = null;
+    };
+  }, [engine.getPlaybackCapture, playbackCaptureRef]);
 
   const [controlsVisible, setControlsVisible] = useState(true);
   const [sheet, setSheet] = useState<PhoneSheet>(null);

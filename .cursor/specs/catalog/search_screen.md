@@ -22,6 +22,7 @@ TV search screen: query field, on-screen keyboard, media filters, recent search 
 14. [x] Media/genre/year filters live behind a «Фильтры» button that opens a right-side overlay sidebar over the search page (does not push layout or split the screen).
 15. [x] Closing the filters sidebar re-runs search when `q.length ≥ 2` or any active filters allow browse.
 16. [x] Long filter lists use dropdown selects (not pill grids), including year and genres.
+17. [x] On TV, Down from the search field / «Найти» / «Фильтры» moves into the on-screen keyboard (when open), otherwise into «Недавние» chips, otherwise into «Популярные запросы» — never into the hidden sidebar anchor.
 
 ## Acceptance Criteria
 
@@ -34,6 +35,7 @@ TV search screen: query field, on-screen keyboard, media filters, recent search 
 - After searching, the query appears in «Недавние»; pressing a history chip runs that search again.
 - «Очистить» removes all history chips from the screen.
 - After a search, reopening the keyboard and typing does not insert duplicate characters per remote select.
+- With recent history visible, Down from the search row focuses a history chip (not the sidebar).
 
 ## Notes
 

@@ -88,6 +88,10 @@ export default function WatchAnimeScreen() {
   const [selectedQuality, setSelectedQuality] = useState<PlaybackQuality>('720p');
   const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
   const playbackTimeRef = useRef(0);
+  const durationRef = useRef(0);
+  const playbackCaptureRef = useRef<(() => { currentTime: number; duration: number }) | null>(
+    null,
+  );
   /** Preserve position across dubbing/quality URL switches. */
   const [resumeOverrideSec, setResumeOverrideSec] = useState<number | undefined>();
 
@@ -208,31 +212,48 @@ export default function WatchAnimeScreen() {
     };
   }, [numericAnimeId, episodeOrdinal, episode, videos]);
 
-  const { sync: syncProgress, flush: flushProgress } = useThrottledEpisodeProgress(
+  const { sync: syncProgress, flush: flushPendingProgress } = useThrottledEpisodeProgress(
     isAuthenticated,
     numericAnimeId,
     numericEpisodeId,
     episodeOrdinal,
   );
 
+  const flushProgress = useCallback(async () => {
+    const snap = playbackCaptureRef.current?.() ?? {
+      currentTime: playbackTimeRef.current,
+      duration: durationRef.current,
+    };
+    if (snap.currentTime > 0) {
+      syncProgress(snap.currentTime, snap.duration);
+    }
+    await flushPendingProgress();
+  }, [syncProgress, flushPendingProgress]);
+
   const switchWithResume = (apply: () => void) => {
-    if (playbackTimeRef.current > 0) {
-      setResumeOverrideSec(playbackTimeRef.current);
+    const snap = playbackCaptureRef.current?.() ?? {
+      currentTime: playbackTimeRef.current,
+      duration: durationRef.current,
+    };
+    if (snap.currentTime > 0) {
+      setResumeOverrideSec(snap.currentTime);
+      syncProgress(snap.currentTime, snap.duration);
     }
     apply();
   };
 
   const navigateToEpisode = useCallback(
     (targetEpisodeId: number) => {
-      flushProgress();
-      router.replace({
-        pathname: '/watch/anime/[animeId]/[episodeId]',
-        params: {
-          animeId: String(numericAnimeId),
-          episodeId: String(targetEpisodeId),
-          title,
-          preferredDubbing: selectedDubbing,
-        },
+      void flushProgress().finally(() => {
+        router.replace({
+          pathname: '/watch/anime/[animeId]/[episodeId]',
+          params: {
+            animeId: String(numericAnimeId),
+            episodeId: String(targetEpisodeId),
+            title,
+            preferredDubbing: selectedDubbing,
+          },
+        });
       });
     },
     [router, numericAnimeId, title, selectedDubbing, flushProgress],
@@ -335,7 +356,10 @@ export default function WatchAnimeScreen() {
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
         skipSegments={skipSegments}
-        onBack={() => router.back()}
+        playbackCaptureRef={playbackCaptureRef}
+        onBack={() => {
+          void flushProgress().finally(() => router.back());
+        }}
         dubbingOptions={dubbingOptions}
         qualityOptions={qualityOptions}
         episodeNav={{
@@ -356,6 +380,7 @@ export default function WatchAnimeScreen() {
         }
         onProgress={(current, duration) => {
           playbackTimeRef.current = current;
+          if (duration > 1) durationRef.current = duration;
           syncProgress(current, duration);
         }}
       />

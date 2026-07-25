@@ -4,7 +4,7 @@ import { lampaProgressKey } from '@/lib/lampaDetail';
 
 const COMPLETED_THRESHOLD = 0.9;
 /** Resume / continue-watching: treat as unfinished only inside this range. */
-export const IN_PROGRESS_MIN = 0.01;
+export const IN_PROGRESS_MIN = 0.001;
 export const IN_PROGRESS_MAX = 0.98;
 /**
  * Auto-next / brief open can leave a tiny stub on the next episode.
@@ -31,7 +31,7 @@ export function isUnfinishedProgress(progress: number, completed?: boolean): boo
 export function formatProgressLabel(progress: number): string | null {
   const p = normalizeProgress(progress);
   if (p >= COMPLETED_THRESHOLD) return 'Просмотрено';
-  if (p > 0.02) return `${Math.round(p * 100)}%`;
+  if (p > IN_PROGRESS_MIN) return `${Math.max(1, Math.round(p * 100))}%`;
   return null;
 }
 

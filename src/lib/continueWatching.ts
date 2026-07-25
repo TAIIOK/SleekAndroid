@@ -1,6 +1,11 @@
 import { resolveLampaPosterUrl, resolvePosterUrl } from '@/lib/config';
 import { lampaDetailPath, lampaDetailRouteId, lampaTitle } from '@/lib/lampaDetail';
 import {
+  animePlaybackDurationKey,
+  getPlaybackDuration,
+  lampaPlaybackDurationKey,
+} from '@/lib/playbackDurationStore';
+import {
   animeProgressByEpisodeId,
   groupAnimeProgressByAnimeId,
   groupLampaProgressById,
@@ -19,6 +24,8 @@ export interface ContinueWatchingItem {
   poster?: string;
   subtitle: string;
   progress: number;
+  /** Real media duration in seconds when known (for time labels). */
+  durationSec?: number;
   href: string;
   startProgress?: number;
   kind: 'anime' | 'movie' | 'tv';
@@ -268,7 +275,8 @@ function pickAnimeContinueFromProgress(
     title,
     poster: poster ? resolvePosterUrl(poster) : undefined,
     subtitle: 'Продолжить',
-    progress: Math.min(1, Math.max(0.02, progress)),
+    progress,
+    durationSec: getPlaybackDuration(animePlaybackDurationKey(animeId, latest.episodeId)),
     href: `/watch/anime/${animeId}/${latest.episodeId}`,
     startProgress: progress,
     kind: 'anime',
@@ -310,7 +318,11 @@ function pickAnimeContinue(
     title,
     poster: poster ? resolvePosterUrl(poster) : undefined,
     subtitle: 'Продолжить',
-    progress: Math.min(1, Math.max(0.02, bestProgress)),
+    progress: bestProgress,
+    durationSec:
+      bestEpisodeId != null
+        ? getPlaybackDuration(animePlaybackDurationKey(animeId, bestEpisodeId))
+        : undefined,
     href: bestEpisodeId
       ? `/watch/anime/${animeId}/${bestEpisodeId}`
       : `/anime/${animeId}`,
@@ -353,7 +365,7 @@ function pickLampaContinueFromProgress(
         meta.season != null && meta.episode != null
           ? `Сезон ${meta.season} · Эпизод ${meta.episode}`
           : 'Продолжить',
-      progress: 0.02,
+      progress: 0.001,
       href,
       kind,
       routeId,
@@ -382,7 +394,10 @@ function pickLampaContinueFromProgress(
       kind === 'tv' && season != null && episode != null
         ? `Сезон ${season} · Эпизод ${episode}`
         : 'Продолжить',
-    progress: Math.min(1, Math.max(0.02, progress)),
+    progress,
+    durationSec: getPlaybackDuration(
+      lampaPlaybackDurationKey(lampaId, latest.seasonOrdinal, latest.episodeOrdinal),
+    ),
     href,
     startProgress: progress,
     kind,
@@ -485,9 +500,22 @@ export function buildContinueWatchingItems(
   return items.slice(0, 16);
 }
 
-export function formatProgressTime(fraction: number, durationSec = 24 * 60): string {
-  const sec = Math.floor(fraction * durationSec);
+export function formatProgressTime(fraction: number, durationSec: number): string {
+  const sec = Math.max(0, Math.floor(fraction * durationSec));
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Time + percent when duration is known; percent alone otherwise. */
+export function formatContinueProgressLabel(
+  fraction: number,
+  durationSec?: number,
+): string {
+  const progress = Math.min(1, Math.max(0, fraction));
+  const pct = `${Math.max(1, Math.round(progress * 100))}%`;
+  if (durationSec != null && durationSec > 1) {
+    return `${formatProgressTime(progress, durationSec)} · ${pct}`;
+  }
+  return pct;
 }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
-  Pressable,
+  findNodeHandle,
   ScrollView,
   StyleSheet,
   Text,
@@ -66,11 +66,28 @@ export default function SearchScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  /** Pin Down from the search row — otherwise Android may land on the hidden sidebar anchor. */
+  const [keyboardFirstTag, setKeyboardFirstTag] = useState<number | undefined>();
+  const [historyFirstTag, setHistoryFirstTag] = useState<number | undefined>();
+  const [popularFirstTag, setPopularFirstTag] = useState<number | undefined>();
 
   const trackScrollY = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollYRef.current = event.nativeEvent.contentOffset.y;
   }, []);
   const chromeScrollProps = useMobileChromeScrollProps(trackScrollY, styles.content);
+
+  const searchNextFocusDown = showKeyboard
+    ? keyboardFirstTag
+    : history.length > 0
+      ? historyFirstTag
+      : popularFirstTag;
+
+  const bindNativeTag = useCallback(
+    (setter: (tag: number | undefined) => void) => (node: View | null) => {
+      setter(node ? (findNodeHandle(node) ?? undefined) : undefined);
+    },
+    [],
+  );
 
   const { data: genres = [] } = useQuery({
     queryKey: ['search-genres'],
@@ -260,6 +277,7 @@ export default function SearchScreen() {
                   setShowKeyboard(true);
                 }}
                 onFocus={revealHeader}
+                nextFocusDown={searchNextFocusDown}
                 style={styles.inputFocus}
                 focusedStyle={styles.inputFocused}
               >
@@ -280,6 +298,7 @@ export default function SearchScreen() {
             <TvFocusable
               onPress={() => void runSearch(query)}
               onFocus={revealHeader}
+              nextFocusDown={searchNextFocusDown}
               style={styles.searchButton}
               focusedStyle={styles.searchButtonFocused}
             >
@@ -292,6 +311,7 @@ export default function SearchScreen() {
                 setFiltersOpen(true);
               }}
               onFocus={revealHeader}
+              nextFocusDown={searchNextFocusDown}
               style={[styles.filtersBtn, filtersActive && styles.filtersBtnActive]}
               focusedStyle={styles.filtersBtnFocused}
             >
@@ -301,7 +321,9 @@ export default function SearchScreen() {
             </TvFocusable>
           </View>
 
-          {isTvUi() && showKeyboard ? <OnScreenKeyboard onKey={handleKey} /> : null}
+          {isTvUi() && showKeyboard ? (
+            <OnScreenKeyboard onKey={handleKey} onFirstKeyNativeTag={setKeyboardFirstTag} />
+          ) : null}
         </View>
 
         {history.length > 0 ? (
@@ -317,11 +339,12 @@ export default function SearchScreen() {
               </TvFocusable>
             </View>
             <View style={styles.popularRow}>
-              {history.map((item) => (
+              {history.map((item, index) => (
                 <FilterChip
                   key={item}
                   label={item}
                   active={false}
+                  hostRef={index === 0 ? bindNativeTag(setHistoryFirstTag) : undefined}
                   onPress={() => {
                     setQuery(item);
                     void runSearch(item);
@@ -335,11 +358,12 @@ export default function SearchScreen() {
         <View style={styles.popular}>
           <Text style={styles.popularTitle}>Популярные запросы</Text>
           <View style={styles.popularRow}>
-            {SEARCH_POPULAR_QUERIES.map((item) => (
+            {SEARCH_POPULAR_QUERIES.map((item, index) => (
               <FilterChip
                 key={item}
                 label={item}
                 active={false}
+                hostRef={index === 0 ? bindNativeTag(setPopularFirstTag) : undefined}
                 onPress={() => {
                   setQuery(item);
                   void runSearch(item);
@@ -412,21 +436,22 @@ function FilterChip({
   label,
   active,
   onPress,
+  hostRef,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  hostRef?: (node: View | null) => void;
 }) {
-  const [focused, setFocused] = useState(false);
   return (
-    <Pressable
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+    <TvFocusable
       onPress={onPress}
-      style={[styles.chip, (active || focused) && styles.chipActive, focused && styles.chipFocused]}
+      hostRef={hostRef}
+      style={[styles.chip, active && styles.chipActive]}
+      focusedStyle={styles.chipFocused}
     >
       <Text style={styles.chipLabel}>{label}</Text>
-    </Pressable>
+    </TvFocusable>
   );
 }
 

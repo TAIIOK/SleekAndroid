@@ -25,13 +25,14 @@ import type { LampaDetail } from '@/api/catalog';
 
 describe('isUnfinishedProgress', () => {
   it('rejects stubs and completed', () => {
-    expect(isUnfinishedProgress(0.005)).toBe(false);
+    expect(isUnfinishedProgress(0.0004)).toBe(false);
     expect(isUnfinishedProgress(0.99)).toBe(false);
     expect(isUnfinishedProgress(0.5, true)).toBe(false);
   });
 
   it('accepts mid progress', () => {
     expect(isUnfinishedProgress(0.4)).toBe(true);
+    expect(isUnfinishedProgress(0.002)).toBe(true);
   });
 });
 
@@ -186,7 +187,7 @@ describe('buildAnimePlaybackState', () => {
 describe('formatProgressLabel', () => {
   it('hides stubs and shows percent or completed', () => {
     expect(formatProgressLabel(0)).toBeNull();
-    expect(formatProgressLabel(0.01)).toBeNull();
+    expect(formatProgressLabel(0.0004)).toBeNull();
     expect(formatProgressLabel(0.42)).toBe('42%');
     expect(formatProgressLabel(0.9)).toBe('Просмотрено');
   });

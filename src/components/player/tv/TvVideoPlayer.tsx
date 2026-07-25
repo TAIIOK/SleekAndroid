@@ -46,6 +46,7 @@ export function TvVideoPlayer({
   qualityOptions,
   connectionOptions,
   deliveryOptions,
+  playbackCaptureRef,
 }: VideoPlayerProps) {
   const handleBack = onBack ?? (() => undefined);
 
@@ -60,6 +61,14 @@ export function TvVideoPlayer({
     onAutoPlayNext,
     onPlaybackError,
   });
+
+  useEffect(() => {
+    if (!playbackCaptureRef) return;
+    playbackCaptureRef.current = engine.getPlaybackCapture;
+    return () => {
+      playbackCaptureRef.current = null;
+    };
+  }, [engine.getPlaybackCapture, playbackCaptureRef]);
 
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
   const [externalError, setExternalError] = useState<string | null>(null);

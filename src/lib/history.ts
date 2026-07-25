@@ -6,6 +6,7 @@ import { extractPosterPath } from '@/lib/poster';
 import {
   groupAnimeProgressByAnimeId,
   groupLampaProgressById,
+  IN_PROGRESS_MIN,
   normalizeProgress,
 } from '@/lib/progressUtils';
 import type { SavedAnimeItem, UserAnimeProgress, UserLampaProgress } from '@/types/progress';
@@ -307,7 +308,7 @@ function buildAnimeHistoryFromProgress(
   rows: UserAnimeProgress[],
   saved?: SavedAnimeItem,
 ): WatchHistoryItem | null {
-  const watchedRows = rows.filter((row) => row.progress > 0.01);
+  const watchedRows = rows.filter((row) => row.progress > IN_PROGRESS_MIN);
   if (!watchedRows.length) return null;
 
   const latest = pickLatestProgressRow(watchedRows);
@@ -341,7 +342,7 @@ function buildLampaHistoryFromProgress(
   rows: UserLampaProgress[],
   saved?: Record<string, unknown>,
 ): WatchHistoryItem | null {
-  const watchedRows = rows.filter((row) => row.progress > 0.01);
+  const watchedRows = rows.filter((row) => row.progress > IN_PROGRESS_MIN);
   if (!watchedRows.length) return null;
 
   const latest = pickLatestProgressRow(watchedRows);

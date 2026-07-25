@@ -42,6 +42,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 - [x] Status picker + favorite toggle + «В коллекцию»; serials can open sources (no download/reactions)
 - [x] Plot / overview section
 - [x] Serials: seasons + episode list; selecting episode opens sheet with S/E
+- [x] TV: opening source / озвучка / season picker focuses the first result chip/row (not the back button)
 - [x] Sidebar info rows (type, premiere, runtime, status, seasons, genres)
 - [x] Hero surfaces key info rows; related sidebar only for movies when related present (see `detail_desktop_hero.md`)
 - [x] Similar + Recommendations rails via WatchHub TMDB

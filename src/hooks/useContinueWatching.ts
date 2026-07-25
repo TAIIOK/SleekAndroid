@@ -16,6 +16,18 @@ import { isTvUi } from '@/lib/isTvUi';
 /** Cap visible continue cards (and ordinal N+1 fetches) on TV. */
 const CONTINUE_WATCHING_LIMIT = isTvUi() ? 10 : 40;
 
+/**
+ * Continue watching must always hit the network.
+ * Keep last good data in memory briefly so a failed refetch does not empty the rail.
+ */
+const CONTINUE_SOURCE_QUERY = {
+  staleTime: 0,
+  gcTime: 5 * 60_000,
+  refetchOnMount: 'always' as const,
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+};
+
 export function useContinueWatching() {
   const { isAuthenticated } = useAuth();
 
@@ -23,31 +35,35 @@ export function useContinueWatching() {
     queryKey: ['library-anime', 'include-anime'],
     queryFn: fetchSavedAnimeLibrary,
     enabled: isAuthenticated,
+    ...CONTINUE_SOURCE_QUERY,
   });
 
   const savedLampaQuery = useQuery({
     queryKey: ['library-lampa', 'include-lampa'],
     queryFn: fetchSavedLampaLibrary,
     enabled: isAuthenticated,
+    ...CONTINUE_SOURCE_QUERY,
   });
 
   const animeProgressQuery = useQuery({
     queryKey: ['anime-progress'],
     queryFn: () => fetchAnimeProgress(),
     enabled: isAuthenticated,
+    ...CONTINUE_SOURCE_QUERY,
   });
 
   const lampaProgressQuery = useQuery({
     queryKey: ['lampa-progress'],
     queryFn: () => fetchLampaProgress(),
     enabled: isAuthenticated,
+    ...CONTINUE_SOURCE_QUERY,
   });
 
   const historyFeedQuery = useQuery({
     queryKey: ['history-feed'],
     queryFn: fetchActivityHistory,
     enabled: isAuthenticated,
-    staleTime: 60_000,
+    ...CONTINUE_SOURCE_QUERY,
   });
 
   const savedAnime = savedAnimeQuery.data ?? [];

@@ -1,5 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import {
+  findNodeHandle,
   Pressable,
   StyleSheet,
   Text,
@@ -32,20 +33,29 @@ interface OnScreenKeyboardProps {
   onKey: (key: string) => void;
   /** Initial layout. Defaults to Russian for the RU-first product. */
   initialLayout?: LayoutId;
+  /** Native tag of the first key — for `nextFocusDown` from the search field. */
+  onFirstKeyNativeTag?: (tag: number | undefined) => void;
 }
 
 const KEY_SIZE = 40;
 const KEY_WIDE = isTvUi() ? 96 : 100;
 
-function OnScreenKeyboardComponent({ onKey, initialLayout = 'ru' }: OnScreenKeyboardProps) {
+function OnScreenKeyboardComponent({
+  onKey,
+  initialLayout = 'ru',
+  onFirstKeyNativeTag,
+}: OnScreenKeyboardProps) {
   const [layout, setLayout] = useState<LayoutId>(initialLayout);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const lastPressAtRef = useRef(0);
   const onKeyRef = useRef(onKey);
   onKeyRef.current = onKey;
+  const onFirstKeyNativeTagRef = useRef(onFirstKeyNativeTag);
+  onFirstKeyNativeTagRef.current = onFirstKeyNativeTag;
 
   const rows = layout === 'ru' ? ROWS_RU : ROWS_EN;
   const langToggleLabel = layout === 'ru' ? 'EN' : 'RU';
+  const firstKey = rows[0]?.[0];
 
   const labelFor = (key: string) => {
     if (key === 'SPACE') return '␣';
@@ -71,6 +81,16 @@ function OnScreenKeyboardComponent({ onKey, initialLayout = 'ru' }: OnScreenKeyb
   const renderKey = (key: string, wide?: boolean) => (
     <Pressable
       key={key}
+      ref={
+        key === firstKey
+          ? (node) => {
+              const tag = node
+                ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined)
+                : undefined;
+              onFirstKeyNativeTagRef.current?.(tag);
+            }
+          : undefined
+      }
       onFocus={() => setFocusedKey(key)}
       onBlur={() => {
         setFocusedKey((current) => (current === key ? null : current));

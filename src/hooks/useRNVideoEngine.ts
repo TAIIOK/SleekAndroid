@@ -103,6 +103,10 @@ export function useRNVideoEngine({
   const resumeTargetRef = useRef<number | null>(null);
   const durationRef = useRef(0);
   const currentTimeRef = useRef(0);
+  /** Survives brief HLS/reload gaps — iOS `lastKnownDuration` parity. */
+  const lastGoodDurationRef = useRef(0);
+  /** Max observed playback time (dismiss must not fall back to an older tick). */
+  const lastGoodTimeRef = useRef(0);
   /** True once onLoad reported a positive media duration (not HLS buffer window). */
   const durationFromLoadRef = useRef(false);
   const prefsRef = useRef(prefs);
@@ -124,6 +128,42 @@ export function useRNVideoEngine({
   startTimeRef.current = startTime;
   startProgressFractionRef.current = startProgressFraction;
   srcRef.current = src;
+
+  const rememberDuration = useCallback((durSec: number, opts?: { fromLoad?: boolean }) => {
+    if (!(durSec > 1)) return;
+    // onLoad is authoritative; otherwise never shrink (HLS buffer windows).
+    if (opts?.fromLoad || durSec >= lastGoodDurationRef.current) {
+      lastGoodDurationRef.current = durSec;
+      durationRef.current = durSec;
+    } else if (!(durationRef.current > 1)) {
+      durationRef.current = lastGoodDurationRef.current;
+    }
+  }, []);
+
+  const rememberTime = useCallback((timeSec: number) => {
+    if (!(timeSec >= 0) || !Number.isFinite(timeSec)) return;
+    currentTimeRef.current = timeSec;
+    if (timeSec > lastGoodTimeRef.current) {
+      lastGoodTimeRef.current = timeSec;
+    }
+  }, []);
+
+  const getPlaybackCapture = useCallback(() => {
+    const duration =
+      lastGoodDurationRef.current > 1
+        ? lastGoodDurationRef.current
+        : durationRef.current > 1
+          ? durationRef.current
+          : 0;
+    const currentTime = Math.max(currentTimeRef.current, lastGoodTimeRef.current);
+    return { currentTime, duration };
+  }, []);
+
+  const emitProgress = useCallback((timeSec: number, durSec: number) => {
+    const duration =
+      durSec > 1 ? durSec : lastGoodDurationRef.current > 1 ? lastGoodDurationRef.current : 0;
+    onProgressRef.current?.(timeSec, duration);
+  }, []);
 
   const resumeIntentTarget = useCallback((durSec: number): number | null => {
     if (typeof startTimeRef.current === 'number' && startTimeRef.current > 1) {
@@ -221,6 +261,8 @@ export function useRNVideoEngine({
     resumeSettledRef.current = false;
     resumeTargetRef.current = null;
     durationRef.current = 0;
+    lastGoodDurationRef.current = 0;
+    lastGoodTimeRef.current = 0;
     durationFromLoadRef.current = false;
     currentTimeRef.current = 0;
     showBufferingRef.current = true;
@@ -298,14 +340,14 @@ export function useRNVideoEngine({
     (data: OnLoadData) => {
       const durSec = data.duration > 0 ? data.duration : 0;
       if (durSec > 0) {
-        durationRef.current = durSec;
         durationFromLoadRef.current = true;
-        setDuration(durSec);
+        rememberDuration(durSec, { fromLoad: true });
+        setDuration(lastGoodDurationRef.current);
       }
       hasBeenReadyRef.current = true;
       setBufferingUi(false);
       setPlaybackError(null);
-      applyResume(durSec);
+      applyResume(lastGoodDurationRef.current > 1 ? lastGoodDurationRef.current : durSec);
 
       const tracks: SubtitleTrackInfo[] = (data.textTracks ?? [])
         .filter((t) => t.language || t.title || t.index != null)
@@ -325,29 +367,34 @@ export function useRNVideoEngine({
 
       if (wantPlayingRef.current) setPlaying(true);
     },
-    [applyResume, setBufferingUi],
+    [applyResume, rememberDuration, setBufferingUi],
   );
 
   const onProgressEvent = useCallback(
     (data: OnProgressData) => {
       const timeSec = data.currentTime;
       const seekable = data.seekableDuration || 0;
-      currentTimeRef.current = timeSec;
+      rememberTime(timeSec);
 
       // Prefer onLoad duration. For HLS without it, adopt seekableDuration only while
       // playback is clearly inside the range — never treat the buffer edge as episode end.
-      if (!durationFromLoadRef.current && seekable > durationRef.current && timeSec + 45 < seekable) {
-        durationRef.current = seekable;
+      if (!durationFromLoadRef.current && seekable > 1 && timeSec + 45 < seekable) {
+        rememberDuration(seekable);
       }
 
-      const durSec = durationRef.current > 0 ? durationRef.current : 0;
+      const durSec =
+        lastGoodDurationRef.current > 1
+          ? lastGoodDurationRef.current
+          : durationRef.current > 0
+            ? durationRef.current
+            : 0;
       // Duration may arrive after onLoad (HLS) — apply pending resume then.
       if (!resumeSettledRef.current && durSec > 1) {
         applyResume(durSec);
       }
 
-      // Progress sync must not use raw seekableDuration (partial windows inflate %).
-      onProgressRef.current?.(timeSec, durSec);
+      // Always emit with last-known-good duration (iOS lastKnownDuration parity).
+      emitProgress(timeSec, durSec);
 
       const now = Date.now();
       if (now - lastUiTickRef.current >= UI_TICK_MS) {
@@ -374,13 +421,20 @@ export function useRNVideoEngine({
         autoHandledSkipsRef.current.add(segment.id);
         dismissedSkipsRef.current.add(segment.id);
         videoRef.current?.seek(segment.end);
-        currentTimeRef.current = segment.end;
+        rememberTime(segment.end);
         setCurrentTime(segment.end);
         setVisibleSkip(undefined);
         break;
       }
     },
-    [applyResume, positionReadyForSkip, refreshSkipPrompt],
+    [
+      applyResume,
+      emitProgress,
+      positionReadyForSkip,
+      refreshSkipPrompt,
+      rememberDuration,
+      rememberTime,
+    ],
   );
 
   const onEnd = useCallback(() => {
@@ -435,25 +489,37 @@ export function useRNVideoEngine({
     setPlaying((prev) => {
       const next = !prev;
       wantPlayingRef.current = next;
+      // Force a progress tick on pause (iOS force-sync parity).
+      if (!next) {
+        const snap = getPlaybackCapture();
+        if (snap.currentTime > 1) {
+          emitProgress(snap.currentTime, snap.duration);
+        }
+      }
       return next;
     });
-  }, []);
+  }, [emitProgress, getPlaybackCapture]);
 
   const pause = useCallback(() => {
     wantPlayingRef.current = false;
     setPlaying(false);
-  }, []);
+    const snap = getPlaybackCapture();
+    if (snap.currentTime > 1) {
+      emitProgress(snap.currentTime, snap.duration);
+    }
+  }, [emitProgress, getPlaybackCapture]);
 
   const seekTo = useCallback((time: number) => {
-    const dur = durationRef.current || duration;
+    const dur = lastGoodDurationRef.current || durationRef.current || duration;
     if (!dur) return;
     const next = Math.max(0, Math.min(time, dur));
     videoRef.current?.seek(next);
-    currentTimeRef.current = next;
+    rememberTime(next);
     setCurrentTime(next);
     refreshSkipPrompt(next);
+    emitProgress(next, dur);
     if (wantPlayingRef.current) setPlaying(true);
-  }, [duration, refreshSkipPrompt]);
+  }, [duration, emitProgress, refreshSkipPrompt, rememberTime]);
 
   const seekBy = useCallback(
     (delta: number) => {
@@ -550,6 +616,7 @@ export function useRNVideoEngine({
     retryPlayback,
     setVolume,
     enterPictureInPicture,
+    getPlaybackCapture,
     /** High-bitrate friendly ExoPlayer buffers (seconds via ms). */
     bufferConfig: {
       minBufferMs: 15000,

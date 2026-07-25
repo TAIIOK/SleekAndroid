@@ -9,6 +9,9 @@ Resume and continue-watching must attribute progress to the episode the user act
 3. [x] Resume UI never pairs one episode’s number with `max(progress)` from another episode.
 4. [x] Continue Watching includes only current unfinished rows (`0.01 < progress < 0.98`, not `completed`, not superseded by newer finished activity).
 5. [x] Anime episode switches flush pending progress for the current episode before navigating.
+5b. [x] Progress sync interval is 5s (not 20s); pending progress flushes on player Back, app background/inactive, and unmount.
+5c. [x] Exit Back awaits the progress PUT (and patches React Query) before navigating so Home does not race a stale GET.
+5d. [x] Player keeps last-known-good duration across HLS/quality gaps (iOS `lastKnownDuration` parity) and force-syncs a playback snapshot on Back/pause so pending progress matches the on-screen clock.
 6. [x] After an episode identity change, throttled progress sync ignores stale near-end ticks until a fresh (non-completed) playback tick arrives.
 7. [x] Progress retry queue drops queued PUTs when the server already has newer activity for the same title (`updatedAt > enqueuedAt`).
 8. [x] Lampa detail playback state accepts progress rows keyed by `objectId` **or** TMDB/route id (`detail.tmdbId` / URL `routeId`), so hero resume and episode progress match Continue Watching when those ids differ (UUID vs numeric).

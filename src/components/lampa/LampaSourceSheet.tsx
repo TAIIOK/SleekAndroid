@@ -831,10 +831,11 @@ function PickerOptions({
         </Text>
       ) : field === 'translator' ? (
         <View style={styles.pillGrid}>
-          {options.map((opt) => (
+          {options.map((opt, index) => (
             <TvFocusable
               key={opt.key}
               onPress={opt.onPress}
+              hasTVPreferredFocus={isTvUi() && index === 0}
               style={[styles.pill, opt.active && styles.pillActive]}
             >
               <Text style={[styles.pillLabel, opt.active && styles.pillLabelActive]}>
@@ -845,10 +846,11 @@ function PickerOptions({
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.optionList}>
-          {options.map((opt) => (
+          {options.map((opt, index) => (
             <TvFocusable
               key={opt.key}
               onPress={opt.onPress}
+              hasTVPreferredFocus={isTvUi() && index === 0}
               style={[styles.optionRow, opt.active && styles.optionRowActive]}
             >
               <Text style={styles.optionRowLabel}>{opt.label}</Text>

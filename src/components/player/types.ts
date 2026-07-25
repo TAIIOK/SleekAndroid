@@ -49,6 +49,13 @@ export interface VideoPlayerProps {
   startTime?: number;
   /** Resume as 0–1 fraction when absolute duration is unknown yet. */
   startProgressFraction?: number;
+  /**
+   * Filled by the player with a snapshot getter (iOS dismiss parity).
+   * Call before leaving so progress flush uses the latest time + last-known duration.
+   */
+  playbackCaptureRef?: {
+    current: (() => { currentTime: number; duration: number }) | null;
+  };
   onProgress?: (current: number, duration: number) => void;
   onEnded?: () => void;
   onAutoPlayNext?: () => void;

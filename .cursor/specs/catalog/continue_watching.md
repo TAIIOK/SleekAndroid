@@ -15,6 +15,7 @@ Home «Продолжить просмотр» shows unfinished anime, movies, a
 9. [x] Tapping a Lampa continue card tries to restore the last selection and open the player immediately; on failure falls back to the detail screen.
 10. [x] Ignore unfinished progress superseded by a later finished watch on another device (phone/web).
 11. [x] Refetch progress, library, and history when Home gains focus or the app becomes active.
+12. [x] Continue-watching source queries use `staleTime: 0` / `refetchOnMount: 'always'` (always network-fresh); keep last good data in memory when a refetch fails.
 
 ## Acceptance Criteria
 
@@ -24,6 +25,9 @@ Home «Продолжить просмотр» shows unfinished anime, movies, a
 - After the user has chosen a source/dub once, tapping continue watching for that title attempts to load the same source/dub and start playback without re-picking.
 - If the previous source/dub is unavailable, the app opens the detail screen so the user can choose again.
 - After watching further episodes on phone/web, returning to TV Home shows the current resume point (not a stale earlier unfinished episode).
+- Leaving the player (Back / Home / app switch) persists the latest position without waiting for the next interval tick.
+- A failed continue-watching refetch does not clear the rail; the previous successful list remains until a successful fetch.
+- Progress labels must not invent a 24‑minute runtime (`progress * 1440`).
 
 ## Notes
 
