@@ -26,6 +26,7 @@ import {
   loadLampaLastSelection,
   saveLampaLastSelection,
 } from '@/lib/lampaLastSelection';
+import { formatProgressLabel } from '@/lib/progressUtils';
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import { getDownloadService } from '@/services/download';
 import { isHlsSourceUrl } from '@/services/download/types';
@@ -65,13 +66,6 @@ function matchStoredTranslator(
 }
 
 type PickerField = 'source' | 'translator' | 'season';
-
-function formatProgressLabel(progress: number): string | null {
-  const p = Math.min(Math.max(progress, 0), 1);
-  if (p >= 0.9) return 'Просмотрено';
-  if (p > 0.02) return `${Math.round(p * 100)}%`;
-  return null;
-}
 
 interface LampaSourceSheetProps {
   visible: boolean;

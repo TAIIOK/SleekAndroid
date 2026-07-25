@@ -27,6 +27,103 @@ export function isUnfinishedProgress(progress: number, completed?: boolean): boo
   return value > IN_PROGRESS_MIN && value < IN_PROGRESS_MAX;
 }
 
+/** Label for episode progress chip; null when progress is absent / stub. */
+export function formatProgressLabel(progress: number): string | null {
+  const p = normalizeProgress(progress);
+  if (p >= COMPLETED_THRESHOLD) return 'Просмотрено';
+  if (p > 0.02) return `${Math.round(p * 100)}%`;
+  return null;
+}
+
+function uniqueNonEmptyIds(values: Array<string | number | undefined | null>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    if (value == null) continue;
+    const id = String(value).trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** All id forms stored on a library Lampa row (objectId, tmdb, nested id, …). */
+function idsFromSavedLampaRow(row?: Record<string, unknown>): string[] {
+  if (!row) return [];
+  const nested = row.lampa as Record<string, unknown> | undefined;
+  return uniqueNonEmptyIds([
+    nested?.objectId,
+    row.lampaObjectId,
+    nested?.id,
+    nested?.tmdbId,
+    nested?.rawId,
+    row.id,
+    row.tmdbId,
+  ]);
+}
+
+/**
+ * Progress / history may key a title under a UUID while the detail URL uses TMDB id.
+ * Collect every id that maps to the same numeric route (or detail dual ids).
+ */
+export function collectLampaProgressAliasIds(
+  routeId: string | undefined,
+  detailIds: string[],
+  historyFeed: unknown[] = [],
+): string[] {
+  const route = routeId?.trim() && /^\d+$/.test(routeId.trim()) ? routeId.trim() : undefined;
+  const detailSet = new Set(detailIds);
+  const aliases: Array<string | number | undefined | null> = [...detailIds];
+
+  for (const raw of historyFeed) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    const snapshot =
+      row.snapshot && typeof row.snapshot === 'object'
+        ? (row.snapshot as Record<string, unknown>)
+        : typeof row.snapshot === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(row.snapshot) as unknown;
+                return parsed && typeof parsed === 'object'
+                  ? (parsed as Record<string, unknown>)
+                  : {};
+              } catch {
+                return {};
+              }
+            })()
+          : {};
+
+    const objectIds = uniqueNonEmptyIds([
+      row.objectId,
+      row.lampaObjectId,
+      row.lampaId,
+      snapshot.objectId,
+      snapshot.lampaId,
+      row.entityId,
+      row.entity_id,
+    ]);
+    const historyRouteCandidates = uniqueNonEmptyIds([
+      snapshot.id,
+      row.id,
+      snapshot.tmdbId,
+      row.tmdbId,
+      snapshot.rawId,
+      route,
+    ]).filter((id) => /^\d+$/.test(id));
+    const historyRoute = historyRouteCandidates[0];
+    const mapsToDetail =
+      (route != null && (historyRoute === route || objectIds.includes(route))) ||
+      objectIds.some((id) => detailSet.has(id)) ||
+      (historyRoute != null && detailSet.has(historyRoute));
+    if (!mapsToDetail) continue;
+    aliases.push(...objectIds, historyRoute);
+  }
+
+  return uniqueNonEmptyIds(aliases);
+}
+
 function parseProgressUpdatedAtMs(value?: string): number {
   if (!value) return 0;
   const ms = new Date(value).getTime();
@@ -267,6 +364,8 @@ export function buildLampaPlaybackState(
   saved: unknown[],
   detail: LampaDetail,
   progressRows: UserLampaProgress[],
+  routeId?: string,
+  historyFeed: unknown[] = [],
 ): SavedLampaPlaybackState {
   const objectId =
     typeof detail.objectId === 'string'
@@ -275,24 +374,26 @@ export function buildLampaPlaybackState(
         ? String(detail.objectId)
         : undefined;
   const numericId = detail.id != null ? String(detail.id) : undefined;
+  const tmdbId = detail.tmdbId != null ? String(detail.tmdbId).trim() : undefined;
+  const route =
+    routeId?.trim() && /^\d+$/.test(routeId.trim()) ? routeId.trim() : undefined;
+  const dualIds = uniqueNonEmptyIds([objectId, numericId, tmdbId, route]);
 
   const match = saved.find((raw) => {
     if (!raw || typeof raw !== 'object') return false;
     const row = raw as Record<string, unknown>;
-    const nested = row.lampa as { objectId?: string; id?: number | string } | undefined;
-    if (objectId && (row.lampaObjectId === objectId || nested?.objectId === objectId)) {
-      return true;
-    }
-    if (numericId && nested?.id != null && String(nested.id) === numericId) return true;
-    if (numericId && row.id != null && String(row.id) === numericId) return true;
-    return false;
+    const rowIds = idsFromSavedLampaRow(row);
+    // Progress / CW often key by TMDB route id while detail.objectId is a UUID.
+    return rowIds.some((id) => dualIds.includes(id));
   }) as Record<string, unknown> | undefined;
 
-  const candidateIds = [objectId, numericId, match?.lampaObjectId]
-    .map((value) => (value == null ? '' : String(value).trim()))
-    .filter(Boolean);
+  const candidateIds = uniqueNonEmptyIds([
+    ...collectLampaProgressAliasIds(route, dualIds, historyFeed),
+    ...idsFromSavedLampaRow(match),
+  ]);
+  const candidateSet = new Set(candidateIds);
   const scopedRows = candidateIds.length
-    ? progressRows.filter((row) => candidateIds.includes(row.lampaId))
+    ? progressRows.filter((row) => candidateSet.has(row.lampaId))
     : progressRows;
   // Rows may be keyed by objectId or numeric route/tmdb id — merge without a single-id filter.
   const episodeProgressByKey = lampaProgressByKey(scopedRows);

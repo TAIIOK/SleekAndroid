@@ -115,13 +115,6 @@ export function LampaDetailHero({
       }
       onStatusChange={onStatusChange}
       onToggleFavorite={onToggleFavorite}
-      extraActions={
-        isSerial && onOpenSources ? (
-          <TvFocusable onPress={onOpenSources} style={styles.iconBtn}>
-            <Text style={styles.iconLabel}>⧉</Text>
-          </TvFocusable>
-        ) : null
-      }
     />
   );
 
@@ -178,6 +171,11 @@ export function LampaDetailHero({
           <Text style={styles.playLabel}>▶ {playLabel}</Text>
           {playHint ? <Text style={styles.playHint}>{playHint}</Text> : null}
         </TvFocusable>
+        {hasHistory && onOpenSources ? (
+          <TvFocusable onPress={onOpenSources} style={styles.sourcesBtn}>
+            <Text style={styles.sourcesLabel}>Выбрать источник</Text>
+          </TvFocusable>
+        ) : null}
         {library}
       </View>
     </View>
@@ -408,19 +406,21 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     fontSize: 11,
   },
-  iconBtn: {
-    width: 48,
-    height: 48,
+  sourcesBtn: {
     borderRadius: 14,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(255,255,255,0.28)',
   },
-  iconLabel: {
+  sourcesLabel: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: isTvUi() ? 15 : 14,
+    fontWeight: '700',
   },
   infoGrid: {
     gap: 10,

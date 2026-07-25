@@ -14,11 +14,14 @@ vi.mock('@/lib/isTvUi', () => ({
 
 import {
   buildAnimePlaybackState,
+  buildLampaPlaybackState,
+  formatProgressLabel,
   isUnfinishedProgress,
   pickLatestUnfinishedAnimeRow,
   pickLatestUnfinishedLampaRow,
 } from './progressUtils';
 import type { UserAnimeProgress, UserLampaProgress } from '../types/progress';
+import type { LampaDetail } from '@/api/catalog';
 
 describe('isUnfinishedProgress', () => {
   it('rejects stubs and completed', () => {
@@ -177,5 +180,85 @@ describe('buildAnimePlaybackState', () => {
     );
     expect(state.lastEpisodeId).toBe(8);
     expect(state.lastProgress).toBe(0);
+  });
+});
+
+describe('formatProgressLabel', () => {
+  it('hides stubs and shows percent or completed', () => {
+    expect(formatProgressLabel(0)).toBeNull();
+    expect(formatProgressLabel(0.01)).toBeNull();
+    expect(formatProgressLabel(0.42)).toBe('42%');
+    expect(formatProgressLabel(0.9)).toBe('Просмотрено');
+  });
+});
+
+describe('buildLampaPlaybackState', () => {
+  it('matches progress keyed by TMDB/route id when detail.objectId is a UUID', () => {
+    const detail = {
+      id: 'uuid-office-detail',
+      objectId: 'uuid-office-object',
+      tmdbId: 2316,
+      title: 'The Office',
+    } as LampaDetail;
+
+    const state = buildLampaPlaybackState(
+      [],
+      detail,
+      [
+        {
+          lampaId: '2316',
+          seasonOrdinal: 2,
+          episodeOrdinal: 5,
+          progress: 0.37,
+          completed: false,
+          updatedAt: '2026-07-24T12:00:00.000Z',
+        },
+      ],
+      '2316',
+    );
+
+    expect(state.hasHistory).toBe(true);
+    expect(state.lastSeason).toBe(2);
+    expect(state.lastEpisode).toBe(5);
+    expect(state.lastProgress).toBeCloseTo(0.37);
+    expect(state.episodeProgressByKey['2-5']).toBeCloseTo(0.37);
+  });
+
+  it('matches progress keyed by history UUID when detail only has TMDB route id', () => {
+    const detail = {
+      id: 2316,
+      objectId: 'uuid-detail-other',
+      tmdbId: 2316,
+      title: 'The Office',
+    } as LampaDetail;
+
+    const state = buildLampaPlaybackState(
+      [],
+      detail,
+      [
+        {
+          lampaId: 'uuid-progress-office',
+          seasonOrdinal: 1,
+          episodeOrdinal: 3,
+          progress: 0.55,
+          completed: false,
+          updatedAt: '2026-07-24T12:00:00.000Z',
+        },
+      ],
+      '2316',
+      [
+        {
+          lampaId: 'uuid-progress-office',
+          tmdbId: 2316,
+          snapshot: { title: 'The Office', tmdbId: 2316, kind: 'tv' },
+        },
+      ],
+    );
+
+    expect(state.hasHistory).toBe(true);
+    expect(state.lastSeason).toBe(1);
+    expect(state.lastEpisode).toBe(3);
+    expect(state.lastProgress).toBeCloseTo(0.55);
+    expect(state.episodeProgressByKey['1-3']).toBeCloseTo(0.55);
   });
 });

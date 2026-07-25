@@ -19,6 +19,7 @@ import { formatRuDate } from '@/lib/catalogLocalization';
 import { resolveLampaPosterUrl } from '@/lib/config';
 import { lampaProgressKey } from '@/lib/lampaDetail';
 import { isTvUi } from '@/lib/isTvUi';
+import { formatProgressLabel } from '@/lib/progressUtils';
 
 /** Matches web desktop `max-h-[32rem]` / mobile `max-h-[24rem]`. */
 const EPISODE_LIST_MAX_HEIGHT = 360;
@@ -153,6 +154,7 @@ function EpisodeCard({
   const progressWidth = watched
     ? 100
     : Math.round(Math.min(1, Math.max(0, progress)) * 100);
+  const progressLabel = formatProgressLabel(progress);
 
   return (
     <TvFocusable onPress={onPress} style={styles.episodeCard}>
@@ -177,9 +179,16 @@ function EpisodeCard({
             <Text style={styles.epNum}>Серия {episode.episodeNumber}</Text>
             {airDate ? <Text style={styles.airDate}>{airDate}</Text> : null}
           </View>
-          <Text style={styles.epTitle} numberOfLines={1}>
-            {episode.name}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.epTitle} numberOfLines={1}>
+              {episode.name}
+            </Text>
+            {progressLabel ? (
+              <View style={styles.progressBadge}>
+                <Text style={styles.progressBadgeText}>{progressLabel}</Text>
+              </View>
+            ) : null}
+          </View>
           {episode.overview ? (
             <Text style={styles.epOverview} numberOfLines={2}>
               {episode.overview}
@@ -317,11 +326,31 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 11,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
   epTitle: {
     color: colors.text,
     fontSize: isTvUi() ? 15 : 13,
     fontWeight: '600',
     lineHeight: isTvUi() ? 20 : 17,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  progressBadge: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(195,192,255,0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    flexShrink: 0,
+  },
+  progressBadgeText: {
+    color: colors.brand,
+    fontSize: 11,
+    fontWeight: '700',
   },
   epOverview: {
     color: colors.textSecondary,

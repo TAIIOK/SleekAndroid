@@ -21,6 +21,7 @@ import {
   fetchLampaSimilar,
 } from '@/api/lampaExtras';
 import { fetchLampaProgress } from '@/api/progress';
+import { fetchActivityHistory } from '@/api/user';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
@@ -64,8 +65,9 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     enabled: !!routeId,
   });
 
+  // Same query keys as Continue Watching so detail reuses the home cache.
   const { data: savedLampa = [] } = useQuery({
-    queryKey: ['library-lampa'],
+    queryKey: ['library-lampa', 'include-lampa'],
     queryFn: fetchSavedLampaLibrary,
     enabled: isAuthenticated,
   });
@@ -76,35 +78,34 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     return String(d.objectId ?? d.object_id ?? '').trim();
   }, [detail]);
 
+  // Unfiltered list (same as CW). Filtered `?lampaId=` can miss rows keyed under
+  // a sibling id (UUID vs TMDB) even when Home already has them.
   const { data: lampaProgress = [] } = useQuery({
-    queryKey: ['lampa-progress', lampaObjectId || routeId || undefined],
-    queryFn: async () => {
-      const ids = [lampaObjectId, routeId].filter(
-        (value, index, all): value is string =>
-          !!value?.trim() && all.indexOf(value) === index,
-      );
-      if (!ids.length) return [];
-      if (ids.length === 1) return fetchLampaProgress(ids[0]);
-      const chunks = await Promise.all(ids.map((id) => fetchLampaProgress(id)));
-      const merged = new Map<string, (typeof chunks)[number][number]>();
-      for (const rows of chunks) {
-        for (const row of rows) {
-          const key = `${row.lampaId}:${row.seasonOrdinal}:${row.episodeOrdinal}`;
-          const prev = merged.get(key);
-          if (!prev || (row.updatedAt ?? '') >= (prev.updatedAt ?? '')) {
-            merged.set(key, row);
-          }
-        }
-      }
-      return [...merged.values()];
-    },
-    enabled: (!!lampaObjectId || !!routeId) && isAuthenticated,
+    queryKey: ['lampa-progress'],
+    queryFn: () => fetchLampaProgress(),
+    enabled: isAuthenticated,
     staleTime: 30_000,
   });
 
+  const { data: historyFeed = [] } = useQuery({
+    queryKey: ['history-feed'],
+    queryFn: fetchActivityHistory,
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+  });
+
   const savedState = useMemo(
-    () => (detail ? buildLampaPlaybackState(savedLampa, detail, lampaProgress) : null),
-    [savedLampa, detail, lampaProgress],
+    () =>
+      detail
+        ? buildLampaPlaybackState(
+            savedLampa,
+            detail,
+            lampaProgress,
+            routeId,
+            historyFeed,
+          )
+        : null,
+    [savedLampa, detail, lampaProgress, routeId, historyFeed],
   );
 
   const tmdbId = useMemo(
@@ -253,7 +254,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
             poster: lampaPosterPath(detail),
           }}
           onWatch={() => openSources(!!savedState?.hasHistory)}
-          onOpenSources={isSerial ? () => openSources(false) : undefined}
+          onOpenSources={() => openSources(false)}
           onStatusChange={onStatusChange}
           onToggleFavorite={onToggleFavorite}
         />
