@@ -43,12 +43,19 @@ export interface WatchHubSeasonEpisodes {
   episodes: WatchHubEpisodeItem[];
 }
 
+export interface WatchHubSubtitleInfo {
+  label: string;
+  url: string;
+}
+
 export interface WatchHubVideoLink {
   quality: string;
   urls?: string[];
   stream?: string[];
   file?: string[];
   proxy?: { stream?: string[]; file?: string[] };
+  /** Sidecar WebVTT tracks (`docs/sidecar_subtitles.md`). Use URL as-is. */
+  subtitles?: WatchHubSubtitleInfo[];
 }
 
 const TASK_PATH = '/api/task';

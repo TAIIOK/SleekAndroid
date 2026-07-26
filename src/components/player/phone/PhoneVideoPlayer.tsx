@@ -20,6 +20,7 @@ import Video, { ViewType } from 'react-native-video';
 import { PhoneGestureHud } from '@/components/player/phone/PhoneGestureHud';
 import { PhoneScrubBar } from '@/components/player/phone/PhoneScrubBar';
 import { PlayerPerfOverlay } from '@/components/player/PlayerPerfOverlay';
+import { SubtitleOverlay } from '@/components/player/SubtitleOverlay';
 import type { PlayerMenuOption, VideoPlayerProps } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
 import { usePhonePlayerGestures } from '@/hooks/usePhonePlayerGestures';
@@ -61,6 +62,7 @@ export function PhoneVideoPlayer({
   headers,
   title,
   subtitle,
+  subtitles,
   startTime,
   startProgressFraction,
   onProgress,
@@ -85,6 +87,7 @@ export function PhoneVideoPlayer({
   const engine = useRNVideoEngine({
     src,
     headers,
+    externalSubtitles: subtitles,
     startTime,
     startProgressFraction,
     skipSegments,
@@ -407,6 +410,7 @@ export function PhoneVideoPlayer({
             onBuffer={engine.onBuffer}
             onReadyForDisplay={engine.onReadyForDisplay}
             onTextTracks={engine.onTextTracks}
+            onTextTrackDataChanged={engine.onTextTrackDataChanged}
             onPictureInPictureStatusChanged={({ isActive }) => {
               setPipActive(isActive);
               if (isActive) {
@@ -419,6 +423,8 @@ export function PhoneVideoPlayer({
           />
         ) : null}
       </View>
+
+      <SubtitleOverlay cues={engine.activeSubtitleCues} text={engine.nativeCueText} />
 
       <GestureDetector gesture={gestures.gesture}>
         <View collapsable={false} style={styles.gestureLayer} />

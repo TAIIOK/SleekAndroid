@@ -7,7 +7,7 @@ import type {
   OnTextTracksData,
   VideoRef,
 } from 'react-native-video';
-import { SelectedTrackType } from 'react-native-video';
+import { SelectedTrackType, TextTrackType } from 'react-native-video';
 
 import {
   getPlayerPreferencesSync,
@@ -25,11 +25,22 @@ import {
 import { toPlaybackErrorInfo, type PlaybackErrorInfo } from '@/lib/playbackErrors';
 import {
   findPreferredSubtitleTrack,
+  guessIsoFromLabel,
+  mergeSubtitleTrackLists,
+  subtitlePreferenceKey,
   type SubtitleTrackInfo,
 } from '@/lib/subtitleTracks';
+import {
+  fetchSubtitleCues,
+  findActiveCues,
+  type SubtitleCue,
+} from '@/lib/parseSubtitles';
 
 const REBUFFER_SPINNER_DELAY_MS = 400;
 const UI_TICK_MS = 1000;
+/** Cue clock while sidecar subtitles are on — HUD time can stay at 1s ticks. */
+const SUBTITLE_CLOCK_MS = 200;
+const EMPTY_SUBTITLES: SubtitleTrackInfo[] = [];
 
 /** Stable identity — avoid re-applying Exo buffer settings every render. */
 const BUFFER_CONFIG = {
@@ -57,9 +68,25 @@ function sameSubtitleTracks(a: SubtitleTrackInfo[], b: SubtitleTrackInfo[]): boo
   });
 }
 
+function mapNativeTextTracks(
+  raw: Array<{ index?: number; language?: string; title?: string; selected?: boolean }>,
+): SubtitleTrackInfo[] {
+  return raw
+    .filter((t) => t.language || t.title || t.index != null)
+    .map((t) => ({
+      id: String(t.index),
+      language: t.language ?? '',
+      label: t.title || t.language || `Track ${t.index}`,
+      isDefault: Boolean(t.selected),
+      source: 'stream' as const,
+    }));
+}
+
 export interface RNVideoEngineOptions {
   src: string;
   headers?: Record<string, string>;
+  /** External sidecar VTT tracks (WatchHub `links[].subtitles`). */
+  externalSubtitles?: SubtitleTrackInfo[];
   startTime?: number;
   startProgressFraction?: number;
   skipSegments?: PlayerSkipSegment[];
@@ -73,6 +100,7 @@ export interface RNVideoEngineOptions {
 export function useRNVideoEngine({
   src,
   headers,
+  externalSubtitles = EMPTY_SUBTITLES,
   startTime,
   startProgressFraction,
   skipSegments = [],
@@ -86,8 +114,11 @@ export function useRNVideoEngine({
   const [duration, setDuration] = useState(0);
   const [visibleSkip, setVisibleSkip] = useState<PlayerSkipSegment | undefined>();
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrackInfo[]>([]);
+  const [streamSubtitleTracks, setStreamSubtitleTracks] = useState<SubtitleTrackInfo[]>([]);
   const [activeSubtitle, setActiveSubtitle] = useState<SubtitleTrackInfo | null>(null);
+  const [sidecarCues, setSidecarCues] = useState<SubtitleCue[]>([]);
+  const [subtitleClock, setSubtitleClock] = useState(0);
+  const [nativeCueText, setNativeCueText] = useState('');
   const [showBuffering, setShowBuffering] = useState(true);
   const [playing, setPlaying] = useState(true);
   const [volume, setVolumeState] = useState(1);
@@ -136,6 +167,11 @@ export function useRNVideoEngine({
   startTimeRef.current = startTime;
   startProgressFractionRef.current = startProgressFraction;
   srcRef.current = src;
+
+  const subtitleTracks = useMemo(
+    () => mergeSubtitleTrackLists(externalSubtitles, streamSubtitleTracks),
+    [externalSubtitles, streamSubtitleTracks],
+  );
 
   const rememberDuration = useCallback((durSec: number, opts?: { fromLoad?: boolean }) => {
     if (!(durSec > 1)) return;
@@ -279,8 +315,11 @@ export function useRNVideoEngine({
     setPlaybackError(null);
     setCurrentTime(0);
     setDuration(0);
-    setSubtitleTracks([]);
+    setStreamSubtitleTracks([]);
     setActiveSubtitle(null);
+    setSidecarCues([]);
+    setNativeCueText('');
+    setSubtitleClock(0);
     setShowBuffering(true);
     setPlaying(true);
     if (bufferSpinnerTimerRef.current) {
@@ -307,6 +346,60 @@ export function useRNVideoEngine({
     setVisibleSkip(undefined);
     if (durationRef.current > 1) applyResume(durationRef.current);
   }, [startTime, startProgressFraction, src, applyResume]);
+
+  // Rematch active track by saved label when sidecar / stream list changes (quality switch).
+  useEffect(() => {
+    const preferred = findPreferredSubtitleTrack(
+      subtitleTracks,
+      prefs.preferredSubtitleLanguage,
+    );
+    setActiveSubtitle((prev) => {
+      if (!preferred) return null;
+      if (
+        prev &&
+        prev.label === preferred.label &&
+        (prev.id ?? '') === (preferred.id ?? '') &&
+        (prev.url ?? '') === (preferred.url ?? '')
+      ) {
+        return prev;
+      }
+      return preferred;
+    });
+  }, [subtitleTracks, prefs.preferredSubtitleLanguage]);
+
+  // Fetch sidecar VTT/SRT when an external track is selected (custom overlay — Exo cues are under HUD).
+  useEffect(() => {
+    const url = activeSubtitle?.url?.trim();
+    if (!url) {
+      setSidecarCues([]);
+      return;
+    }
+    let cancelled = false;
+    setSidecarCues([]);
+    void fetchSubtitleCues(url).then((cues) => {
+      if (!cancelled) setSidecarCues(cues);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSubtitle?.url, activeSubtitle?.id]);
+
+  // Fine-grained clock for cue timing while a track is active.
+  useEffect(() => {
+    if (!activeSubtitle) {
+      setSubtitleClock(0);
+      return;
+    }
+    setSubtitleClock(currentTimeRef.current);
+    const id = setInterval(() => {
+      setSubtitleClock(currentTimeRef.current);
+    }, SUBTITLE_CLOCK_MS);
+    return () => clearInterval(id);
+  }, [activeSubtitle]);
+
+  useEffect(() => {
+    setNativeCueText('');
+  }, [activeSubtitle?.id, activeSubtitle?.label, src]);
 
   const setBufferingUi = useCallback(
     (isBuffering: boolean) => {
@@ -346,12 +439,21 @@ export function useRNVideoEngine({
       : lower.includes('.mpd')
         ? 'mpd'
         : undefined;
+    const textTracks = externalSubtitles
+      .filter((t) => Boolean(t.url?.trim()))
+      .map((t) => ({
+        title: t.label,
+        language: guessIsoFromLabel(t) as 'en',
+        type: TextTrackType.VTT,
+        uri: t.url!.trim(),
+      }));
     return {
       uri,
       ...(type ? { type } : {}),
       ...(headers && Object.keys(headers).length ? { headers } : {}),
+      ...(textTracks.length ? { textTracks } : {}),
     };
-  }, [src, headers]);
+  }, [src, headers, externalSubtitles]);
 
   const onLoad = useCallback(
     (data: OnLoadData) => {
@@ -366,21 +468,8 @@ export function useRNVideoEngine({
       setPlaybackError(null);
       applyResume(lastGoodDurationRef.current > 1 ? lastGoodDurationRef.current : durSec);
 
-      const tracks: SubtitleTrackInfo[] = (data.textTracks ?? [])
-        .filter((t) => t.language || t.title || t.index != null)
-        .map((t) => ({
-          id: String(t.index),
-          language: t.language ?? '',
-          label: t.title || t.language || `Track ${t.index}`,
-          isDefault: Boolean(t.selected),
-        }));
-      setSubtitleTracks((prev) => (sameSubtitleTracks(prev, tracks) ? prev : tracks));
-
-      const preferred = findPreferredSubtitleTrack(
-        tracks,
-        prefsRef.current.preferredSubtitleLanguage,
-      );
-      if (preferred) setActiveSubtitle(preferred);
+      const tracks = mapNativeTextTracks(data.textTracks ?? []);
+      setStreamSubtitleTracks((prev) => (sameSubtitleTracks(prev, tracks) ? prev : tracks));
 
       if (wantPlayingRef.current) setPlaying(true);
     },
@@ -489,13 +578,8 @@ export function useRNVideoEngine({
   }, [setBufferingUi]);
 
   const onTextTracks = useCallback((data: OnTextTracksData) => {
-    const tracks: SubtitleTrackInfo[] = (data.textTracks ?? []).map((t) => ({
-      id: String(t.index),
-      language: t.language ?? '',
-      label: t.title || t.language || `Track ${t.index}`,
-      isDefault: Boolean(t.selected),
-    }));
-    setSubtitleTracks((prev) => (sameSubtitleTracks(prev, tracks) ? prev : tracks));
+    const tracks = mapNativeTextTracks(data.textTracks ?? []);
+    setStreamSubtitleTracks((prev) => (sameSubtitleTracks(prev, tracks) ? prev : tracks));
   }, []);
 
   const updatePrefs = useCallback((patch: Partial<PlayerPreferences>) => {
@@ -573,17 +657,43 @@ export function useRNVideoEngine({
   const setSubtitleTrack = useCallback((track: SubtitleTrackInfo | null) => {
     setActiveSubtitle(track);
     void savePlayerPreferences({
-      preferredSubtitleLanguage: track?.language ?? '',
+      preferredSubtitleLanguage: track ? subtitlePreferenceKey(track) : '',
     }).then(setPrefs);
   }, []);
 
+  const isExternalActive = Boolean(activeSubtitle?.url?.trim());
+
   const selectedTextTrack = useMemo(() => {
-    if (!activeSubtitle?.id) return undefined;
+    // Sidecar cues render in RN overlay — keep Exo text track off to avoid double text
+    // if native SubtitleView ever becomes visible.
+    if (!activeSubtitle || isExternalActive) {
+      return { type: SelectedTrackType.DISABLED };
+    }
+    const index = Number(activeSubtitle.id);
+    if (activeSubtitle.id != null && activeSubtitle.id !== '' && Number.isFinite(index)) {
+      return {
+        type: SelectedTrackType.INDEX,
+        value: index,
+      };
+    }
     return {
-      type: SelectedTrackType.INDEX,
-      value: Number(activeSubtitle.id),
+      type: SelectedTrackType.TITLE,
+      value: activeSubtitle.label,
     };
-  }, [activeSubtitle]);
+  }, [activeSubtitle, isExternalActive]);
+
+  const activeSubtitleCues = useMemo(() => {
+    if (!isExternalActive || !sidecarCues.length) return [];
+    return findActiveCues(sidecarCues, subtitleClock);
+  }, [isExternalActive, sidecarCues, subtitleClock]);
+
+  const onTextTrackDataChanged = useCallback(
+    (data: { subtitleTracks?: string }) => {
+      if (isExternalActive) return;
+      setNativeCueText(data.subtitleTracks?.trim() ?? '');
+    },
+    [isExternalActive],
+  );
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -611,6 +721,7 @@ export function useRNVideoEngine({
     onBuffer,
     onReadyForDisplay,
     onTextTracks,
+    onTextTrackDataChanged,
     prefs,
     updatePrefs,
     playing,
@@ -624,6 +735,8 @@ export function useRNVideoEngine({
     contentFit: prefs.videoFit,
     subtitleTracks,
     activeSubtitle,
+    activeSubtitleCues,
+    nativeCueText: isExternalActive ? '' : nativeCueText,
     setSubtitleTrack,
     togglePlay,
     pause,

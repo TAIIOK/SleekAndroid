@@ -1,5 +1,6 @@
 import type { PlaybackErrorInfo } from '@/lib/playbackErrors';
 import type { PlayerSkipSegment } from '@/lib/playerSkip';
+import type { SubtitleTrackInfo } from '@/lib/subtitleTracks';
 
 export type { PlaybackErrorInfo };
 
@@ -50,6 +51,11 @@ export interface VideoPlayerProps {
   headers?: Record<string, string>;
   title?: string;
   subtitle?: string;
+  /**
+   * External sidecar subtitle tracks (WatchHub `links[].subtitles`).
+   * Not the chrome episode line (`subtitle`).
+   */
+  subtitles?: SubtitleTrackInfo[];
   /** Absolute resume time in seconds. */
   startTime?: number;
   /** Resume as 0–1 fraction when absolute duration is unknown yet. */

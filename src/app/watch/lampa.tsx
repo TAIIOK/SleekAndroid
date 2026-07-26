@@ -38,6 +38,7 @@ import {
 import { saveLampaLastSelection } from '@/lib/lampaLastSelection';
 import { buildLampaSkipSegments, buildSkipSegments } from '@/lib/playerSkip';
 import { lampaResumeProgress } from '@/lib/progressUtils';
+import { pickLampaSidecarSubtitles } from '@/lib/subtitleTracks';
 import {
   consumeLampaWatchPayload,
   lampaEpisodeNavId,
@@ -206,6 +207,11 @@ export default function WatchLampaScreen() {
   ]);
 
   const playerSrc = unloadPlayer ? '' : (streamSrc ?? '');
+
+  const sidecarSubtitles = useMemo(
+    () => pickLampaSidecarSubtitles(lampaLinks, activeLampaLink),
+    [lampaLinks, activeLampaLink],
+  );
 
   const syncedProgress = useMemo(
     () => lampaResumeProgress(progressRows, lampaId, season, episode, isSerial),
@@ -612,6 +618,7 @@ export default function WatchLampaScreen() {
         src={playerSrc}
         title={title}
         subtitle={subtitle}
+        subtitles={sidecarSubtitles}
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
         skipSegments={skipSegments}

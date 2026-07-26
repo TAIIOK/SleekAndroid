@@ -10,6 +10,7 @@ import {
 import Video from 'react-native-video';
 
 import { PlayerPerfOverlay } from '@/components/player/PlayerPerfOverlay';
+import { SubtitleOverlay } from '@/components/player/SubtitleOverlay';
 import type { VideoPlayerProps } from '@/components/player/types';
 import { TvEpisodeDock } from '@/components/player/tv/TvEpisodeDock';
 import { TvPlayerOverlays } from '@/components/player/tv/TvPlayerOverlays';
@@ -36,6 +37,7 @@ export function TvVideoPlayer({
   headers,
   title,
   subtitle,
+  subtitles,
   startTime,
   startProgressFraction,
   onProgress,
@@ -60,6 +62,7 @@ export function TvVideoPlayer({
   const engine = useRNVideoEngine({
     src,
     headers,
+    externalSubtitles: subtitles,
     startTime,
     startProgressFraction,
     skipSegments,
@@ -255,6 +258,7 @@ export function TvVideoPlayer({
           onBuffer={engine.onBuffer}
           onReadyForDisplay={engine.onReadyForDisplay}
           onTextTracks={engine.onTextTracks}
+          onTextTrackDataChanged={engine.onTextTrackDataChanged}
         />
       ) : null}
 
@@ -265,6 +269,8 @@ export function TvVideoPlayer({
         accessible={false}
         style={styles.focusSink}
       />
+
+      <SubtitleOverlay cues={engine.activeSubtitleCues} text={engine.nativeCueText} />
 
       {engine.isLoading && !engine.playbackError ? (
         <View style={styles.center} pointerEvents="none">
