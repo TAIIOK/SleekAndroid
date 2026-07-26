@@ -54,10 +54,22 @@ export interface WatchHubVideoLink {
 const TASK_PATH = '/api/task';
 const POLL_MS = 5000;
 const MAX_POLLS = 60;
+/** Bound process-lifetime task cache (insertion-order Map = LRU-ish). */
+const MAX_TASK_RESPONSE_CACHE = 40;
 const taskResponseCache = new Map<string, WatchHubTaskResponse>();
 
 function taskContentKey(req: WatchHubTaskRequest): string {
   return `${req.id}|${req.serial ? 1 : 0}`;
+}
+
+function rememberTaskResponse(key: string, response: WatchHubTaskResponse): void {
+  if (taskResponseCache.has(key)) taskResponseCache.delete(key);
+  taskResponseCache.set(key, response);
+  while (taskResponseCache.size > MAX_TASK_RESPONSE_CACHE) {
+    const oldest = taskResponseCache.keys().next().value;
+    if (oldest == null) break;
+    taskResponseCache.delete(oldest);
+  }
 }
 
 export function toSleekTaskRequest(req: WatchHubTaskRequest): WatchHubTaskRequest {
@@ -128,7 +140,7 @@ export async function postTask(req: WatchHubTaskRequest): Promise<WatchHubTaskRe
       method: 'POST',
       body: JSON.stringify(sleek),
     });
-    if (response?.id) taskResponseCache.set(key, response);
+    if (response?.id) rememberTaskResponse(key, response);
     return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : '';

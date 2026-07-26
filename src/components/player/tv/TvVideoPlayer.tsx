@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Video from 'react-native-video';
 
+import { PlayerPerfOverlay } from '@/components/player/PlayerPerfOverlay';
 import type { VideoPlayerProps } from '@/components/player/types';
 import { TvEpisodeDock } from '@/components/player/tv/TvEpisodeDock';
 import { TvPlayerOverlays } from '@/components/player/tv/TvPlayerOverlays';
@@ -18,6 +19,7 @@ import {
   TV_PLAYER_OPTIONS_ORDER,
 } from '@/components/player/tv/tvPlayerTypes';
 import { colors, spacing } from '@/constants/aniverse';
+import { usePlayerPerfRenderCounter } from '@/hooks/usePlayerPerfStats';
 import { useRNVideoEngine } from '@/hooks/useRNVideoEngine';
 import { useTvPlayerRemote } from '@/hooks/useTvPlayerRemote';
 import {
@@ -25,6 +27,7 @@ import {
   listInstalledExternalPlayers,
   type ExternalPlayerTarget,
 } from '@/lib/externalPlayer';
+import { isPlayerPerfOverlayEnabled } from '@/lib/playerPerf';
 import { cyclePlaybackRate, cycleVideoFit } from '@/lib/playerPreferences';
 import { subtitleTrackLabel } from '@/lib/subtitleTracks';
 
@@ -47,8 +50,12 @@ export function TvVideoPlayer({
   connectionOptions,
   deliveryOptions,
   playbackCaptureRef,
+  playbackControlRef,
 }: VideoPlayerProps) {
   const handleBack = onBack ?? (() => undefined);
+  const perfEnabled = isPlayerPerfOverlayEnabled();
+  const { noteRender, renderCountRef } = usePlayerPerfRenderCounter(perfEnabled);
+  noteRender();
 
   const engine = useRNVideoEngine({
     src,
@@ -69,6 +76,14 @@ export function TvVideoPlayer({
       playbackCaptureRef.current = null;
     };
   }, [engine.getPlaybackCapture, playbackCaptureRef]);
+
+  useEffect(() => {
+    if (!playbackControlRef) return;
+    playbackControlRef.current = { pause: engine.pause };
+    return () => {
+      playbackControlRef.current = null;
+    };
+  }, [engine.pause, playbackControlRef]);
 
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
   const [externalError, setExternalError] = useState<string | null>(null);
@@ -195,6 +210,26 @@ export function TvVideoPlayer({
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
     };
   }, [remote.overlay, remote.panelVisible, src]);
+
+  const perfLines = useMemo(() => {
+    if (!perfEnabled) return [];
+    const srcShort = src ? `${src.slice(0, 28)}…` : '(no src)';
+    return [
+      engine.isLoading ? 'buf: yes' : 'buf: no',
+      engine.playing ? 'play' : 'pause',
+      `t ${engine.currentTime.toFixed(0)}/${engine.duration.toFixed(0)}s`,
+      `nav ${episodeNav?.items.length ?? 0}`,
+      srcShort,
+    ];
+  }, [
+    perfEnabled,
+    engine.isLoading,
+    engine.playing,
+    engine.currentTime,
+    engine.duration,
+    episodeNav?.items.length,
+    src,
+  ]);
 
   return (
     <View style={styles.root}>
@@ -336,6 +371,14 @@ export function TvVideoPlayer({
         }}
         onSettingsAction={handleSettingsAction}
       />
+
+      {perfEnabled ? (
+        <PlayerPerfOverlay
+          enabled={perfEnabled}
+          renderCountRef={renderCountRef}
+          lines={perfLines}
+        />
+      ) : null}
     </View>
   );
 }

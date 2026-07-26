@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
@@ -71,6 +71,8 @@ export function usePhonePlayerGestures({
   });
   const scrubTimeRef = useRef(currentTime);
   const hideHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const doubleTapHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chromeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ time: number; x: number } | null>(null);
   const layoutRef = useRef({ width: 1, height: 1 });
 
@@ -85,6 +87,14 @@ export function usePhonePlayerGestures({
       hideHudTimerRef.current = null;
     }
   }, []);
+
+  useEffect(() => {
+    return () => {
+      clearHideHudTimer();
+      if (doubleTapHintTimerRef.current) clearTimeout(doubleTapHintTimerRef.current);
+      if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
+    };
+  }, [clearHideHudTimer]);
 
   const dismissHud = useCallback(() => {
     clearHideHudTimer();
@@ -102,7 +112,11 @@ export function usePhonePlayerGestures({
 
   const showDoubleTap = useCallback((direction: 'backward' | 'forward') => {
     setDoubleTapHint(direction);
-    setTimeout(() => setDoubleTapHint(null), 700);
+    if (doubleTapHintTimerRef.current) clearTimeout(doubleTapHintTimerRef.current);
+    doubleTapHintTimerRef.current = setTimeout(() => {
+      setDoubleTapHint(null);
+      doubleTapHintTimerRef.current = null;
+    }, 700);
   }, []);
 
   const toggleChrome = useCallback(() => {
@@ -148,7 +162,9 @@ export function usePhonePlayerGestures({
       }
 
       // When visible, wait for a possible double-tap before hiding.
-      setTimeout(() => {
+      if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
+      chromeHideTimerRef.current = setTimeout(() => {
+        chromeHideTimerRef.current = null;
         if (!lastTapRef.current || lastTapRef.current.time !== now) return;
         lastTapRef.current = null;
         hideControls();

@@ -6,9 +6,17 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { fetchLampaSkipSegments } from '@/api/catalog';
 import { fetchLampaProgress } from '@/api/progress';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
-import type { PlaybackErrorInfo, PlayerEpisodeNav } from '@/components/player/types';
+import type {
+  PlaybackErrorInfo,
+  PlayerControlHandle,
+  PlayerEpisodeNav,
+  PlayerMenuOption,
+} from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
-import { useThrottledLampaProgress } from '@/hooks/useThrottledLampaProgress';
+import {
+  useThrottledLampaProgress,
+  type ProgressFlushOptions,
+} from '@/hooks/useThrottledLampaProgress';
 import {
   getDownloadPreferencesSync,
   loadDownloadPreferences,
@@ -59,6 +67,8 @@ export default function WatchLampaScreen() {
   );
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  /** Unload native Video while fetching next episode / translator links. */
+  const [unloadPlayer, setUnloadPlayer] = useState(false);
 
   const [lampaQuality, setLampaQuality] = useState('');
   const [lampaConnection, setLampaConnection] = useState<LampaConnectionMode>(
@@ -72,6 +82,7 @@ export default function WatchLampaScreen() {
   const playbackCaptureRef = useRef<(() => { currentTime: number; duration: number }) | null>(
     null,
   );
+  const playbackControlRef = useRef<PlayerControlHandle | null>(null);
   const httpFallbackTriedRef = useRef(false);
   const hasSwitchedEpisodeRef = useRef(false);
   const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
@@ -176,7 +187,7 @@ export default function WatchLampaScreen() {
     if (modes.delivery !== lampaDelivery) setLampaDelivery(modes.delivery);
   }, [activeLampaLink, lampaConnection, lampaDelivery]);
 
-  const src = useMemo(() => {
+  const streamSrc = useMemo(() => {
     if (!activeLampaLink) return undefined;
     const modes = normalizePlaybackModes(activeLampaLink, lampaConnection, lampaDelivery);
     return resolveLampaPlaybackUrl(
@@ -193,6 +204,8 @@ export default function WatchLampaScreen() {
     lampaConnection,
     lampaDelivery,
   ]);
+
+  const playerSrc = unloadPlayer ? '' : (streamSrc ?? '');
 
   const syncedProgress = useMemo(
     () => lampaResumeProgress(progressRows, lampaId, season, episode, isSerial),
@@ -233,6 +246,7 @@ export default function WatchLampaScreen() {
     playbackTimeRef.current = 0;
     durationRef.current = 0;
     setResumeOverrideSec(undefined);
+    setUnloadPlayer(false);
   }, [lampaId, season, episode]);
 
   const title = useMemo(() => {
@@ -262,16 +276,24 @@ export default function WatchLampaScreen() {
     episode,
   );
 
-  const flushProgress = useCallback(async () => {
-    const snap = playbackCaptureRef.current?.() ?? {
-      currentTime: playbackTimeRef.current,
-      duration: durationRef.current,
-    };
-    if (snap.currentTime > 0) {
-      syncProgress(snap.currentTime, snap.duration);
-    }
-    await flushPendingProgress();
-  }, [syncProgress, flushPendingProgress]);
+  const flushProgress = useCallback(
+    async (options?: ProgressFlushOptions) => {
+      const snap = playbackCaptureRef.current?.() ?? {
+        currentTime: playbackTimeRef.current,
+        duration: durationRef.current,
+      };
+      if (snap.currentTime > 0) {
+        syncProgress(snap.currentTime, snap.duration);
+      }
+      await flushPendingProgress(options);
+    },
+    [syncProgress, flushPendingProgress],
+  );
+
+  const teardownPlayer = useCallback(() => {
+    playbackControlRef.current?.pause();
+    setUnloadPlayer(true);
+  }, []);
 
   const episodeItems = useMemo(() => {
     if (!canNavigateEpisodes || !payload?.seasons) return [];
@@ -332,6 +354,7 @@ export default function WatchLampaScreen() {
         setResumeOverrideSec(playbackTimeRef.current);
       }
 
+      teardownPlayer();
       setSwitchingEpisode(true);
       setSwitchError(null);
       try {
@@ -344,19 +367,31 @@ export default function WatchLampaScreen() {
         });
         if (!links.length) {
           setSwitchError('Для этой озвучки нет ссылки на текущий эпизод');
+          setUnloadPlayer(false);
           return;
         }
         hasSwitchedEpisodeRef.current = true;
         setLampaLinks(links);
         setTranslatorId(translator.id);
         persistTranslatorChoice(translator);
+        setUnloadPlayer(false);
       } catch (e) {
         setSwitchError(e instanceof Error ? e.message : 'Ошибка смены озвучки');
+        setUnloadPlayer(false);
       } finally {
         setSwitchingEpisode(false);
       }
     },
-    [taskId, sourceId, translatorId, switchingEpisode, season, episode, persistTranslatorChoice],
+    [
+      taskId,
+      sourceId,
+      translatorId,
+      switchingEpisode,
+      season,
+      episode,
+      persistTranslatorChoice,
+      teardownPlayer,
+    ],
   );
 
   const navigateToEpisode = useCallback(
@@ -365,6 +400,7 @@ export default function WatchLampaScreen() {
       if (nextSeason === season && nextEpisodeNum === episode) return;
       if (switchingEpisode) return;
 
+      teardownPlayer();
       await flushProgress();
       setSwitchingEpisode(true);
       setSwitchError(null);
@@ -378,19 +414,31 @@ export default function WatchLampaScreen() {
         });
         if (!links.length) {
           setSwitchError('Не удалось получить ссылку на серию');
+          setUnloadPlayer(false);
           return;
         }
         hasSwitchedEpisodeRef.current = true;
         setLampaLinks(links);
         setSeason(nextSeason);
         setEpisode(nextEpisodeNum);
+        // unload cleared by season/episode effect
       } catch (e) {
         setSwitchError(e instanceof Error ? e.message : 'Ошибка смены серии');
+        setUnloadPlayer(false);
       } finally {
         setSwitchingEpisode(false);
       }
     },
-    [taskId, sourceId, translatorId, season, episode, switchingEpisode, flushProgress],
+    [
+      taskId,
+      sourceId,
+      translatorId,
+      season,
+      episode,
+      switchingEpisode,
+      flushProgress,
+      teardownPlayer,
+    ],
   );
 
   const episodeNav: PlayerEpisodeNav | undefined = useMemo(() => {
@@ -428,12 +476,12 @@ export default function WatchLampaScreen() {
     navigateToEpisode,
   ]);
 
-  const switchWithResume = (apply: () => void) => {
+  const switchWithResume = useCallback((apply: () => void) => {
     if (playbackTimeRef.current > 0) {
       setResumeOverrideSec(playbackTimeRef.current);
     }
     apply();
-  };
+  }, []);
 
   const handlePlaybackError = useCallback(
     (info: PlaybackErrorInfo) => {
@@ -448,8 +496,92 @@ export default function WatchLampaScreen() {
       });
       return true;
     },
-    [activeLampaLink, lampaConnection],
+    [activeLampaLink, lampaConnection, switchWithResume],
   );
+
+  const handleBack = useCallback(() => {
+    void flushProgress({ invalidate: true }).finally(() => router.back());
+  }, [flushProgress, router]);
+
+  const handleProgress = useCallback(
+    (current: number, duration: number) => {
+      playbackTimeRef.current = current;
+      if (duration > 1) durationRef.current = duration;
+      syncProgress(current, duration);
+    },
+    [syncProgress],
+  );
+
+  const handleAutoPlayNext = useCallback(() => {
+    if (!nextEpisode) return;
+    void navigateToEpisode(nextEpisode.season, nextEpisode.episode);
+  }, [nextEpisode, navigateToEpisode]);
+
+  const dubbingOptions = useMemo((): PlayerMenuOption[] | undefined => {
+    if (!canLoadTranslators || lampaTranslators.length <= 1) return undefined;
+    return lampaTranslators.map((translator) => {
+      const label = translator.name?.trim() || `Озвучка ${translator.id}`;
+      return {
+        id: String(translator.id),
+        label,
+        selected: translator.id === translatorId,
+        onSelect: () => {
+          void switchLampaTranslator(translator);
+        },
+      };
+    });
+  }, [canLoadTranslators, lampaTranslators, translatorId, switchLampaTranslator]);
+
+  const qualityOptions = useMemo((): PlayerMenuOption[] | undefined => {
+    if (qualityOptionsList.length <= 1) return undefined;
+    const selected = lampaQuality || pickDefaultLampaQuality(qualityOptionsList);
+    return qualityOptionsList.map((label) => ({
+      id: label,
+      label,
+      selected: label === selected,
+      onSelect: () => switchWithResume(() => setLampaQuality(label)),
+    }));
+  }, [qualityOptionsList, lampaQuality, switchWithResume]);
+
+  const connectionOptions = useMemo((): PlayerMenuOption[] | undefined => {
+    if (
+      !activeLampaLink ||
+      !linkSupportsConnection(activeLampaLink, 'direct') ||
+      !linkSupportsConnection(activeLampaLink, 'proxy')
+    ) {
+      return undefined;
+    }
+    return (['direct', 'proxy'] as const).map((mode) => ({
+      id: mode,
+      label: lampaConnectionLabel(mode),
+      selected: mode === lampaConnection,
+      onSelect: () =>
+        switchWithResume(() => {
+          setLampaConnection(mode);
+          void saveDownloadPreferences({ directFirst: mode === 'direct' });
+        }),
+    }));
+  }, [activeLampaLink, lampaConnection, switchWithResume]);
+
+  const deliveryOptions = useMemo((): PlayerMenuOption[] | undefined => {
+    if (
+      !activeLampaLink ||
+      !linkSupportsDelivery(activeLampaLink, lampaConnection, 'stream') ||
+      !linkSupportsDelivery(activeLampaLink, lampaConnection, 'file')
+    ) {
+      return undefined;
+    }
+    return (['stream', 'file'] as const).map((mode) => ({
+      id: mode,
+      label: lampaDeliveryLabel(mode),
+      selected: mode === lampaDelivery,
+      onSelect: () =>
+        switchWithResume(() => {
+          setLampaDelivery(mode);
+          void saveDownloadPreferences({ preferStreamOverFile: mode === 'stream' });
+        }),
+    }));
+  }, [activeLampaLink, lampaConnection, lampaDelivery, switchWithResume]);
 
   if (authLoading) {
     return (
@@ -463,7 +595,7 @@ export default function WatchLampaScreen() {
     return <Redirect href="/login" />;
   }
 
-  if (!payload || !src) {
+  if (!payload || !streamSrc) {
     return (
       <View style={styles.loader}>
         <Text style={styles.errorTitle}>Нет источника видео</Text>
@@ -474,92 +606,26 @@ export default function WatchLampaScreen() {
     );
   }
 
-  const dubbingOptions =
-    canLoadTranslators && lampaTranslators.length > 1
-      ? lampaTranslators.map((translator) => {
-          const label = translator.name?.trim() || `Озвучка ${translator.id}`;
-          return {
-            id: String(translator.id),
-            label,
-            selected: translator.id === translatorId,
-            onSelect: () => {
-              void switchLampaTranslator(translator);
-            },
-          };
-        })
-      : undefined;
-
-  const qualityOptions =
-    qualityOptionsList.length > 1
-      ? qualityOptionsList.map((label) => ({
-          id: label,
-          label,
-          selected: label === (lampaQuality || pickDefaultLampaQuality(qualityOptionsList)),
-          onSelect: () => switchWithResume(() => setLampaQuality(label)),
-        }))
-      : undefined;
-
-  const connectionOptions =
-    activeLampaLink &&
-    linkSupportsConnection(activeLampaLink, 'direct') &&
-    linkSupportsConnection(activeLampaLink, 'proxy')
-      ? (['direct', 'proxy'] as const).map((mode) => ({
-          id: mode,
-          label: lampaConnectionLabel(mode),
-          selected: mode === lampaConnection,
-          onSelect: () =>
-            switchWithResume(() => {
-              setLampaConnection(mode);
-              void saveDownloadPreferences({ directFirst: mode === 'direct' });
-            }),
-        }))
-      : undefined;
-
-  const deliveryOptions =
-    activeLampaLink &&
-    linkSupportsDelivery(activeLampaLink, lampaConnection, 'stream') &&
-    linkSupportsDelivery(activeLampaLink, lampaConnection, 'file')
-      ? (['stream', 'file'] as const).map((mode) => ({
-          id: mode,
-          label: lampaDeliveryLabel(mode),
-          selected: mode === lampaDelivery,
-          onSelect: () =>
-            switchWithResume(() => {
-              setLampaDelivery(mode);
-              void saveDownloadPreferences({ preferStreamOverFile: mode === 'stream' });
-            }),
-        }))
-      : undefined;
-
   return (
     <View style={styles.root}>
       <VideoPlayer
-        src={src}
+        src={playerSrc}
         title={title}
         subtitle={subtitle}
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
         skipSegments={skipSegments}
         playbackCaptureRef={playbackCaptureRef}
-        onBack={() => {
-          void flushProgress().finally(() => router.back());
-        }}
+        playbackControlRef={playbackControlRef}
+        onBack={handleBack}
         dubbingOptions={dubbingOptions}
         qualityOptions={qualityOptions}
         connectionOptions={connectionOptions}
         deliveryOptions={deliveryOptions}
         episodeNav={episodeNav}
-        onAutoPlayNext={
-          nextEpisode
-            ? () => void navigateToEpisode(nextEpisode.season, nextEpisode.episode)
-            : undefined
-        }
+        onAutoPlayNext={nextEpisode ? handleAutoPlayNext : undefined}
         onPlaybackError={handlePlaybackError}
-        onProgress={(current, duration) => {
-          playbackTimeRef.current = current;
-          if (duration > 1) durationRef.current = duration;
-          syncProgress(current, duration);
-        }}
+        onProgress={handleProgress}
       />
       {switchingEpisode ? (
         <View style={styles.switchOverlay} pointerEvents="none">

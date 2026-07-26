@@ -17,6 +17,11 @@ const DEFAULT_SYNC_INTERVAL_MS = 5_000;
 /** Cap for duration-unknown heuristic — never mark completed from a guess. */
 const HEURISTIC_PROGRESS_CAP = 0.89;
 
+export type ProgressFlushOptions = {
+  /** When true, refetch continue-watching lists. Default false (episode switch / mid-watch). */
+  invalidate?: boolean;
+};
+
 function invalidateLampaProgress(): void {
   void queryClient.invalidateQueries({ queryKey: ['lampa-progress'] });
 }
@@ -67,7 +72,7 @@ export function useThrottledLampaProgress(
       coords &&
       !sameLampaCoords(pending, coords.seasonOrdinal, coords.episodeOrdinal, lampaId.trim())
     ) {
-      void writeLampaProgress(pending, true);
+      void writeLampaProgress(pending, false);
     }
     lastSyncRef.current = 0;
     pendingRef.current = null;
@@ -75,7 +80,7 @@ export function useThrottledLampaProgress(
     awaitingFreshRef.current = true;
   }, [lampaId, isSerial, season, episode]);
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (options?: ProgressFlushOptions) => {
     if (!enabledRef.current) return;
     const pending = pendingRef.current;
     if (!pending) {
@@ -83,7 +88,7 @@ export function useThrottledLampaProgress(
       return;
     }
     lastSyncRef.current = Date.now();
-    const write = writeLampaProgress(pending, true);
+    const write = writeLampaProgress(pending, Boolean(options?.invalidate));
     writingRef.current = write;
     try {
       await write;
@@ -164,7 +169,9 @@ export function useThrottledLampaProgress(
       if (shouldSyncInitial || shouldSyncCompleted || shouldSyncInterval) {
         lastSyncRef.current = now;
         if (completed) completedSentRef.current = true;
-        void putLampaProgress(payload).then(() => patchLampaProgressCache(payload));
+        // PUT only — skip RQ patch while watching (avoids watch-screen re-render
+        // / episode-nav rebuild every sync). Patch on flush / leave-watch.
+        void putLampaProgress(payload);
       }
     },
     [enabled, lampaId, isSerial, season, episode, intervalMs],

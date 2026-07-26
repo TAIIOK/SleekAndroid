@@ -17,6 +17,11 @@ const DEFAULT_SYNC_INTERVAL_MS = 5_000;
 /** Cap for duration-unknown heuristic — never mark completed from a guess. */
 const HEURISTIC_PROGRESS_CAP = 0.89;
 
+export type ProgressFlushOptions = {
+  /** When true, refetch continue-watching lists. Default false (episode switch / mid-watch). */
+  invalidate?: boolean;
+};
+
 function invalidateAnimeProgress(): void {
   void queryClient.invalidateQueries({ queryKey: ['anime-progress'] });
 }
@@ -47,7 +52,8 @@ export function useThrottledEpisodeProgress(
   useEffect(() => {
     const pending = pendingRef.current;
     if (pending && pending.episodeId !== episodeId) {
-      void writeAnimeProgress(pending, true);
+      // Episode switch: persist without refetch storms during next media load.
+      void writeAnimeProgress(pending, false);
     }
     lastSyncRef.current = 0;
     pendingRef.current = null;
@@ -55,7 +61,7 @@ export function useThrottledEpisodeProgress(
     awaitingFreshRef.current = true;
   }, [episodeId]);
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (options?: ProgressFlushOptions) => {
     if (!enabledRef.current) return;
     const pending = pendingRef.current;
     if (!pending) {
@@ -63,7 +69,7 @@ export function useThrottledEpisodeProgress(
       return;
     }
     lastSyncRef.current = Date.now();
-    const write = writeAnimeProgress(pending, true);
+    const write = writeAnimeProgress(pending, Boolean(options?.invalidate));
     writingRef.current = write;
     try {
       await write;
@@ -83,6 +89,7 @@ export function useThrottledEpisodeProgress(
   useEffect(() => {
     const onChange = (state: AppStateStatus) => {
       if (state === 'background' || state === 'inactive') {
+        // Leave-watch invalidation is on unmount / explicit back; background only persists.
         void flush();
       }
     };
@@ -135,8 +142,11 @@ export function useThrottledEpisodeProgress(
       if (shouldSyncInitial || shouldSyncCompleted || shouldSyncInterval) {
         lastSyncRef.current = now;
         if (completed) completedSentRef.current = true;
-        // Do not invalidate queries while watching — refetches compete with 4K I/O.
-        void putAnimeProgress(payload).then(() => patchAnimeProgressCache(payload));
+        // PUT only — do not patch RQ while watching. setQueryData on
+        // ['anime-progress', animeId] re-renders the watch screen and rebuilds
+        // up to 500 episode-nav items every sync interval. Cache patch + invalidate
+        // happen on flush / leave-watch instead.
+        void putAnimeProgress(payload);
       }
     },
     [enabled, animeId, episodeId, episodeOrdinal, intervalMs],

@@ -39,6 +39,11 @@ export interface PlayerEpisodeNav {
   onSelect?: (episodeId: number) => void;
 }
 
+/** Imperative controls for episode teardown (pause before clearing src). */
+export interface PlayerControlHandle {
+  pause: () => void;
+}
+
 export interface VideoPlayerProps {
   src: string;
   /** Optional HTTP headers for the media request (WatchHub / CDN). */
@@ -55,6 +60,10 @@ export interface VideoPlayerProps {
    */
   playbackCaptureRef?: {
     current: (() => { currentTime: number; duration: number }) | null;
+  };
+  /** Filled by the player so watch screens can pause before unloading src. */
+  playbackControlRef?: {
+    current: PlayerControlHandle | null;
   };
   onProgress?: (current: number, duration: number) => void;
   onEnded?: () => void;

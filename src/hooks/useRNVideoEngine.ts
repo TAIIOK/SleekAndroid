@@ -31,6 +31,14 @@ import {
 const REBUFFER_SPINNER_DELAY_MS = 400;
 const UI_TICK_MS = 1000;
 
+/** Stable identity — avoid re-applying Exo buffer settings every render. */
+const BUFFER_CONFIG = {
+  minBufferMs: 15000,
+  maxBufferMs: 50000,
+  bufferForPlaybackMs: 2500,
+  bufferForPlaybackAfterRebufferMs: 5000,
+};
+
 function fitToResizeMode(fit: VideoFitMode): 'contain' | 'cover' | 'stretch' {
   if (fit === 'cover') return 'cover';
   if (fit === 'fill') return 'stretch';
@@ -280,6 +288,15 @@ export function useRNVideoEngine({
       bufferSpinnerTimerRef.current = null;
     }
   }, [src, reloadKey]);
+
+  useEffect(() => {
+    return () => {
+      if (bufferSpinnerTimerRef.current) {
+        clearTimeout(bufferSpinnerTimerRef.current);
+        bufferSpinnerTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Resume props often arrive after onLoad — re-apply when intent changes.
   useEffect(() => {
@@ -618,11 +635,6 @@ export function useRNVideoEngine({
     enterPictureInPicture,
     getPlaybackCapture,
     /** High-bitrate friendly ExoPlayer buffers (seconds via ms). */
-    bufferConfig: {
-      minBufferMs: 15000,
-      maxBufferMs: 50000,
-      bufferForPlaybackMs: 2500,
-      bufferForPlaybackAfterRebufferMs: 5000,
-    },
+    bufferConfig: BUFFER_CONFIG,
   };
 }

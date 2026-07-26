@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -19,15 +19,18 @@ import Video, { ViewType } from 'react-native-video';
 
 import { PhoneGestureHud } from '@/components/player/phone/PhoneGestureHud';
 import { PhoneScrubBar } from '@/components/player/phone/PhoneScrubBar';
+import { PlayerPerfOverlay } from '@/components/player/PlayerPerfOverlay';
 import type { PlayerMenuOption, VideoPlayerProps } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
 import { usePhonePlayerGestures } from '@/hooks/usePhonePlayerGestures';
+import { usePlayerPerfRenderCounter } from '@/hooks/usePlayerPerfStats';
 import { useRNVideoEngine } from '@/hooks/useRNVideoEngine';
 import {
   launchExternalPlayer,
   listInstalledExternalPlayers,
   type ExternalPlayerTarget,
 } from '@/lib/externalPlayer';
+import { isPlayerPerfOverlayEnabled } from '@/lib/playerPerf';
 import {
   cyclePlaybackRate,
   cycleVideoFit,
@@ -72,8 +75,13 @@ export function PhoneVideoPlayer({
   connectionOptions,
   deliveryOptions,
   playbackCaptureRef,
+  playbackControlRef,
 }: VideoPlayerProps) {
   const insets = useSafeAreaInsets();
+  const perfEnabled = isPlayerPerfOverlayEnabled();
+  const { noteRender, renderCountRef } = usePlayerPerfRenderCounter(perfEnabled);
+  noteRender();
+
   const engine = useRNVideoEngine({
     src,
     headers,
@@ -93,6 +101,14 @@ export function PhoneVideoPlayer({
       playbackCaptureRef.current = null;
     };
   }, [engine.getPlaybackCapture, playbackCaptureRef]);
+
+  useEffect(() => {
+    if (!playbackControlRef) return;
+    playbackControlRef.current = { pause: engine.pause };
+    return () => {
+      playbackControlRef.current = null;
+    };
+  }, [engine.pause, playbackControlRef]);
 
   const [controlsVisible, setControlsVisible] = useState(true);
   const [sheet, setSheet] = useState<PhoneSheet>(null);
@@ -217,12 +233,24 @@ export function PhoneVideoPlayer({
     clearHideTimer();
   };
 
+  const lockToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (lockToastTimerRef.current) clearTimeout(lockToastTimerRef.current);
+    };
+  }, []);
+
   const toggleGestureLock = () => {
     const locked = !engine.prefs.gesturesLocked;
     engine.updatePrefs({ gesturesLocked: locked });
     if (locked) {
       setLockToast(true);
-      setTimeout(() => setLockToast(false), 1800);
+      if (lockToastTimerRef.current) clearTimeout(lockToastTimerRef.current);
+      lockToastTimerRef.current = setTimeout(() => {
+        setLockToast(false);
+        lockToastTimerRef.current = null;
+      }, 1800);
     }
     showControls();
   };
@@ -326,6 +354,26 @@ export function PhoneVideoPlayer({
   const selectedQuality = qualityOptions?.find((o) => o.selected)?.label;
   const selectedConnection = connectionOptions?.find((o) => o.selected)?.label;
   const selectedDelivery = deliveryOptions?.find((o) => o.selected)?.label;
+
+  const perfLines = useMemo(() => {
+    if (!perfEnabled) return [];
+    const srcShort = src ? `${src.slice(0, 28)}…` : '(no src)';
+    return [
+      engine.isLoading ? 'buf: yes' : 'buf: no',
+      engine.playing ? 'play' : 'pause',
+      `t ${engine.currentTime.toFixed(0)}/${engine.duration.toFixed(0)}s`,
+      `nav ${episodeNav?.items.length ?? 0}`,
+      srcShort,
+    ];
+  }, [
+    perfEnabled,
+    engine.isLoading,
+    engine.playing,
+    engine.currentTime,
+    engine.duration,
+    episodeNav?.items.length,
+    src,
+  ]);
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -771,6 +819,14 @@ export function PhoneVideoPlayer({
           </Pressable>
         </Pressable>
       </Modal>
+
+      {perfEnabled ? (
+        <PlayerPerfOverlay
+          enabled={perfEnabled}
+          renderCountRef={renderCountRef}
+          lines={[...perfLines, `safeT ${Math.round(insets.top)}`]}
+        />
+      ) : null}
     </GestureHandlerRootView>
   );
 }

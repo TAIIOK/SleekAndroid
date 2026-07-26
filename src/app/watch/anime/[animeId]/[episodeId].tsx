@@ -6,8 +6,12 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { fetchAnimeDetail, fetchAnimeEpisodes, fetchAnimeSkip } from '@/api/catalog';
 import { fetchAnimeProgress } from '@/api/progress';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
+import type { PlayerControlHandle, PlayerEpisodeNav } from '@/components/player/types';
 import { colors, spacing } from '@/constants/aniverse';
-import { useThrottledEpisodeProgress } from '@/hooks/useThrottledEpisodeProgress';
+import {
+  useThrottledEpisodeProgress,
+  type ProgressFlushOptions,
+} from '@/hooks/useThrottledEpisodeProgress';
 import { useWatchEpisodeNavigation } from '@/hooks/useWatchEpisodeNavigation';
 import { saveAnimeLastDubbing, loadAnimeLastDubbing } from '@/lib/animeLastDubbing';
 import {
@@ -18,7 +22,7 @@ import {
   pickPlaybackUrl,
   type PlaybackQuality,
 } from '@/lib/animePlaybackOptions';
-import { episodeNumber } from '@/lib/animeDetail';
+import { episodeNumber, isRedundantEpisodeTitle } from '@/lib/animeDetail';
 import {
   buildSkipSegments,
   parseSkipInterval,
@@ -51,9 +55,10 @@ export default function WatchAnimeScreen() {
   });
 
   const { data: episodesData, isLoading, isError } = useQuery({
-    queryKey: ['watch', numericAnimeId, numericEpisodeId],
+    queryKey: ['watch-episodes', numericAnimeId],
     queryFn: () => fetchAnimeEpisodes(numericAnimeId, 1, 100),
     enabled: Number.isFinite(numericAnimeId),
+    staleTime: 60_000,
   });
 
   const { data: progressRows = [] } = useQuery({
@@ -74,7 +79,7 @@ export default function WatchAnimeScreen() {
     }
     return map;
   }, [progressRows]);
-  const episodeNav = useWatchEpisodeNavigation(
+  const episodeNavData = useWatchEpisodeNavigation(
     numericAnimeId,
     numericEpisodeId,
     progressByEpisodeId,
@@ -87,11 +92,14 @@ export default function WatchAnimeScreen() {
   const [storedDubbing, setStoredDubbing] = useState<string | null | undefined>(undefined);
   const [selectedQuality, setSelectedQuality] = useState<PlaybackQuality>('720p');
   const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
+  /** Unload native Video before applying the next episode URL. */
+  const [unloadPlayer, setUnloadPlayer] = useState(false);
   const playbackTimeRef = useRef(0);
   const durationRef = useRef(0);
   const playbackCaptureRef = useRef<(() => { currentTime: number; duration: number }) | null>(
     null,
   );
+  const playbackControlRef = useRef<PlayerControlHandle | null>(null);
   /** Preserve position across dubbing/quality URL switches. */
   const [resumeOverrideSec, setResumeOverrideSec] = useState<number | undefined>();
 
@@ -100,10 +108,12 @@ export default function WatchAnimeScreen() {
     [videos, selectedDubbing],
   );
 
-  const src = useMemo(() => {
+  const streamSrc = useMemo(() => {
     if (!selectedDubbing) return undefined;
     return pickPlaybackUrl(videos, selectedDubbing, selectedQuality);
   }, [videos, selectedDubbing, selectedQuality]);
+
+  const playerSrc = unloadPlayer ? '' : (streamSrc ?? '');
 
   const title = titleParam || detail?.title || 'Воспроизведение';
   const subtitle = useMemo(() => {
@@ -141,6 +151,7 @@ export default function WatchAnimeScreen() {
   useEffect(() => {
     playbackTimeRef.current = 0;
     setResumeOverrideSec(undefined);
+    setUnloadPlayer(false);
   }, [numericEpisodeId]);
 
   useEffect(() => {
@@ -219,45 +230,150 @@ export default function WatchAnimeScreen() {
     episodeOrdinal,
   );
 
-  const flushProgress = useCallback(async () => {
-    const snap = playbackCaptureRef.current?.() ?? {
-      currentTime: playbackTimeRef.current,
-      duration: durationRef.current,
-    };
-    if (snap.currentTime > 0) {
-      syncProgress(snap.currentTime, snap.duration);
-    }
-    await flushPendingProgress();
-  }, [syncProgress, flushPendingProgress]);
+  const flushProgress = useCallback(
+    async (options?: ProgressFlushOptions) => {
+      const snap = playbackCaptureRef.current?.() ?? {
+        currentTime: playbackTimeRef.current,
+        duration: durationRef.current,
+      };
+      if (snap.currentTime > 0) {
+        syncProgress(snap.currentTime, snap.duration);
+      }
+      await flushPendingProgress(options);
+    },
+    [syncProgress, flushPendingProgress],
+  );
 
-  const switchWithResume = (apply: () => void) => {
-    const snap = playbackCaptureRef.current?.() ?? {
-      currentTime: playbackTimeRef.current,
-      duration: durationRef.current,
-    };
-    if (snap.currentTime > 0) {
-      setResumeOverrideSec(snap.currentTime);
-      syncProgress(snap.currentTime, snap.duration);
-    }
-    apply();
-  };
+  const switchWithResume = useCallback(
+    (apply: () => void) => {
+      const snap = playbackCaptureRef.current?.() ?? {
+        currentTime: playbackTimeRef.current,
+        duration: durationRef.current,
+      };
+      if (snap.currentTime > 0) {
+        setResumeOverrideSec(snap.currentTime);
+        syncProgress(snap.currentTime, snap.duration);
+      }
+      apply();
+    },
+    [syncProgress],
+  );
+
+  const teardownPlayer = useCallback(() => {
+    playbackControlRef.current?.pause();
+    setUnloadPlayer(true);
+  }, []);
 
   const navigateToEpisode = useCallback(
     (targetEpisodeId: number) => {
-      void flushProgress().finally(() => {
-        router.replace({
-          pathname: '/watch/anime/[animeId]/[episodeId]',
-          params: {
-            animeId: String(numericAnimeId),
-            episodeId: String(targetEpisodeId),
-            title,
-            preferredDubbing: selectedDubbing,
-          },
-        });
+      teardownPlayer();
+      // Navigate immediately — do not block on progress flush (hang = stuck unloaded player).
+      void flushProgress();
+      router.replace({
+        pathname: '/watch/anime/[animeId]/[episodeId]',
+        params: {
+          animeId: String(numericAnimeId),
+          episodeId: String(targetEpisodeId),
+          title,
+          preferredDubbing: selectedDubbing,
+        },
       });
     },
-    [router, numericAnimeId, title, selectedDubbing, flushProgress],
+    [router, numericAnimeId, title, selectedDubbing, flushProgress, teardownPlayer],
   );
+
+  const handleBack = useCallback(() => {
+    void flushProgress({ invalidate: true }).finally(() => router.back());
+  }, [flushProgress, router]);
+
+  const handleProgress = useCallback(
+    (current: number, duration: number) => {
+      playbackTimeRef.current = current;
+      if (duration > 1) durationRef.current = duration;
+      syncProgress(current, duration);
+    },
+    [syncProgress],
+  );
+
+  // Prefer dedicated nav query; fall back to the already-loaded watch page so the
+  // player never loses prev/next / episodes when nav fetch is empty or truncated.
+  const playerEpisodeNav = useMemo((): PlayerEpisodeNav | undefined => {
+    const fromNav = episodeNavData.items;
+    const currentInNav = fromNav.some((item) => Number(item.id) === numericEpisodeId);
+    const fallbackEpisodes = episodesData?.episodes ?? [];
+    const useFallback = fromNav.length < 2 || !currentInNav;
+
+    const sourceEpisodes = useFallback ? fallbackEpisodes : null;
+    const items = sourceEpisodes
+      ? sourceEpisodes.map((ep) => {
+          const num = episodeNumber(ep);
+          const rawTitle = ep.title?.trim();
+          const epTitle =
+            rawTitle && !isRedundantEpisodeTitle(rawTitle, num) ? rawTitle : undefined;
+          return {
+            id: ep.id,
+            number: num,
+            label: epTitle ? `Эп. ${num} · ${epTitle}` : `Эпизод ${num}`,
+            title: epTitle ?? `Эпизод ${num}`,
+            durationSec: typeof ep.duration === 'number' && ep.duration > 0 ? ep.duration : undefined,
+            progress: progressByEpisodeId[ep.id],
+          };
+        })
+      : fromNav;
+
+    if (items.length < 2) return undefined;
+
+    const currentIndex = items.findIndex((item) => Number(item.id) === numericEpisodeId);
+    const previous = currentIndex > 0 ? items[currentIndex - 1] : undefined;
+    const next =
+      currentIndex >= 0 && currentIndex < items.length - 1 ? items[currentIndex + 1] : undefined;
+
+    return {
+      items,
+      currentEpisodeId: numericEpisodeId,
+      hasPrevious: Boolean(previous),
+      hasNext: Boolean(next),
+      onPrevious: previous ? () => navigateToEpisode(previous.id) : undefined,
+      onNext: next ? () => navigateToEpisode(next.id) : undefined,
+      onSelect: (id) => {
+        if (id !== numericEpisodeId) navigateToEpisode(id);
+      },
+    };
+  }, [
+    episodeNavData.items,
+    episodesData?.episodes,
+    numericEpisodeId,
+    navigateToEpisode,
+    progressByEpisodeId,
+  ]);
+
+  const handleAutoPlayNext = useCallback(() => {
+    playerEpisodeNav?.onNext?.();
+  }, [playerEpisodeNav]);
+
+  const dubbingOptions = useMemo(() => {
+    if (dubbingOptionsList.length <= 1) return undefined;
+    return dubbingOptionsList.map((label) => ({
+      id: label,
+      label,
+      selected: label === selectedDubbing,
+      onSelect: () =>
+        switchWithResume(() => {
+          setSelectedDubbing(label);
+          void saveAnimeLastDubbing(numericAnimeId, label);
+        }),
+    }));
+  }, [dubbingOptionsList, selectedDubbing, switchWithResume, numericAnimeId]);
+
+  const qualityOptions = useMemo(() => {
+    if (qualityOptionsList.length <= 1) return undefined;
+    return qualityOptionsList.map((label) => ({
+      id: label,
+      label,
+      selected: label === selectedQuality,
+      onSelect: () => switchWithResume(() => setSelectedQuality(label)),
+    }));
+  }, [qualityOptionsList, selectedQuality, switchWithResume]);
 
   if (authLoading) {
     return (
@@ -311,7 +427,7 @@ export default function WatchAnimeScreen() {
     );
   }
 
-  if (!src) {
+  if (!streamSrc) {
     return (
       <View style={styles.loader}>
         <Text style={styles.errorTitle}>Нет источника видео</Text>
@@ -323,66 +439,23 @@ export default function WatchAnimeScreen() {
     );
   }
 
-  const dubbingOptions =
-    dubbingOptionsList.length > 1
-      ? dubbingOptionsList.map((label) => ({
-          id: label,
-          label,
-          selected: label === selectedDubbing,
-          onSelect: () =>
-            switchWithResume(() => {
-              setSelectedDubbing(label);
-              void saveAnimeLastDubbing(numericAnimeId, label);
-            }),
-        }))
-      : undefined;
-
-  const qualityOptions =
-    qualityOptionsList.length > 1
-      ? qualityOptionsList.map((label) => ({
-          id: label,
-          label,
-          selected: label === selectedQuality,
-          onSelect: () => switchWithResume(() => setSelectedQuality(label)),
-        }))
-      : undefined;
-
   return (
     <View style={styles.playerRoot}>
       <VideoPlayer
-        src={src}
+        src={playerSrc}
         title={title}
         subtitle={subtitle}
         startTime={resumeTime}
         startProgressFraction={resumeFraction}
         skipSegments={skipSegments}
         playbackCaptureRef={playbackCaptureRef}
-        onBack={() => {
-          void flushProgress().finally(() => router.back());
-        }}
+        playbackControlRef={playbackControlRef}
+        onBack={handleBack}
         dubbingOptions={dubbingOptions}
         qualityOptions={qualityOptions}
-        episodeNav={{
-          items: episodeNav.items,
-          currentEpisodeId: numericEpisodeId,
-          hasPrevious: episodeNav.hasPrevious,
-          hasNext: episodeNav.hasNext,
-          onPrevious: episodeNav.previous
-            ? () => navigateToEpisode(episodeNav.previous!.id)
-            : undefined,
-          onNext: episodeNav.next ? () => navigateToEpisode(episodeNav.next!.id) : undefined,
-          onSelect: (id) => {
-            if (id !== numericEpisodeId) navigateToEpisode(id);
-          },
-        }}
-        onAutoPlayNext={
-          episodeNav.next ? () => navigateToEpisode(episodeNav.next!.id) : undefined
-        }
-        onProgress={(current, duration) => {
-          playbackTimeRef.current = current;
-          if (duration > 1) durationRef.current = duration;
-          syncProgress(current, duration);
-        }}
+        episodeNav={playerEpisodeNav}
+        onAutoPlayNext={playerEpisodeNav?.hasNext ? handleAutoPlayNext : undefined}
+        onProgress={handleProgress}
       />
     </View>
   );

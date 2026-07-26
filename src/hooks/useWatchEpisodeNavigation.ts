@@ -24,13 +24,24 @@ export function useWatchEpisodeNavigation(
     staleTime: 120_000,
   });
 
-  const totalEpisodes = detail?.episodesTotal ?? NAV_LIMIT;
-  const fetchLimit = Math.min(Math.max(totalEpisodes, 1), NAV_LIMIT);
+  const totalEpisodes = detail?.episodesTotal;
+  // Never clamp to 1 when API reports 0/missing — that hides prev/next and the
+  // episodes overlay (hasEpisodes requires items.length > 1).
+  const fetchLimit = Math.min(
+    Math.max(
+      typeof totalEpisodes === 'number' && Number.isFinite(totalEpisodes) && totalEpisodes > 1
+        ? totalEpisodes
+        : NAV_LIMIT,
+      100,
+    ),
+    NAV_LIMIT,
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: ['watch-nav-episodes', animeId, fetchLimit],
     queryFn: () => fetchAnimeEpisodes(animeId, 1, fetchLimit),
     staleTime: 120_000,
+    enabled: Number.isFinite(animeId) && animeId > 0,
   });
 
   const episodes = data?.episodes ?? [];
@@ -55,7 +66,9 @@ export function useWatchEpisodeNavigation(
     });
   }, [episodes, progressByEpisodeId]);
 
-  const currentIndex = items.findIndex((item) => item.id === currentEpisodeId);
+  const currentIndex = items.findIndex(
+    (item) => Number(item.id) === Number(currentEpisodeId),
+  );
   const previous = currentIndex > 0 ? items[currentIndex - 1] : undefined;
   const next =
     currentIndex >= 0 && currentIndex < items.length - 1 ? items[currentIndex + 1] : undefined;

@@ -18,6 +18,7 @@
 | [TV Home Top Navigation](.cursor/specs/catalog/tv_home_top_nav.md) | catalog | Implemented |
 | [Video Player](.cursor/specs/player/video_player.md) | player | Implemented |
 | [Episode Picker + Lampa Dubbing](.cursor/specs/player/episode_picker_and_lampa_dubbing.md) | player | Implemented |
+| [Episode Switch Performance](.cursor/specs/player/episode_switch_perf.md) | player | Implemented |
 | [Episode Progress Resume](.cursor/specs/playback/episode_progress_resume.md) | playback | Implemented |
 | [TV Density](.cursor/specs/shell/tv_density.md) | shell | Implemented |
 | [TV Focus Navigation](.cursor/specs/shell/tv_focus_navigation.md) | shell | Implemented |
