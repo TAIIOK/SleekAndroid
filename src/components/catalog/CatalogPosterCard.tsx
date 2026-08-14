@@ -31,6 +31,8 @@ export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
       railStart,
       contentEntry,
       pinVerticalFocus,
+      nextFocusUp,
+      nextFocusDown,
     },
     ref,
   ) {
@@ -50,6 +52,8 @@ export const CatalogPosterCard = forwardRef<View, CatalogPosterCardProps>(
         railStart={railStart}
         contentEntry={contentEntry}
         pinVerticalFocus={pinVerticalFocus}
+        nextFocusUp={nextFocusUp}
+        nextFocusDown={nextFocusDown}
       />
     );
   },

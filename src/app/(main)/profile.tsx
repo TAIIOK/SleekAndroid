@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Image,
   ScrollView,
@@ -11,6 +11,7 @@ import {
 
 import { fetchAchievements, fetchFullProfile, fetchLeaderboard, fetchUserStats } from '@/api/user';
 import { ProfileAchievements } from '@/components/profile/ProfileAchievements';
+import { ProfileEditSheet } from '@/components/profile/ProfileEditSheet';
 import { ProfileLeaderboard } from '@/components/profile/ProfileLeaderboard';
 import { ProfileQuickLinks } from '@/components/profile/ProfileQuickLinks';
 import { ProfileSettings } from '@/components/profile/ProfileSettings';
@@ -33,9 +34,11 @@ function isPremiumSubscriber(
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const { user, logout, refreshUser } = useAuth();
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>('week');
   const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>('watch');
   const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
@@ -104,9 +107,14 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
+          <TvFocusable onPress={() => setEditOpen(true)} style={styles.editBtn}>
+            <Text style={styles.editLabel}>Редактировать</Text>
+          </TvFocusable>
         </View>
 
         <ProfileStatsGrid stats={stats} loading={statsLoading} />
+
+        <ProfileQuickLinks />
 
         {!isTvUi() ? (
           <>
@@ -119,7 +127,6 @@ export default function ProfileScreen() {
               onTypeChange={setLeaderboardType}
             />
             <ProfileAchievements data={achievements} loading={achievementsLoading} />
-            <ProfileQuickLinks />
           </>
         ) : null}
 
@@ -135,6 +142,18 @@ export default function ProfileScreen() {
 
         <ProfileSettings onLogout={() => setConfirmLogout(true)} />
       </ScrollView>
+
+      <ProfileEditSheet
+        visible={editOpen}
+        nickname={nickname}
+        email={email}
+        avatarUrl={avatarUrl}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => {
+          void queryClient.invalidateQueries({ queryKey: ['profile-full'] });
+          void refreshUser();
+        }}
+      />
 
       <LogoutConfirm
         visible={confirmLogout}
@@ -207,4 +226,13 @@ const styles = StyleSheet.create({
     fontSize: isTvUi() ? 20 : 16,
     fontWeight: '600',
   },
+  editBtn: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(79,70,229,0.3)',
+  },
+  editLabel: { color: colors.text, fontWeight: '700' },
 });

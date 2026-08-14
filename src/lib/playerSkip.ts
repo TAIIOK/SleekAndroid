@@ -42,6 +42,9 @@ export interface PlayerSkipSegment {
   end: number;
 }
 
+/** Stable empty list — default `skipSegments = []` is a new array every render. */
+export const EMPTY_SKIP_SEGMENTS: PlayerSkipSegment[] = [];
+
 /** Runtime episode fields that may arrive from catalog but are not on AnimeEpisode. */
 type EpisodeSkipFields = AnimeEpisode & {
   openingStart?: number;
@@ -101,7 +104,7 @@ export function parseSkipResponse(
 }
 
 export function skipSegmentsFromEpisode(episode?: AnimeEpisode | null): PlayerSkipSegment[] {
-  if (!episode) return [];
+  if (!episode) return EMPTY_SKIP_SEGMENTS;
   const ep = episode as EpisodeSkipFields;
 
   const opening =
@@ -118,7 +121,7 @@ export function skipSegmentsFromEpisode(episode?: AnimeEpisode | null): PlayerSk
 }
 
 export function skipSegmentsFromVideos(videos: AnimeVideo[] | undefined): PlayerSkipSegment[] {
-  if (!videos?.length) return [];
+  if (!videos?.length) return EMPTY_SKIP_SEGMENTS;
 
   let opening: { start: number; end: number } | undefined;
   let ending: { start: number; end: number } | undefined;
@@ -167,6 +170,23 @@ export function buildSkipSegments(
   return segments;
 }
 
+export function sameSkipSegments(
+  a: PlayerSkipSegment[],
+  b: PlayerSkipSegment[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((segment, index) => {
+    const other = b[index];
+    return (
+      segment.id === other.id &&
+      segment.type === other.type &&
+      segment.start === other.start &&
+      segment.end === other.end
+    );
+  });
+}
+
 const LAMPA_SKIP_TITLES: Record<'intro' | 'credits', string> = {
   intro: 'Пропустить интро',
   credits: 'Пропустить титры',
@@ -175,7 +195,7 @@ const LAMPA_SKIP_TITLES: Record<'intro' | 'credits', string> = {
 export function buildLampaSkipSegments(
   apiSegments: LampaSkipSegment[] | null | undefined,
 ): PlayerSkipSegment[] {
-  if (!apiSegments?.length) return [];
+  if (!apiSegments?.length) return EMPTY_SKIP_SEGMENTS;
 
   const segments: PlayerSkipSegment[] = [];
   const seen = new Set<'intro' | 'credits'>();

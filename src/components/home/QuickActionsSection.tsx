@@ -6,7 +6,10 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { setActivePartyRoomId } from '@/lib/activePartyRoom';
+import { partyRoomHref } from '@/lib/partyRoomRoute';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { tvNextFocusLeft } from '@/lib/tvRailFocus';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -17,11 +20,18 @@ export interface QuickActionCounts {
   history: number;
 }
 
+export interface QuickActionActiveParty {
+  id: string;
+  title: string;
+}
+
 interface QuickActionsSectionProps {
   /** When omitted (TV), cards stay enabled and use static subtitles — no count fetches. */
   counts?: QuickActionCounts;
   /** First card is the top content entry when continue-watching is empty. */
   contentEntry?: boolean;
+  /** Active party room — shown as a leading quick-return card on phone. */
+  activeParty?: QuickActionActiveParty;
 }
 
 const actions = [
@@ -70,7 +80,11 @@ function itemsLabel(n: number): string {
   return `${n} элементов`;
 }
 
-export function QuickActionsSection({ counts, contentEntry = false }: QuickActionsSectionProps) {
+export function QuickActionsSection({
+  counts,
+  contentEntry = false,
+  activeParty,
+}: QuickActionsSectionProps) {
   const actionByKey = Object.fromEntries(actions.map((action) => [action.key, action])) as Record<
     (typeof actions)[number]['key'],
     (typeof actions)[number]
@@ -115,6 +129,11 @@ export function QuickActionsSection({ counts, contentEntry = false }: QuickActio
           style={Platform.OS === 'web' ? undefined : styles.grid}
           className={Platform.OS === 'web' ? 'quick-actions-grid' : undefined}
         >
+          {activeParty ? (
+            <View style={styles.column}>
+              <PartyQuickActionCard party={activeParty} />
+            </View>
+          ) : null}
           {columns.map((column) => (
             <View key={column.join('-')} style={styles.column}>
               {column.map((key) => (
@@ -129,6 +148,57 @@ export function QuickActionsSection({ counts, contentEntry = false }: QuickActio
         </View>
       </ScrollView>
     </View>
+  );
+}
+
+function PartyQuickActionCard({ party }: { party: QuickActionActiveParty }) {
+  const router = useRouter();
+  const [focused, setFocused] = useState(false);
+
+  const openParty = () => {
+    void setActivePartyRoomId(party.id).then(() => {
+      router.push(partyRoomHref(party.id));
+    });
+  };
+
+  const inner = (
+    <>
+      <View style={styles.cardHeader}>
+        <View style={[styles.iconWrap, focused && styles.iconWrapFocused]}>
+          <Ionicons name="people" size={14} color={colors.brand} />
+        </View>
+        <Text style={[styles.cardTitle, focused && styles.cardTitleFocused]}>Комната</Text>
+      </View>
+      <Text style={[styles.cardSubtitle, focused && styles.cardSubtitleFocused]} numberOfLines={2}>
+        {party.title}
+      </Text>
+    </>
+  );
+
+  if (Platform.OS === 'web') {
+    return (
+      <Pressable onPress={openParty} className="quick-action-card">
+        {inner}
+      </Pressable>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={openParty}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={[styles.cardPressable, focused && styles.cardFocused]}
+    >
+      <LinearGradient
+        colors={['#1b1b24', '#1f1f28']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.card, focused && styles.cardInnerFocused]}
+      >
+        {inner}
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -154,7 +224,10 @@ function QuickActionCard({
     alwaysEnabled || action.key === 'history' || action.key === 'lists' || (count ?? 0) > 0;
   const exitLeft = isTvUi() && railStart;
   const exitUp = isTvUi() && contentEntry;
-  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
+  const pinnedLeft = tvNextFocusLeft({
+    railStart: exitLeft,
+    exitTag: shellFocus?.sidebarNativeTag,
+  });
 
   const inner = (
     <>
@@ -205,7 +278,7 @@ function QuickActionCard({
         focused && styles.cardFocused,
       ]}
       {...(contentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
-      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
+      {...(pinnedLeft != null ? { nextFocusLeft: pinnedLeft } : {})}
     >
       <LinearGradient
         colors={['#1b1b24', '#1f1f28']}

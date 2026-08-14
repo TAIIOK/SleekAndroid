@@ -70,6 +70,106 @@ export function pickFromPosterImages(images: AnimePosterImage[]): string | undef
   return undefined;
 }
 
+const HERO_BACKDROP_TYPES = ['background', 'banner', 'fanart', 'landscape'] as const;
+
+export function isHeroBackdropImageType(type?: string): boolean {
+  const normalized = (type ?? '').trim().toLowerCase();
+  return (HERO_BACKDROP_TYPES as readonly string[]).includes(normalized);
+}
+
+function isUsableHeroPath(value: string | null | undefined): value is string {
+  const trimmed = value?.trim();
+  if (!trimmed) return false;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('//')
+  ) {
+    return isPlausibleImageURL(trimmed);
+  }
+  if (trimmed.startsWith('/')) return true;
+  return trimmed.includes('.') && trimmed.includes('/');
+}
+
+/** Hero/backdrop: prefer full-resolution source over compressed optimized. */
+export function pickHeroPosterImageUrl(img: AnimePosterImage): string | undefined {
+  const urls = [img.source, img.preview, img.optimized, img.thumbnail]
+    .filter(isUsableHeroPath)
+    .map((value) => normalizedAbsoluteURLString(value) ?? value.trim());
+  const nonAvif = urls.find((url) => !isAvif(url));
+  return nonAvif ?? urls[0];
+}
+
+export function uniqueImagePaths(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed) continue;
+    const normalized = normalizedAbsoluteURLString(trimmed) ?? trimmed;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function asPosterImages(poster: unknown): Array<string | AnimePosterImage> {
+  if (!poster) return [];
+  if (typeof poster === 'string') return [poster];
+  if (Array.isArray(poster)) {
+    return poster.filter(
+      (entry): entry is string | AnimePosterImage =>
+        typeof entry === 'string' || (!!entry && typeof entry === 'object'),
+    );
+  }
+  if (typeof poster === 'object') return [poster as AnimePosterImage];
+  return [];
+}
+
+/** Collect all poster image paths in hero quality order (source first per object). */
+export function collectPosterImageCandidates(poster: unknown): string[] {
+  const entries = asPosterImages(poster);
+  if (!entries.length) return [];
+  const paths: string[] = [];
+  for (const entry of entries) {
+    if (typeof entry === 'string') {
+      const trimmed = entry.trim();
+      if (trimmed) paths.push(trimmed);
+      continue;
+    }
+    const url = pickHeroPosterImageUrl(entry);
+    if (url) paths.push(url);
+    for (const fallback of [entry.optimized, entry.thumbnail, entry.preview, entry.source]) {
+      if (isUsableHeroPath(fallback)) {
+        paths.push(normalizedAbsoluteURLString(fallback) ?? fallback.trim());
+      }
+    }
+  }
+  return uniqueImagePaths(paths);
+}
+
+/** Landscape hero assets: Image(type=background|banner|fanart|landscape). */
+export function collectBackdropImageCandidates(poster: unknown): string[] {
+  const images = asPosterImages(poster);
+  if (!images.length) return [];
+  const byType = new Map<string, string[]>();
+  for (const entry of images) {
+    if (typeof entry === 'string' || !isHeroBackdropImageType(entry.type)) continue;
+    const url = pickHeroPosterImageUrl(entry);
+    if (!url) continue;
+    const key = (entry.type ?? '').trim().toLowerCase();
+    const list = byType.get(key) ?? [];
+    list.push(url);
+    byType.set(key, list);
+  }
+  const paths: string[] = [];
+  for (const type of HERO_BACKDROP_TYPES) {
+    paths.push(...(byType.get(type) ?? []));
+  }
+  return uniqueImagePaths(paths);
+}
+
 /** Normalize API poster field (string, object, or array) to a single path/url. */
 export function extractPosterPath(poster: unknown): string | undefined {
   if (!poster) return undefined;

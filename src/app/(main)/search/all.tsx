@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -12,7 +13,7 @@ import {
 import { lampaItemTitle, searchCatalog } from '@/api/catalog';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { TvFocusable } from '@/components/tv/TvFocusable';
-import { colors, spacing, tvFocus } from '@/constants/aniverse';
+import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { usePosterGridLayout } from '@/hooks/usePosterGridLayout';
 import { lampaDetailPath } from '@/lib/lampaDetail';
 import { animePoster, animeTitle } from '@/lib/poster';
@@ -40,7 +41,8 @@ function pickParam(value: string | string[] | undefined): string {
 export default function SearchAllScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { columns, gap, cardWidth, horizontalPadding } = usePosterGridLayout(spacing.lg);
+  const horizontalPadding = isTvUi() ? spacing.lg : layout.gutterMobile;
+  const { columns, gap, cardWidth } = usePosterGridLayout(horizontalPadding);
   const chrome = useMobileChromeScroll();
   const chromeScrollProps = useMobileChromeScrollProps(
     undefined,
@@ -150,7 +152,12 @@ export default function SearchAllScreen() {
           focusedStyle={styles.backBtnFocused}
           hasTVPreferredFocus={isTvUi()}
         >
-          <Text style={styles.back}>← Назад</Text>
+          <Ionicons
+            name="chevron-back"
+            size={isTvUi() ? 20 : 18}
+            color={colors.text}
+          />
+          <Text style={styles.back}>Назад</Text>
         </TvFocusable>
         <Text style={styles.title}>{q ? `${title} · «${q}»` : title}</Text>
       </View>
@@ -197,17 +204,23 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     alignSelf: 'flex-start',
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bgCard,
+    borderWidth: isTvUi() ? tvFocus.borderWidth : 1,
+    borderColor: colors.border,
   },
   backBtnFocused: {
     borderColor: tvFocus.borderColor,
     backgroundColor: tvFocus.fill,
   },
   back: {
-    color: colors.brand,
-    fontSize: isTvUi() ? 16 : 14,
+    color: colors.text,
+    fontSize: isTvUi() ? 15 : 14,
     fontWeight: '600',
   },
   title: {

@@ -6,14 +6,14 @@ import type {
   UserCollectionItem,
 } from '@/types/collection';
 
-function normalizeCollection(raw: unknown): UserCollection | null {
+export function normalizeCollection(raw: unknown): UserCollection | null {
   if (!raw || typeof raw !== 'object' || !('id' in raw)) return null;
   const id = (raw as UserCollection).id;
   if (typeof id !== 'number' || !Number.isFinite(id)) return null;
   return raw as UserCollection;
 }
 
-function normalizeCollectionDetail(raw: unknown): UserCollectionDetail {
+export function normalizeCollectionDetail(raw: unknown): UserCollectionDetail {
   const payload = unwrapData<UserCollectionDetail | UserCollection>(raw);
   if (payload && typeof payload === 'object' && 'collection' in payload) {
     const detail = payload as UserCollectionDetail;

@@ -12,11 +12,13 @@ import { resolveAnimePosterUrl } from '@/lib/config';
 import type { AnimeEpisode } from '@aniverse/types';
 
 const NAV_LIMIT = 500;
+const EMPTY_EPISODES: AnimeEpisode[] = [];
+const EMPTY_PROGRESS_BY_EPISODE: Record<number, number> = {};
 
 export function useWatchEpisodeNavigation(
   animeId: number,
   currentEpisodeId: number,
-  progressByEpisodeId: Record<number, number> = {},
+  progressByEpisodeId: Record<number, number> = EMPTY_PROGRESS_BY_EPISODE,
 ) {
   const { data: detail } = useQuery({
     queryKey: ['anime', animeId],
@@ -44,7 +46,7 @@ export function useWatchEpisodeNavigation(
     enabled: Number.isFinite(animeId) && animeId > 0,
   });
 
-  const episodes = data?.episodes ?? [];
+  const episodes = data?.episodes ?? EMPTY_EPISODES;
 
   const items = useMemo((): PlayerEpisodeNavItem[] => {
     return episodes.map((ep) => {

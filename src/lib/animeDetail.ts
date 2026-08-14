@@ -3,7 +3,12 @@ import { nonEmptyStreamUrl } from '@aniverse/types';
 import { normalizeDubbingName } from '@aniverse/playback';
 
 import type { AnimeDetail } from '@/api/catalog';
-import { extractPosterPath } from '@/lib/poster';
+import {
+  collectBackdropImageCandidates,
+  collectPosterImageCandidates,
+  extractPosterPath,
+  uniqueImagePaths,
+} from '@/lib/poster';
 
 export function localizedAnimeStatus(status?: string): string {
   if (!status) return '';
@@ -54,16 +59,19 @@ export function localizedAnimeType(type?: string): string | undefined {
   return type.trim().toUpperCase();
 }
 
-export function animeHeroImageCandidates(detail: AnimeDetail): string[] {
-  const candidates: string[] = [];
-  const push = (value: unknown) => {
-    const path = extractPosterPath(value);
-    if (path && !candidates.includes(path)) candidates.push(path);
-  };
-  push(detail.banner);
-  push(detail.screenshots);
-  push(detail.poster);
-  return candidates;
+/** Ordered hero candidates: backdrop → typed backgrounds → poster variants → screenshots. */
+export function animeHeroImageCandidates(
+  detail: AnimeDetail,
+  fallbackScreenshots?: Array<string | null | undefined>,
+): string[] {
+  return uniqueImagePaths([
+    detail.backdrop,
+    ...collectBackdropImageCandidates(detail.poster),
+    ...collectPosterImageCandidates(detail.poster),
+    ...collectPosterImageCandidates(detail.screenshots),
+    ...collectPosterImageCandidates(detail.banner),
+    ...(fallbackScreenshots ?? []),
+  ]);
 }
 
 export function episodeNumber(ep: AnimeEpisode): number {
@@ -181,42 +189,132 @@ export function isRecommendationRelation(relationType?: string): boolean {
   return n.includes('recommend') || n.includes('рекомен');
 }
 
+/** List cards on related/similar rails may carry year/kind beyond the shared catalog type. */
+export type AnimeRelatedItem = AnimeListItem & {
+  year?: number;
+  kind?: string;
+};
+
 export interface AnimeRelated {
-  id?: number;
+  id?: number | string;
   animeId?: number;
   relatedAnimeId?: number;
   relationType?: string;
   title?: string;
   poster?: unknown;
-  anime?: AnimeListItem;
-  relatedAnime?: AnimeListItem;
+  anime?: AnimeRelatedItem;
+  relatedAnime?: AnimeRelatedItem;
+}
+
+function asOptionalInt(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return Math.trunc(parsed);
+  }
+  return undefined;
+}
+
+function asAnimeListItem(value: unknown): AnimeRelatedItem | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const row = value as Record<string, unknown>;
+  const id = asOptionalInt(row.id);
+  if (!id) return undefined;
+  const year = asOptionalInt(row.year);
+  return {
+    ...(value as AnimeRelatedItem),
+    id,
+    year: year && year > 0 ? year : undefined,
+  };
+}
+
+export function normalizeAnimeRelated(raw: unknown): AnimeRelated {
+  if (!raw || typeof raw !== 'object') return {};
+  const row = raw as Record<string, unknown>;
+  const relationType = row.relationType ?? row.relation_type;
+  const id = asOptionalInt(row.id) ?? (typeof row.id === 'string' ? row.id : undefined);
+  return {
+    id,
+    animeId: asOptionalInt(row.animeId ?? row.anime_id),
+    relatedAnimeId: asOptionalInt(row.relatedAnimeId ?? row.related_anime_id),
+    relationType: typeof relationType === 'string' ? relationType : undefined,
+    title: typeof row.title === 'string' ? row.title : undefined,
+    poster: row.poster as AnimeRelated['poster'],
+    anime: asAnimeListItem(row.anime),
+    relatedAnime: asAnimeListItem(row.relatedAnime),
+  };
+}
+
+export function animeListCardSubtitle(item: AnimeRelatedItem): string | undefined {
+  if (item.year && item.year > 0) return String(item.year);
+  return item.kind;
+}
+
+export function sortAnimeItemsByYear(items: AnimeRelatedItem[]): AnimeRelatedItem[] {
+  return [...items].sort((a, b) => {
+    const yearA = a.year && a.year > 0 ? a.year : Number.POSITIVE_INFINITY;
+    const yearB = b.year && b.year > 0 ? b.year : Number.POSITIVE_INFINITY;
+    if (yearA !== yearB) return yearA - yearB;
+    return a.id - b.id;
+  });
+}
+
+export function excludeRelatedFromSimilar(
+  similar: AnimeRelatedItem[],
+  related: AnimeRelatedItem[],
+): AnimeRelatedItem[] {
+  const relatedIds = new Set(related.map((item) => item.id));
+  return similar.filter((item) => !relatedIds.has(item.id));
 }
 
 export function extractRelatedItems(
   related: AnimeRelated[],
   animeId: number,
   recommendations: boolean,
-): AnimeListItem[] {
+): AnimeRelatedItem[] {
   const seen = new Set<number>();
-  const result: AnimeListItem[] = [];
+  const result: AnimeRelatedItem[] = [];
 
-  const pushItem = (item: AnimeListItem | undefined) => {
+  const pushItem = (item: AnimeRelatedItem | undefined) => {
     if (!item?.id || item.id === animeId || seen.has(item.id)) return;
     seen.add(item.id);
     result.push(item);
   };
 
-  for (const relation of related) {
+  const relations = related.map(normalizeAnimeRelated);
+
+  for (const relation of relations) {
     const isRec = isRecommendationRelation(relation.relationType);
     if (recommendations !== isRec) continue;
-    let item: AnimeListItem | undefined;
+    let item: AnimeRelatedItem | undefined;
     if (relation.relatedAnimeId === animeId) item = relation.anime;
     else if (relation.animeId === animeId) item = relation.relatedAnime;
     else item = relation.relatedAnime ?? relation.anime;
-    if (!item?.id && relation.id != null) {
-      item = { id: Number(relation.id), title: relation.title, poster: relation.poster as string };
+    if (!item?.id && relation.id != null && relation.title) {
+      item = {
+        id: Number(relation.id),
+        title: relation.title,
+        poster: relation.poster as AnimeListItem['poster'],
+      };
     }
     pushItem(item);
+  }
+
+  if (!recommendations && result.length === 0) {
+    for (const relation of relations) {
+      if (isRecommendationRelation(relation.relationType)) continue;
+      const flatId = Number(relation.id ?? relation.relatedAnimeId ?? relation.animeId);
+      if (!flatId || flatId === animeId || seen.has(flatId)) continue;
+      pushItem({
+        id: flatId,
+        title: relation.title ?? relation.anime?.title ?? relation.relatedAnime?.title,
+        poster:
+          (relation.poster as AnimeListItem['poster']) ??
+          relation.anime?.poster ??
+          relation.relatedAnime?.poster,
+        year: relation.anime?.year ?? relation.relatedAnime?.year,
+      });
+    }
   }
 
   return result;

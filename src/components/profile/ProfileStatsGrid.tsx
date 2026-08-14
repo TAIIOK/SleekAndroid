@@ -24,16 +24,14 @@ export function ProfileStatsGrid({ stats, loading }: ProfileStatsGridProps) {
   }
 
   const watchSeconds = stats.totalWatchSeconds ?? stats.activity?.totalWatchSeconds ?? 0;
-  const readPages = stats.totalReadPages ?? stats.activity?.totalReadPages ?? 0;
+  // totalAchievements / achievements.total = unlocked count (API).
   const achievements = stats.totalAchievements ?? stats.achievements?.total ?? 0;
   const ratings = stats.totalRatings ?? stats.social?.totalRatings ?? 0;
   const reviews = stats.totalReviews ?? stats.social?.totalReviews ?? 0;
   const friends = stats.totalFriends ?? 0;
-  const streak = stats.history?.currentStreak ?? 0;
 
   const items = [
     { label: 'Просмотрено', value: formatWatchTime(watchSeconds) },
-    { label: 'Прочитано', value: formatNumber(readPages) },
     { label: 'Достижения', value: formatNumber(achievements) },
     { label: 'Оценки', value: formatNumber(ratings) },
     { label: 'Отзывы', value: formatNumber(reviews) },
@@ -51,9 +49,6 @@ export function ProfileStatsGrid({ stats, loading }: ProfileStatsGridProps) {
           </View>
         ))}
       </View>
-      {streak > 0 ? (
-        <Text style={styles.streak}>Серия: {formatNumber(streak)} дн.</Text>
-      ) : null}
     </View>
   );
 }
@@ -81,23 +76,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     gap: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   value: {
     color: colors.text,
     fontSize: isTvUi() ? 28 : 22,
     fontWeight: '700',
+    textAlign: 'center',
+    width: '100%',
   },
   label: {
     color: colors.textSecondary,
     fontSize: 13,
+    textAlign: 'center',
+    width: '100%',
   },
   hint: {
     color: colors.textSecondary,
     fontSize: 15,
-  },
-  streak: {
-    color: colors.brand,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

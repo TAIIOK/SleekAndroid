@@ -1,61 +1,97 @@
 import { useRouter } from 'expo-router';
-import {
-  StyleSheet,
-  View,
-} from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail } from '@/components/catalog/PosterRail';
-import { colors, layout, spacing } from '@/constants/aniverse';
-import { mapAnimeToRailItem } from '@/lib/poster';
-import type { AnimeListItem } from '@aniverse/types';
+import { layout, spacing } from '@/constants/aniverse';
+import {
+  animeListCardSubtitle,
+  type AnimeRelatedItem,
+} from '@/lib/animeDetail';
 import { isTvUi } from '@/lib/isTvUi';
+import { mapAnimeToRailItem } from '@/lib/poster';
 
-interface AnimeDetailSidebarProps {
-  similarItems: AnimeListItem[];
-  recommendationItems: AnimeListItem[];
+interface AnimeDetailRelatedProps {
+  relatedItems: AnimeRelatedItem[];
+  recommendationItems: AnimeRelatedItem[];
+  similarItems: AnimeRelatedItem[];
+  relatedLoading?: boolean;
   similarLoading?: boolean;
 }
 
+function toRailItems(items: AnimeRelatedItem[]) {
+  return items.map((item) => ({
+    ...mapAnimeToRailItem(item),
+    subtitle: animeListCardSubtitle(item),
+  }));
+}
+
 export function AnimeDetailSidebar({
-  similarItems,
+  relatedItems,
   recommendationItems,
+  similarItems,
+  relatedLoading,
   similarLoading,
-}: AnimeDetailSidebarProps) {
+}: AnimeDetailRelatedProps) {
   const router = useRouter();
 
-  if (!similarItems.length && !similarLoading && !recommendationItems.length) {
+  if (
+    !relatedItems.length &&
+    !relatedLoading &&
+    !recommendationItems.length &&
+    !similarItems.length &&
+    !similarLoading
+  ) {
     return null;
   }
 
   return (
-    <View style={styles.sidebar}>
-      {similarItems.length > 0 || similarLoading ? (
-        <PosterRail
-          title="Похожее"
-          items={similarItems.map(mapAnimeToRailItem)}
-          loading={similarLoading}
-          itemWidth={layout.posterWidthDetail}
-          flush
-          onItemPress={(item) => router.push(`/anime/${item.id}`)}
-        />
+    <View style={styles.rails}>
+      {relatedItems.length > 0 || relatedLoading ? (
+        <LazyCatalogRail>
+          <PosterRail
+            title="Связанные"
+            items={toRailItems(relatedItems)}
+            loading={relatedLoading}
+            itemWidth={layout.posterWidthDetail}
+            flush
+            onItemPress={(item) => router.push(`/anime/${item.id}`)}
+          />
+        </LazyCatalogRail>
       ) : null}
 
-      {recommendationItems.length > 0 ? (
-        <PosterRail
-          title="Рекомендации"
-          items={recommendationItems.map(mapAnimeToRailItem)}
-          itemWidth={layout.posterWidthDetail}
-          flush
-          onItemPress={(item) => router.push(`/anime/${item.id}`)}
-        />
+      {recommendationItems.length > 0 || relatedLoading ? (
+        <LazyCatalogRail>
+          <PosterRail
+            title="Рекомендации"
+            items={toRailItems(recommendationItems)}
+            loading={relatedLoading}
+            itemWidth={layout.posterWidthDetail}
+            flush
+            onItemPress={(item) => router.push(`/anime/${item.id}`)}
+          />
+        </LazyCatalogRail>
+      ) : null}
+
+      {similarItems.length > 0 || similarLoading ? (
+        <LazyCatalogRail>
+          <PosterRail
+            title="Похожее"
+            items={toRailItems(similarItems)}
+            loading={similarLoading}
+            itemWidth={layout.posterWidthDetail}
+            flush
+            onItemPress={(item) => router.push(`/anime/${item.id}`)}
+          />
+        </LazyCatalogRail>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  sidebar: {
+  rails: {
     alignSelf: 'stretch',
-    gap: isTvUi() ? spacing.md : spacing.md,
+    gap: isTvUi() ? spacing.md : spacing.sm,
   },
 });

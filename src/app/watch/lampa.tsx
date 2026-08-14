@@ -44,6 +44,10 @@ import {
   lampaEpisodeNavId,
   parseLampaEpisodeNavId,
 } from '@/lib/watchStore';
+import {
+  lampaWatchHistoryKey,
+  rememberWatchHistoryMeta,
+} from '@/lib/watchHistoryMeta';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   fetchTranslators,
@@ -259,6 +263,14 @@ export default function WatchLampaScreen() {
     if (!payload) return 'Воспроизведение';
     return payload.lampaTitle || 'Воспроизведение';
   }, [payload]);
+
+  useEffect(() => {
+    if (!lampaId) return;
+    rememberWatchHistoryMeta(lampaWatchHistoryKey(lampaId), {
+      title: title !== 'Воспроизведение' ? title : undefined,
+      kind: payload?.lampaKind,
+    });
+  }, [lampaId, payload?.lampaKind, title]);
 
   const subtitle = useMemo(() => {
     if (!payload) return undefined;

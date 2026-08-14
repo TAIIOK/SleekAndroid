@@ -1,15 +1,21 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { type View } from 'react-native';
 
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PaginatedContentRow } from '@/components/catalog/PaginatedContentRow';
-import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
+import { layout } from '@/constants/aniverse';
+import {
+  useTvRailFocusRestore,
+  type TvRailFocusBind,
+} from '@/hooks/useTvRailFocusRestore';
+import { useTvCatalogVerticalNeighbors } from '@/hooks/useTvCatalogVerticalNeighbors';
 import { uniqueById } from '@/lib/searchConfig';
 import {
   setCatalogActiveFocus,
   takePendingCatalogFocusRestore,
 } from '@/lib/tvCatalogScrollRestore';
+import { registerTvCatalogRail } from '@/lib/tvCatalogVerticalFocus';
 import { isTvUi } from '@/lib/isTvUi';
 
 export interface RailItem {
@@ -44,6 +50,8 @@ interface PosterRailProps {
   restorePath?: string;
   /** Stable rail id for restore (defaults to title). */
   restoreRailKey?: string;
+  /** First card is the vertical Up/Down target for this rail (lower = closer to the top). */
+  railFocusPriority?: number;
 }
 
 export function PosterRail({
@@ -62,10 +70,12 @@ export function PosterRail({
   contentEntry = false,
   restorePath,
   restoreRailKey,
+  railFocusPriority,
 }: PosterRailProps) {
   // API pages (and some feeds) can repeat the same TMDB/anime id — keys must stay unique.
   const uniqueItems = useMemo(() => uniqueById(items), [items]);
-  const { bindItem } = useTvRailFocusRestore(uniqueItems.length);
+  const { bindItem, subscribePin } = useTvRailFocusRestore(uniqueItems.length);
+  const railNeighbors = useTvCatalogVerticalNeighbors(restorePath, railFocusPriority);
   const railKey = restoreRailKey ?? title;
   const hostsRef = useRef(new Map<number, View | null>());
   const itemsLengthRef = useRef(uniqueItems.length);
@@ -131,43 +141,106 @@ export function PosterRail({
       onLoadMore={onLoadMore}
       onSeeAll={onSeeAll}
       flush={flush}
-      renderItem={(item, index) => {
-        const railFocus = bindItem(index);
-        return (
-          <CatalogPosterCard
-            ref={(node) => {
-              hostsRef.current.set(index, node);
-              railFocus.ref?.(node);
-            }}
-            title={item.title}
-            poster={item.poster}
-            animeId={item.animeId}
-            subtitle={item.subtitle}
-            rating={item.score}
-            onPress={() => onItemPress?.(item)}
-            onFocus={() => {
-              railFocus.onFocus?.();
-              if (restorePath) {
-                setCatalogActiveFocus(restorePath, railKey, index);
-              }
-              if (
-                hasNextPage &&
-                !isFetchingNextPage &&
-                onLoadMore &&
-                index >= items.length - 3
-              ) {
-                onLoadMore();
-              }
-            }}
-            onBlur={railFocus.onBlur}
-            variant="rail"
-            width={itemWidth}
-            railStart={index === 0}
-            contentEntry={contentEntry && index === 0}
-            pinVerticalFocus={railFocus.pinVerticalFocus}
-          />
-        );
+      itemWidth={itemWidth ?? layout.posterWidthRail}
+      renderItem={(item, index) => (
+        <RailPosterCard
+          item={item}
+          index={index}
+          bindItem={bindItem}
+          subscribePin={subscribePin}
+          hostsRef={hostsRef}
+          onItemPress={onItemPress}
+          restorePath={restorePath}
+          railKey={railKey}
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={onLoadMore}
+          itemsLength={items.length}
+          itemWidth={itemWidth}
+          contentEntry={contentEntry}
+          railFocusPriority={railFocusPriority}
+          nextFocusUp={railNeighbors.up}
+          nextFocusDown={railNeighbors.down}
+        />
+      )}
+    />
+  );
+}
+
+function RailPosterCard({
+  item,
+  index,
+  bindItem,
+  subscribePin,
+  hostsRef,
+  onItemPress,
+  restorePath,
+  railKey,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+  itemsLength,
+  itemWidth,
+  contentEntry,
+  railFocusPriority,
+  nextFocusUp,
+  nextFocusDown,
+}: {
+  item: RailItem;
+  index: number;
+  bindItem: (index: number) => TvRailFocusBind;
+  subscribePin: (index: number, listener: (pinned: boolean) => void) => () => void;
+  hostsRef: MutableRefObject<Map<number, View | null>>;
+  onItemPress?: (item: RailItem) => void;
+  restorePath?: string;
+  railKey: string;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
+  itemsLength: number;
+  itemWidth?: number;
+  contentEntry: boolean;
+  railFocusPriority?: number;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
+}) {
+  const railFocus = bindItem(index);
+  const [pinVerticalFocus, setPinVerticalFocus] = useState(false);
+
+  useEffect(() => subscribePin(index, setPinVerticalFocus), [index, subscribePin]);
+
+  return (
+    <CatalogPosterCard
+      ref={(node) => {
+        hostsRef.current.set(index, node);
+        railFocus.ref?.(node);
+        if (restorePath && railFocusPriority != null && index === 0) {
+          registerTvCatalogRail(restorePath, railFocusPriority, node);
+        }
       }}
+      title={item.title}
+      poster={item.poster}
+      animeId={item.animeId}
+      subtitle={item.subtitle}
+      rating={item.score}
+      onPress={() => onItemPress?.(item)}
+      onFocus={() => {
+        railFocus.onFocus?.();
+        if (restorePath) {
+          setCatalogActiveFocus(restorePath, railKey, index);
+        }
+        if (hasNextPage && !isFetchingNextPage && onLoadMore && index >= itemsLength - 3) {
+          onLoadMore();
+        }
+      }}
+      onBlur={railFocus.onBlur}
+      variant="rail"
+      width={itemWidth}
+      railStart={index === 0}
+      contentEntry={contentEntry && index === 0}
+      pinVerticalFocus={pinVerticalFocus}
+      nextFocusUp={nextFocusUp}
+      nextFocusDown={nextFocusDown}
     />
   );
 }

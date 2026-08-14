@@ -1,10 +1,10 @@
 import {
   isAnimeRecommendationShowcaseId,
   isLampaRecommendationEndpoint,
-  type CatalogShowcase,
-  type LampaSection,
-} from '@/api/catalog';
+} from '@aniverse/catalog';
+import type { CatalogShowcase, LampaSection } from '@/api/catalog';
 import {
+  EMPTY_HOME_CONFIG,
   dedupeAnimeRailsByPath,
   filterLampaSectionsForHomeKind,
   isHomeConfigConfigured,
@@ -149,16 +149,82 @@ function orderLampaSections(
     });
 }
 
-/** Type chips available from the user's enabled content types. */
+/** Type chips available from the user's enabled home sections. */
 export function resolveAvailableTvHomeTypeFilters(
   enabledTypes: string[],
+  config: CatalogHomeConfig = EMPTY_HOME_CONFIG,
 ): { id: TvHomeTypeFilter; label: string }[] {
+  const sections = resolveEnabledHomeSections({
+    ...config,
+    enabledContentTypes: enabledTypes,
+  });
   return TV_HOME_TYPE_FILTERS.filter((option) => {
-    if (option.id === 'all') {
-      return enabledTypes.includes('anime') || enabledTypes.includes('lampa');
-    }
-    if (option.id === 'anime') return enabledTypes.includes('anime');
-    return enabledTypes.includes('lampa');
+    if (option.id === 'all') return sections.length > 0;
+    if (option.id === 'anime') return sections.includes('anime');
+    if (option.id === 'movie') return sections.includes('movie');
+    return sections.includes('tv');
+  });
+}
+
+function collectAnimeSources(
+  options: Omit<ResolveTvHomeOptions, 'tab'>,
+  disambiguate: boolean,
+): TvHomeFeedSource[] {
+  const { config, animeShowcases } = options;
+  const sources: TvHomeFeedSource[] = [];
+  const allIds = animeShowcases.map((showcase) => showcase.id);
+  const enabledIds = resolveAnimeShowcaseIds(config, allIds).filter(
+    (id) => !isHomeExcludedAnimeRecommendationSection(id),
+  );
+  const orderedShowcases = orderAnimeShowcases(animeShowcases, enabledIds, config);
+  const customSections = resolveAnimeCustomSections(config);
+  const { primary, secondary } = dedupeAnimeRailsByPath(orderedShowcases, customSections);
+
+  for (const showcase of primary) {
+    const name = showcase.name || showcase.id;
+    sources.push({
+      key: `anime:${showcase.id}`,
+      title: disambiguate ? `${name} · ${kindLabel('anime')}` : name,
+      kind: 'anime',
+      animePath: showcase.path,
+    });
+  }
+
+  for (const section of secondary) {
+    const name = section.title || section.id;
+    sources.push({
+      key: `anime:custom:${section.id}`,
+      title: disambiguate ? `${name} · ${kindLabel('anime')}` : name,
+      kind: 'anime',
+      animePath: section.path,
+    });
+  }
+
+  return sources;
+}
+
+function collectLampaKindSources(
+  options: Omit<ResolveTvHomeOptions, 'tab'>,
+  kind: 'movie' | 'tv',
+  disambiguate: boolean,
+): TvHomeFeedSource[] {
+  const { config, lampaMovieSections, lampaTvSections, firstLampaKindId } = options;
+  const sections = kind === 'movie' ? lampaMovieSections : lampaTvSections;
+  const endpoints = resolveLampaSectionEndpoints(
+    config,
+    kind,
+    sections.map((section) => section.endpoint),
+  );
+  const ordered = orderLampaSections(sections, endpoints, config, kind);
+  const visible = filterLampaSectionsForHomeKind(ordered, kind, firstLampaKindId);
+  return visible.map((section) => {
+    const name = section.title || section.endpoint;
+    return {
+      key: `${kind}:${section.endpoint}`,
+      title: disambiguate ? `${name} · ${kindLabel(kind)}` : name,
+      kind,
+      lampaSection: section,
+    };
   });
 }
 
@@ -166,117 +232,38 @@ export function resolveAvailableTvHomeTypeFilters(
 export function listTvHomeCatalogSources(
   options: Omit<ResolveTvHomeOptions, 'tab'>,
 ): TvHomeFeedSource[] {
-  const {
-    filter,
-    config,
-    animeShowcases,
-    lampaMovieSections,
-    lampaTvSections,
-    enabledTypes,
-    firstLampaKindId,
-  } = options;
+  const { filter, config, enabledTypes } = options;
 
   const animeEnabled = enabledTypes.includes('anime');
   const lampaEnabled = enabledTypes.includes('lampa');
-  const sources: TvHomeFeedSource[] = [];
-
   const includeAnime = animeEnabled && (filter === 'all' || filter === 'anime');
   const includeMovie = lampaEnabled && (filter === 'all' || filter === 'movie');
   const includeTv = lampaEnabled && (filter === 'all' || filter === 'tv');
   const disambiguate = filter === 'all';
 
-  const byKind: Record<HomeSectionId, TvHomeFeedSource[]> = {
-    anime: [],
-    movie: [],
-    tv: [],
-  };
+  const bySection: Partial<Record<HomeSectionId, TvHomeFeedSource[]>> = {};
+  if (includeAnime) bySection.anime = collectAnimeSources(options, disambiguate);
+  if (includeMovie) bySection.movie = collectLampaKindSources(options, 'movie', disambiguate);
+  if (includeTv) bySection.tv = collectLampaKindSources(options, 'tv', disambiguate);
 
-  if (includeAnime) {
-    const allIds = animeShowcases.map((showcase) => showcase.id);
-    const enabledIds = resolveAnimeShowcaseIds(config, allIds).filter(
-      (id) => !isHomeExcludedAnimeRecommendationSection(id),
-    );
-    const orderedShowcases = orderAnimeShowcases(animeShowcases, enabledIds, config);
-    const customSections = resolveAnimeCustomSections(config);
-    const { primary, secondary } = dedupeAnimeRailsByPath(orderedShowcases, customSections);
-
-    for (const showcase of primary) {
-      const name = showcase.name || showcase.id;
-      byKind.anime.push({
-        key: `anime:${showcase.id}`,
-        title: disambiguate ? `${name} · ${kindLabel('anime')}` : name,
-        kind: 'anime',
-        animePath: showcase.path,
-      });
-    }
-
-    for (const section of secondary) {
-      const name = section.title || section.id;
-      byKind.anime.push({
-        key: `anime:custom:${section.id}`,
-        title: disambiguate ? `${name} · ${kindLabel('anime')}` : name,
-        kind: 'anime',
-        animePath: section.path,
-      });
-    }
-  }
-
-  if (includeMovie) {
-    const endpoints = resolveLampaSectionEndpoints(
-      config,
-      'movie',
-      lampaMovieSections.map((section) => section.endpoint),
-    );
-    const ordered = orderLampaSections(lampaMovieSections, endpoints, config, 'movie');
-    const visible = filterLampaSectionsForHomeKind(ordered, 'movie', firstLampaKindId);
-    for (const section of visible) {
-      const name = section.title || section.endpoint;
-      byKind.movie.push({
-        key: `movie:${section.endpoint}`,
-        title: disambiguate ? `${name} · ${kindLabel('movie')}` : name,
-        kind: 'movie',
-        lampaSection: section,
-      });
-    }
-  }
-
-  if (includeTv) {
-    const endpoints = resolveLampaSectionEndpoints(
-      config,
-      'tv',
-      lampaTvSections.map((section) => section.endpoint),
-    );
-    const ordered = orderLampaSections(lampaTvSections, endpoints, config, 'tv');
-    const visible = filterLampaSectionsForHomeKind(ordered, 'tv', firstLampaKindId);
-    for (const section of visible) {
-      const name = section.title || section.endpoint;
-      byKind.tv.push({
-        key: `tv:${section.endpoint}`,
-        title: disambiguate ? `${name} · ${kindLabel('tv')}` : name,
-        kind: 'tv',
-        lampaSection: section,
-      });
-    }
-  }
-
-  const enabledSections = resolveEnabledHomeSections(config).filter((id) => {
+  const enabledSections = resolveEnabledHomeSections({
+    ...config,
+    enabledContentTypes: enabledTypes,
+  }).filter((id) => {
     if (id === 'anime') return includeAnime;
     if (id === 'movie') return includeMovie;
     return includeTv;
   });
-  const sectionOrder =
+
+  const order =
     filter === 'all'
       ? resolveHomeSectionOrder(config, enabledSections)
-      : (['anime', 'movie', 'tv'] as HomeSectionId[]).filter((id) => {
-          if (id === 'anime') return includeAnime;
-          if (id === 'movie') return includeMovie;
-          return includeTv;
-        });
+      : (enabledSections as HomeSectionId[]);
 
-  for (const id of sectionOrder) {
-    sources.push(...byKind[id]);
+  const sources: TvHomeFeedSource[] = [];
+  for (const sectionId of order) {
+    sources.push(...(bySection[sectionId] ?? []));
   }
-
   return sources;
 }
 
@@ -297,46 +284,4 @@ export function resolveAvailableTvHomeFeedTabs(
     { id: 'all', label: 'Все' },
     ...sources.map((source) => ({ id: source.key, label: source.title })),
   ];
-}
-
-/** How many concrete feeds (besides «Все») stay visible in the compact chip row. */
-export const TV_HOME_FEED_PIN_COUNT = 4;
-
-/**
- * Compact chrome: «Все» + first N feeds + selected (if overflow).
- * Remaining feeds are chosen via the «Ещё» picker.
- */
-export function buildCompactTvHomeFeedRow(
-  tabs: TvHomeFeedTabOption[],
-  selectedId: TvHomeFeedTab,
-  pinCount = TV_HOME_FEED_PIN_COUNT,
-): {
-  visible: TvHomeFeedTabOption[];
-  hidden: TvHomeFeedTabOption[];
-  moreLabel: string | null;
-} {
-  const allTab = tabs.find((tab) => tab.id === 'all');
-  const rest = tabs.filter((tab) => tab.id !== 'all');
-  const pinned = rest.slice(0, pinCount);
-  const pinnedIds = new Set(pinned.map((tab) => tab.id));
-  const selected =
-    selectedId !== 'all' ? rest.find((tab) => tab.id === selectedId) : undefined;
-
-  const visible: TvHomeFeedTabOption[] = [];
-  if (allTab) visible.push(allTab);
-  visible.push(...pinned);
-
-  if (selected && !pinnedIds.has(selected.id)) {
-    visible.push(selected);
-  }
-
-  const visibleIds = new Set(visible.map((tab) => tab.id));
-  const hidden = rest.filter((tab) => !visibleIds.has(tab.id));
-  const overflowCount = Math.max(0, rest.length - pinCount);
-
-  return {
-    visible,
-    hidden,
-    moreLabel: overflowCount > 0 ? `Ещё · ${overflowCount}` : null,
-  };
 }

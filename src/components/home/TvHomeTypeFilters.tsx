@@ -1,22 +1,26 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { findNodeHandle, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
-import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
+import { registerTvHomeFiltersFocus } from '@/lib/tvHomeFocusHandoff';
 import {
   TV_HOME_TYPE_FILTERS,
   type TvHomeTypeFilter,
 } from '@/lib/tvHomeFeeds';
+import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 interface TvHomeTypeFiltersProps {
   value: TvHomeTypeFilter;
   onChange: (value: TvHomeTypeFilter) => void;
   options?: { id: TvHomeTypeFilter; label: string }[];
-  /** When Continue Watching is empty, first type chip is the content entry. */
+  /** First type segment is the TV content entry (Up→sidebar). */
   contentEntry?: boolean;
   /** Opens home feed settings (shared with Sleek / backend config). */
   onOpenSettings?: () => void;
-  /** Number of feeds enabled for the current type (excludes «Все»). */
-  selectedFeedCount?: number;
 }
 
 export function TvHomeTypeFilters({
@@ -25,44 +29,77 @@ export function TvHomeTypeFilters({
   options = TV_HOME_TYPE_FILTERS,
   contentEntry = false,
   onOpenSettings,
-  selectedFeedCount,
 }: TvHomeTypeFiltersProps) {
+  const router = useRouter();
+  const shellFocus = useTvShellFocus();
+  const [rowExitTag, setRowExitTag] = useState<number | undefined>();
+
   if (!options.length) return null;
 
   return (
     <View style={styles.row}>
-      {options.map((option, index) => {
-        const active = value === option.id;
-        const isEntry = contentEntry && index === 0;
-        // First chip always exits Left→sidebar; Up only when this row is the content entry.
-        const isRailStart = index === 0;
-        return (
-          <TvFocusable
-            key={option.id}
-            onPress={() => onChange(option.id)}
-            style={[styles.tab, active && styles.tabActive]}
-            focusedStyle={active ? styles.tabFocusedActive : styles.tabFocused}
-            hasTVPreferredFocus={isEntry}
-            railStart={isRailStart}
-            contentEntry={isEntry}
-          >
-            <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{option.label}</Text>
-          </TvFocusable>
-        );
-      })}
+      <View style={styles.segment}>
+        {options.map((option, index) => {
+          const active = value === option.id;
+          const isEntry = contentEntry && index === 0;
+          const isRailStart = index === 0;
+          return (
+            <TvFocusable
+              key={option.id}
+              onPress={() => onChange(option.id)}
+              style={[styles.tab, active && styles.tabActive]}
+              focusedStyle={active ? styles.tabFocusedActive : styles.tabFocused}
+              hasTVPreferredFocus={isEntry}
+              railStart={isRailStart}
+              contentEntry={isEntry}
+              nextFocusLeft={isRailStart ? rowExitTag : undefined}
+              hostRef={index === 0 ? registerTvHomeFiltersFocus : undefined}
+            >
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                {option.label}
+              </Text>
+            </TvFocusable>
+          );
+        })}
+      </View>
 
       {onOpenSettings ? (
         <TvFocusable
           onPress={onOpenSettings}
-          style={styles.settingsBtn}
-          focusedStyle={styles.tabFocused}
+          style={styles.iconBtn}
+          focusedStyle={styles.iconFocused}
+          accessibilityLabel="Настройки лент"
         >
-          <Text style={styles.settingsLabel}>
-            {selectedFeedCount != null && selectedFeedCount > 0
-              ? `Настройки · ${selectedFeedCount}`
-              : 'Настройки лент'}
-          </Text>
+          <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
         </TvFocusable>
+      ) : null}
+
+      <TvFocusable
+        onPress={() => router.navigate('/search')}
+        style={styles.iconBtn}
+        focusedStyle={styles.iconFocused}
+        accessibilityLabel="Поиск"
+        railEnd
+      >
+        <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+      </TvFocusable>
+
+      {isTvUi() ? (
+        <Pressable
+          ref={(node) => {
+            const tag =
+              node != null
+                ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined)
+                : undefined;
+            setRowExitTag((prev) => (prev === tag ? prev : tag));
+          }}
+          collapsable={false}
+          focusable={!shellFocus?.menuOpen}
+          onFocus={() => {
+            shellFocus?.requestSidebarFocus();
+          }}
+          style={styles.rowExit}
+        />
       ) : null}
     </View>
   );
@@ -71,25 +108,36 @@ export function TvHomeTypeFilters({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: layout.gutterDesktop,
     paddingVertical: spacing.xs,
+  },
+  rowExit: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 1,
+  },
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    padding: 4,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   tab: {
     flexShrink: 0,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.sm,
+    backgroundColor: 'transparent',
   },
-  // Soft tint (not solid brand) so focus ring stays readable.
   tabActive: {
-    backgroundColor: 'rgba(195,192,255,0.18)',
-    borderColor: colors.brand,
+    backgroundColor: colors.brandAccent,
   },
   tabFocused: {
     borderColor: '#ffffff',
@@ -97,7 +145,7 @@ const styles = StyleSheet.create({
   },
   tabFocusedActive: {
     borderColor: '#ffffff',
-    backgroundColor: 'rgba(195,192,255,0.32)',
+    backgroundColor: colors.brandAccent,
   },
   tabLabel: {
     color: colors.textSecondary,
@@ -105,21 +153,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabLabelActive: {
-    color: colors.brandTint,
+    color: '#ffffff',
   },
-  settingsBtn: {
-    flexShrink: 0,
-    marginLeft: 'auto',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  iconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: radii.pill,
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.brand,
-    backgroundColor: 'rgba(167,139,250,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  settingsLabel: {
-    color: colors.brand,
-    fontSize: 13,
-    fontWeight: '700',
+  iconFocused: {
+    borderColor: '#ffffff',
+    backgroundColor: tvFocus.fill,
   },
 });

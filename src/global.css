@@ -16,6 +16,8 @@
 html,
 body,
 #root {
+  height: 100%;
+  overflow: hidden;
   background: var(--color-bg-primary);
   font-family: var(--font-display);
   -webkit-tap-highlight-color: transparent;
@@ -114,10 +116,8 @@ h3 {
   align-items: stretch;
   justify-content: space-around;
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(19, 18, 27, 0.62);
   padding: 6px;
-  box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.35);
+  background: rgba(19, 18, 27, 0.72);
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
 }

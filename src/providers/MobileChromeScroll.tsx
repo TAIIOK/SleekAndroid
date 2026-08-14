@@ -29,6 +29,9 @@ type MobileChromeScrollContextValue = {
   hideDistance: SharedValue<number>;
   /** When true, scroll views must pad content for overlay top/bottom chrome. */
   contentInsetsEnabled: boolean;
+  /** When true, top island stays fixed (hubs / profile chrome). */
+  scrollPinned: boolean;
+  scrollPinnedSv: SharedValue<number>;
   topContentInset: number;
   bottomContentInset: number;
   reportScrollY: (y: number) => void;
@@ -42,6 +45,7 @@ export function MobileChromeScrollProvider({
   children,
   hideDistance,
   contentInsetsEnabled,
+  scrollPinned = false,
   topContentInset,
   bottomContentInset,
 }: {
@@ -49,19 +53,36 @@ export function MobileChromeScrollProvider({
   /** Distance (px) the top chrome travels before it is fully off-screen. */
   hideDistance: number;
   contentInsetsEnabled: boolean;
+  /** Keep the top island fixed while the page scrolls. */
+  scrollPinned?: boolean;
   topContentInset: number;
   bottomContentInset: number;
 }) {
   const scrollY = useSharedValue(0);
   const hideDistanceSv = useSharedValue(hideDistance);
+  const scrollPinnedSv = useSharedValue(scrollPinned ? 1 : 0);
+  const pinnedRef = useRef(scrollPinned);
   const lastYRef = useRef(0);
 
   useEffect(() => {
     hideDistanceSv.value = hideDistance;
   }, [hideDistance, hideDistanceSv]);
 
+  useEffect(() => {
+    pinnedRef.current = scrollPinned;
+    scrollPinnedSv.value = scrollPinned ? 1 : 0;
+    if (scrollPinned) {
+      lastYRef.current = 0;
+      scrollY.value = 0;
+    }
+  }, [scrollPinned, scrollPinnedSv, scrollY]);
+
   const reportScrollY = useCallback(
     (y: number) => {
+      if (pinnedRef.current) {
+        if (scrollY.value !== 0) scrollY.value = 0;
+        return;
+      }
       const next = Math.max(0, y);
       lastYRef.current = next;
       scrollY.value = next;
@@ -86,6 +107,8 @@ export function MobileChromeScrollProvider({
       scrollY,
       hideDistance: hideDistanceSv,
       contentInsetsEnabled,
+      scrollPinned,
+      scrollPinnedSv,
       topContentInset,
       bottomContentInset,
       reportScrollY,
@@ -96,6 +119,8 @@ export function MobileChromeScrollProvider({
       scrollY,
       hideDistanceSv,
       contentInsetsEnabled,
+      scrollPinned,
+      scrollPinnedSv,
       topContentInset,
       bottomContentInset,
       reportScrollY,
@@ -118,9 +143,10 @@ export function useMobileChromeTopAnimatedStyle() {
   const ctx = useMobileChromeScroll();
   const scrollY = ctx?.scrollY;
   const hideDistance = ctx?.hideDistance;
+  const scrollPinnedSv = ctx?.scrollPinnedSv;
 
   return useAnimatedStyle(() => {
-    if (!scrollY || !hideDistance) {
+    if (!scrollY || !hideDistance || (scrollPinnedSv?.value ?? 0) > 0) {
       return { transform: [{ translateY: 0 }], opacity: 1 };
     }
     const max = Math.max(hideDistance.value, 1);

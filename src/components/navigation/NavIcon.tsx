@@ -13,6 +13,8 @@ const ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   '/profile': 'person-outline',
   '/library/lists': 'library-outline',
   '/downloads': 'download-outline',
+  '/party': 'people-outline',
+  '/friends/feed': 'chatbubbles-outline',
   '/more': 'grid-outline',
 };
 
@@ -27,6 +29,8 @@ const ICON_MAP_ACTIVE: Record<string, keyof typeof Ionicons.glyphMap> = {
   '/profile': 'person',
   '/library/lists': 'library',
   '/downloads': 'download',
+  '/party': 'people',
+  '/friends/feed': 'chatbubbles',
   '/more': 'grid',
 };
 

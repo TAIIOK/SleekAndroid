@@ -1,13 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
-import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
-import {
-  buildCompactTvHomeFeedRow,
-  type TvHomeFeedTab,
-  type TvHomeFeedTabOption,
-} from '@/lib/tvHomeFeeds';
+import { colors, layout, spacing, tvFocus } from '@/constants/aniverse';
+import { tvHorizontalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { registerTvHomeTabsFocus } from '@/lib/tvHomeFocusHandoff';
+import type { TvHomeFeedTab, TvHomeFeedTabOption } from '@/lib/tvHomeFeeds';
 
 interface TvHomeFeedTabsProps {
   value: TvHomeFeedTab;
@@ -16,221 +13,85 @@ interface TvHomeFeedTabsProps {
 }
 
 export function TvHomeFeedTabs({ value, onChange, tabs }: TvHomeFeedTabsProps) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-
-  const { visible, moreLabel } = useMemo(
-    () => buildCompactTvHomeFeedRow(tabs, value),
-    [tabs, value],
-  );
-
-  useEffect(() => {
-    setPickerOpen(false);
-  }, [tabs]);
-
   if (!tabs.length) return null;
 
-  const select = (id: TvHomeFeedTab) => {
-    onChange(id);
-    setPickerOpen(false);
-  };
-
   return (
-    <>
-      <View style={styles.row}>
-        {visible.map((tab, index) => {
+    <View style={styles.nav}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+        {...tvHorizontalCatalogScrollProps}
+      >
+        {tabs.map((tab, index) => {
           const active = value === tab.id;
           return (
-            <TvFocusable
-              key={tab.id}
-              onPress={() => select(tab.id)}
-              style={[styles.chip, active && styles.chipActive]}
-              focusedStyle={active ? styles.chipFocusedActive : styles.chipFocused}
-              railStart={index === 0}
-            >
-              <Text style={[styles.chipLabel, active && styles.chipLabelActive]} numberOfLines={1}>
-                {active ? `✓ ${tab.label}` : tab.label}
-              </Text>
-            </TvFocusable>
+            <View key={tab.id} collapsable={false} style={styles.tabWrap}>
+              <TvFocusable
+                onPress={() => onChange(tab.id)}
+                style={styles.tab}
+                focusedStyle={styles.tabFocused}
+                railStart={index === 0}
+                railEnd={index === tabs.length - 1}
+                hostRef={index === 0 ? registerTvHomeTabsFocus : undefined}
+              >
+                <Text
+                  style={[styles.tabLabel, active && styles.tabLabelActive]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+              </TvFocusable>
+              <View style={[styles.underline, active && styles.underlineActive]} />
+            </View>
           );
         })}
-
-        {moreLabel ? (
-          <TvFocusable
-            onPress={() => setPickerOpen(true)}
-            style={[styles.chip, styles.moreChip]}
-            focusedStyle={styles.chipFocused}
-          >
-            <Text style={styles.chipLabel}>{moreLabel}</Text>
-          </TvFocusable>
-        ) : null}
-      </View>
-
-      <Modal
-        transparent
-        animationType="fade"
-        visible={pickerOpen}
-        onRequestClose={() => setPickerOpen(false)}
-      >
-        <View style={styles.backdrop}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Ленты</Text>
-              <TvFocusable
-                onPress={() => setPickerOpen(false)}
-                style={styles.closeBtn}
-                focusedStyle={styles.chipFocused}
-              >
-                <Text style={styles.closeLabel}>Закрыть</Text>
-              </TvFocusable>
-            </View>
-
-            <ScrollView
-              style={styles.sheetScroll}
-              contentContainerStyle={styles.sheetList}
-              showsVerticalScrollIndicator={false}
-            >
-              {tabs.map((tab) => {
-                const active = value === tab.id;
-                return (
-                  <TvFocusable
-                    key={tab.id}
-                    onPress={() => select(tab.id)}
-                    style={[styles.listItem, active && styles.listItemActive]}
-                    focusedStyle={styles.listItemFocused}
-                    hasTVPreferredFocus={active}
-                  >
-                    <Text
-                      style={[styles.listItemLabel, active && styles.listItemLabelActive]}
-                      numberOfLines={1}
-                    >
-                      {active ? `✓ ${tab.label}` : tab.label}
-                    </Text>
-                  </TvFocusable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  nav: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    marginBottom: spacing.sm,
+  },
   row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    paddingTop: 2,
+    alignItems: 'flex-end',
+    gap: spacing.lg,
+    paddingHorizontal: layout.gutterDesktop,
   },
-  chip: {
+  tabWrap: {
     flexShrink: 0,
-    maxWidth: 280,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.border,
+    maxWidth: 256,
+    marginBottom: -1,
   },
-  moreChip: {
-    borderStyle: 'dashed',
+  tab: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 10,
+    backgroundColor: 'transparent',
   },
-  chipActive: {
-    backgroundColor: 'rgba(195,192,255,0.18)',
-    borderColor: colors.brand,
-  },
-  chipFocused: {
+  tabFocused: {
     borderColor: '#ffffff',
     backgroundColor: tvFocus.fill,
   },
-  chipFocusedActive: {
-    borderColor: '#ffffff',
-    backgroundColor: 'rgba(195,192,255,0.32)',
-  },
-  chipLabel: {
+  tabLabel: {
     color: colors.textSecondary,
     fontSize: 14,
     fontWeight: '600',
   },
-  chipLabelActive: {
-    color: colors.brandTint,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xxl,
-  },
-  sheet: {
-    maxHeight: '80%',
-    backgroundColor: colors.bgElevated ?? colors.bg,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.md,
-  },
-  sheetTitle: {
+  tabLabelActive: {
     color: colors.text,
-    fontSize: 22,
-    fontWeight: '700',
-    flex: 1,
   },
-  closeBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.border,
+  underline: {
+    height: 2,
+    marginHorizontal: 4,
+    backgroundColor: 'transparent',
   },
-  closeLabel: {
-    color: colors.brand,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  sheetScroll: {
-    maxHeight: 520,
-  },
-  sheetList: {
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  listItem: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  listItemActive: {
-    borderColor: colors.brand,
-    backgroundColor: 'rgba(167,139,250,0.12)',
-  },
-  listItemFocused: {
-    borderColor: tvFocus.borderColor,
-    backgroundColor: tvFocus.fill,
-  },
-  listItemLabel: {
-    color: colors.textSecondary,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  listItemLabelActive: {
-    color: colors.text,
+  underlineActive: {
+    backgroundColor: colors.brand,
   },
 });

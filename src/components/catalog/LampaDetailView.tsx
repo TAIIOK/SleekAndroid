@@ -1,14 +1,16 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 
-import { fetchLampaDetail, mapLampaToRailItem } from '@/api/catalog';
+import { fetchLampaDetail, mapLampaToRailItem, type LampaItem } from '@/api/catalog';
 import {
   fetchSavedLampaLibrary,
   toggleLampaFavorite,
@@ -20,17 +22,25 @@ import {
   fetchLampaRelated,
   fetchLampaSimilar,
 } from '@/api/lampaExtras';
+import { fetchLampaExternalRatings } from '@/api/lampaRatings';
 import { fetchLampaProgress } from '@/api/progress';
 import { fetchActivityHistory } from '@/api/user';
+import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
 import { LampaDetailPlot } from '@/components/lampa/detail/LampaDetailPlot';
 import { LampaDetailSeasons } from '@/components/lampa/detail/LampaDetailSeasons';
 import { LampaDetailSkeleton } from '@/components/lampa/detail/LampaDetailSkeleton';
+import { LampaExternalRatingsRow } from '@/components/lampa/LampaExternalRatingsRow';
 import { LampaSourceSheet } from '@/components/lampa/LampaSourceSheet';
+import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBackButton';
 import { colors, layout, spacing } from '@/constants/aniverse';
+import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
 import {
+  excludeRelatedLampaItems,
+  lampaCardSubtitle,
+  lampaCollectionId,
   lampaDetailPath,
   lampaTitle,
   parseLampaSeasons,
@@ -39,8 +49,13 @@ import {
 import type { UserListStatus } from '@/lib/libraryStatus';
 import { lampaPosterPath } from '@/lib/poster';
 import { buildLampaPlaybackState } from '@/lib/progressUtils';
+import {
+  lampaWatchHistoryKey,
+  rememberWatchHistoryMeta,
+} from '@/lib/watchHistoryMeta';
 import { useAuth } from '@/providers/AuthProvider';
 import { isTvUi } from '@/lib/isTvUi';
+import { notifyViewportScroll } from '@/lib/viewportScroll';
 
 export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const router = useRouter();
@@ -49,6 +64,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const routeId = String(id ?? '');
   const { isAuthenticated } = useAuth();
   const isSerial = kind === 'tv';
+  const belowFoldReady = useBelowFoldReady();
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pickerSeason, setPickerSeason] = useState<number | undefined>();
@@ -77,6 +93,19 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     const d = detail as unknown as Record<string, unknown>;
     return String(d.objectId ?? d.object_id ?? '').trim();
   }, [detail]);
+
+  useEffect(() => {
+    if (!detail || !routeId) return;
+    const meta = {
+      title: lampaTitle(detail),
+      poster: lampaPosterPath(detail),
+      kind,
+    };
+    rememberWatchHistoryMeta(lampaWatchHistoryKey(routeId), meta);
+    if (lampaObjectId) {
+      rememberWatchHistoryMeta(lampaWatchHistoryKey(lampaObjectId), meta);
+    }
+  }, [detail, kind, lampaObjectId, routeId]);
 
   // Unfiltered list (same as CW). Filtered `?lampaId=` can miss rows keyed under
   // a sibling id (UUID vs TMDB) even when Home already has them.
@@ -112,29 +141,44 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     () => (detail ? resolveLampaTmdbId(detail, routeId) : undefined),
     [detail, routeId],
   );
+  const collectionId = useMemo(
+    () => (detail ? lampaCollectionId(detail) : undefined),
+    [detail],
+  );
 
-  const { data: similar = [], isPending: similarPending } = useQuery({
+  const { data: similar = [], isLoading: similarLoading } = useQuery({
     queryKey: ['lampa-similar', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaSimilar(kind, tmdbId!),
-    enabled: tmdbId != null,
+    enabled: belowFoldReady && tmdbId != null,
   });
 
-  const { data: recommendations = [], isPending: recommendationsPending } = useQuery({
+  const { data: recommendations = [], isLoading: recommendationsLoading } = useQuery({
     queryKey: ['lampa-recommendations', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaRecommendations(kind, tmdbId!),
-    enabled: tmdbId != null,
+    enabled: belowFoldReady && tmdbId != null,
   });
 
-  const { data: franchise = [], isPending: franchisePending } = useQuery({
-    queryKey: ['lampa-related', tmdbId ?? 0],
-    queryFn: () => fetchLampaRelated(tmdbId!),
-    enabled: tmdbId != null && !isSerial,
+  const { data: franchise = [], isLoading: franchiseLoading } = useQuery({
+    queryKey: ['lampa-related', kind, tmdbId ?? 0],
+    queryFn: () => fetchLampaRelated(kind, tmdbId!, collectionId),
+    enabled: belowFoldReady && tmdbId != null && collectionId != null,
   });
 
-  const { data: cast = [], isPending: castPending } = useQuery({
+  const similarItems = useMemo(
+    () => excludeRelatedLampaItems(similar, franchise),
+    [similar, franchise],
+  );
+
+  const { data: cast = [], isLoading: castLoading } = useQuery({
     queryKey: ['lampa-cast', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaCast(kind, tmdbId!),
-    enabled: tmdbId != null,
+    enabled: belowFoldReady && tmdbId != null,
+  });
+
+  const { data: externalRatings = [] } = useQuery({
+    queryKey: ['lampa-ratings', kind, tmdbId ?? 0],
+    queryFn: () => fetchLampaExternalRatings(kind, tmdbId!, detail),
+    enabled: belowFoldReady && tmdbId != null && !!detail,
   });
 
   const invalidateLibrary = () => {
@@ -178,18 +222,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     ).then(invalidateLibrary);
   };
 
-  if (isLoading) return <LampaDetailSkeleton />;
-
-  if (isError || !detail) {
-    return (
-      <View style={styles.loader}>
-        <Text style={styles.errorTitle}>Не удалось загрузить</Text>
-        <Text style={styles.errorBody}>Проверьте подключение или попробуйте позже</Text>
-      </View>
-    );
-  }
-
-  const seasons = parseLampaSeasons(detail.seasons);
+  const seasons = detail ? parseLampaSeasons(detail.seasons) : [];
 
   const openLampaItem = (itemId: string | number, itemKind: 'movie' | 'tv' = kind) => {
     const path = lampaDetailPath(itemKind, { id: itemId });
@@ -198,115 +231,157 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     }
   };
 
+  const toRailItems = (items: LampaItem[]) =>
+    items.map((item) => ({
+      ...mapLampaToRailItem(item),
+      subtitle: lampaCardSubtitle(item),
+    }));
+
+  const openFromList = (items: LampaItem[], itemId: string | number) => {
+    const source = items.find((row) => String(row.id) === String(itemId));
+    const itemKind = source?.kind === 'tv' ? 'tv' : source?.kind === 'movie' ? 'movie' : kind;
+    openLampaItem(itemId, itemKind);
+  };
+
+  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    notifyViewportScroll(event.nativeEvent.contentOffset.y);
+  }, []);
+
   const relatedRails = (
     <>
-      {!isSerial && (franchise.length > 0 || franchisePending) ? (
-        <PosterRail
-          title="Связанные"
-          items={franchise.map(mapLampaToRailItem)}
-          loading={franchisePending}
-          itemWidth={layout.posterWidthDetail}
-          flush
-          onItemPress={(item) => openLampaItem(item.id, 'movie')}
-        />
+      {franchise.length > 0 || franchiseLoading ? (
+        <LazyCatalogRail>
+          <PosterRail
+            title="Связанные"
+            items={toRailItems(franchise)}
+            loading={franchiseLoading}
+            itemWidth={layout.posterWidthDetail}
+            flush
+            onItemPress={(item) => openFromList(franchise, item.id)}
+          />
+        </LazyCatalogRail>
       ) : null}
-      {(similar.length > 0 || similarPending) && (
-        <PosterRail
-          title="Похожие"
-          items={similar.map(mapLampaToRailItem)}
-          loading={similarPending}
-          itemWidth={layout.posterWidthDetail}
-          flush
-          onItemPress={(item) => openLampaItem(item.id)}
-        />
-      )}
-      {(recommendations.length > 0 || recommendationsPending) && (
-        <PosterRail
-          title="Рекомендации"
-          items={recommendations.map(mapLampaToRailItem)}
-          loading={recommendationsPending}
-          itemWidth={layout.posterWidthDetail}
-          flush
-          onItemPress={(item) => openLampaItem(item.id)}
-        />
-      )}
+      {recommendations.length > 0 || recommendationsLoading ? (
+        <LazyCatalogRail>
+          <PosterRail
+            title="Рекомендации"
+            items={toRailItems(recommendations)}
+            loading={recommendationsLoading}
+            itemWidth={layout.posterWidthDetail}
+            flush
+            onItemPress={(item) => openFromList(recommendations, item.id)}
+          />
+        </LazyCatalogRail>
+      ) : null}
+      {similarItems.length > 0 || similarLoading ? (
+        <LazyCatalogRail>
+          <PosterRail
+            title="Похожее"
+            items={toRailItems(similarItems)}
+            loading={similarLoading}
+            itemWidth={layout.posterWidthDetail}
+            flush
+            onItemPress={(item) => openFromList(similarItems, item.id)}
+          />
+        </LazyCatalogRail>
+      ) : null}
     </>
   );
 
-  return (
-    <>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <LampaDetailHero
+  let main: ReactNode;
+  if (isLoading) {
+    main = <LampaDetailSkeleton />;
+  } else if (isError || !detail) {
+    main = (
+      <View style={styles.loader}>
+        <Text style={styles.errorTitle}>Не удалось загрузить</Text>
+        <Text style={styles.errorBody}>Проверьте подключение или попробуйте позже</Text>
+      </View>
+    );
+  } else {
+    main = (
+      <>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          onScroll={onScroll}
+          scrollEventThrottle={64}
+        >
+          <LampaDetailHero
+            detail={detail}
+            kind={kind}
+            isSerial={isSerial}
+            hasHistory={savedState?.hasHistory ?? false}
+            lastSeason={savedState?.lastSeason ?? 1}
+            lastEpisode={savedState?.lastEpisode ?? 1}
+            lastProgress={savedState?.lastProgress ?? 0}
+            userStatus={savedState?.status}
+            isFavorite={savedState?.isFavorite}
+            libraryDisabled={!isAuthenticated}
+            collectionItem={{
+              mediaType: 'lampa',
+              mediaId: `${kind}:${routeId}`,
+              title: lampaTitle(detail),
+              poster: lampaPosterPath(detail),
+            }}
+            onWatch={() => openSources(!!savedState?.hasHistory)}
+            onOpenSources={() => openSources(false)}
+            onStatusChange={onStatusChange}
+            onToggleFavorite={onToggleFavorite}
+          />
+
+          {externalRatings.length > 0 ? (
+            <View style={styles.ratingsPad}>
+              <LampaExternalRatingsRow ratings={externalRatings} />
+            </View>
+          ) : null}
+
+          {isSerial && seasons.length > 0 ? (
+            <LampaDetailSeasons
+              seasons={seasons}
+              tmdbId={tmdbId}
+              episodeProgressByKey={savedState?.episodeProgressByKey}
+              onSelectEpisode={onSelectEpisode}
+            />
+          ) : null}
+
+          <View style={styles.stack}>
+            <LampaDetailPlot detail={detail} />
+            {castLoading || cast.length > 0 ? (
+              <LazyCatalogRail placeholderMinHeight={180}>
+                <LampaDetailCast cast={cast} loading={castLoading} />
+              </LazyCatalogRail>
+            ) : null}
+          </View>
+          <View style={styles.stack}>{relatedRails}</View>
+        </ScrollView>
+
+        <LampaSourceSheet
+          visible={sheetOpen}
+          onClose={() => setSheetOpen(false)}
           detail={detail}
           kind={kind}
-          isSerial={isSerial}
-          hasHistory={savedState?.hasHistory ?? false}
-          lastSeason={savedState?.lastSeason ?? 1}
-          lastEpisode={savedState?.lastEpisode ?? 1}
-          lastProgress={savedState?.lastProgress ?? 0}
-          userStatus={savedState?.status}
-          isFavorite={savedState?.isFavorite}
-          libraryDisabled={!isAuthenticated}
-          collectionItem={{
-            mediaType: 'lampa',
-            mediaId: `${kind}:${routeId}`,
-            title: lampaTitle(detail),
-            poster: lampaPosterPath(detail),
-          }}
-          onWatch={() => openSources(!!savedState?.hasHistory)}
-          onOpenSources={() => openSources(false)}
-          onStatusChange={onStatusChange}
-          onToggleFavorite={onToggleFavorite}
+          routeId={routeId}
+          lampaObjectId={lampaObjectId || undefined}
+          initialSeason={isSerial ? pickerSeason : undefined}
+          initialEpisode={isSerial ? pickerEpisode : undefined}
+          autoPlayPreferredEpisode={autoPlayPreferred}
+          episodeProgressByKey={savedState?.episodeProgressByKey}
         />
+      </>
+    );
+  }
 
-        {/* Seasons/episodes directly under hero; genres already in hero pills. */}
-        {isSerial && seasons.length > 0 ? (
-          <LampaDetailSeasons
-            seasons={seasons}
-            tmdbId={tmdbId}
-            episodeProgressByKey={savedState?.episodeProgressByKey}
-            onSelectEpisode={onSelectEpisode}
-          />
-        ) : null}
-
-        {isTvUi() ? (
-          <View style={styles.stack}>
-            <View style={styles.wideGrid}>
-              <View style={styles.wideMain}>
-                <LampaDetailPlot detail={detail} />
-                <LampaDetailCast cast={cast} loading={castPending} />
-              </View>
-              <View style={styles.wideSide}>{relatedRails}</View>
-            </View>
-          </View>
-        ) : (
-          <>
-            <View style={styles.stack}>
-              <LampaDetailPlot detail={detail} />
-              <LampaDetailCast cast={cast} loading={castPending} />
-            </View>
-            <View style={styles.stack}>{relatedRails}</View>
-          </>
-        )}
-      </ScrollView>
-
-      <LampaSourceSheet
-        visible={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        detail={detail}
-        kind={kind}
-        routeId={routeId}
-        lampaObjectId={lampaObjectId || undefined}
-        initialSeason={isSerial ? pickerSeason : undefined}
-        initialEpisode={isSerial ? pickerEpisode : undefined}
-        autoPlayPreferredEpisode={autoPlayPreferred}
-        episodeProgressByKey={savedState?.episodeProgressByKey}
-      />
-    </>
+  return (
+    <View style={styles.root} collapsable={false}>
+      {main}
+      <MobileDetailBackButton />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
     flexGrow: 0,
@@ -315,29 +390,13 @@ const styles = StyleSheet.create({
     gap: isTvUi() ? spacing.sm : spacing.md,
     paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
   },
+  ratingsPad: {
+    paddingHorizontal: 0,
+  },
   stack: {
     width: '100%',
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: spacing.md,
-  },
-  wideGrid: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.lg,
-  },
-  wideMain: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    minWidth: 0,
-    gap: spacing.md,
-  },
-  wideSide: {
-    width: 300,
-    flexGrow: 0,
-    flexShrink: 0,
     gap: spacing.md,
   },
   loader: {

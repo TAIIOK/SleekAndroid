@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { enableFreeze } from 'react-native-screens';
 
 import '@/global.css';
 import { GlobalShell } from '@/components/shell/GlobalShell';
@@ -7,9 +8,11 @@ import { RootErrorBoundary } from '@/components/shell/RootErrorBoundary';
 import { initCrashReporting } from '@/lib/crashReporting';
 import { ensureImageCdnPreference } from '@/lib/imageCdn';
 import { isTvUi } from '@/lib/isTvUi';
+import { ActivitySocketBootstrap } from '@/components/shell/ActivitySocketBootstrap';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { QueryProvider } from '@/providers/QueryProvider';
 
+enableFreeze(true);
 initCrashReporting();
 void ensureImageCdnPreference();
 
@@ -32,6 +35,7 @@ export default function RootLayout() {
     <RootErrorBoundary>
       <QueryProvider>
         <AuthProvider>
+          <ActivitySocketBootstrap />
           <StatusBar style="light" />
           <GlobalShell />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#13121b' } }}>
@@ -39,7 +43,10 @@ export default function RootLayout() {
             <Stack.Screen name="auth/device" />
             <Stack.Screen name="add-media-server" />
             <Stack.Screen name="catalog/connect" />
-            <Stack.Screen name="(main)" />
+            <Stack.Screen
+              name="(main)"
+              options={isTvUi() ? { freezeOnBlur: false } : undefined}
+            />
             <Stack.Screen name="watch" options={watchScreenOptions} />
           </Stack>
         </AuthProvider>

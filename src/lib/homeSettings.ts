@@ -67,8 +67,11 @@ export async function getHomeConfigUpdatedAt(): Promise<number> {
   return Number.isFinite(value) ? value : 0;
 }
 
-export async function saveHomeConfig(config: CatalogHomeConfig): Promise<void> {
+export async function saveHomeConfig(
+  config: CatalogHomeConfig,
+  updatedAt = Date.now(),
+): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  await AsyncStorage.setItem(UPDATED_AT_KEY, String(Date.now()));
+  await AsyncStorage.setItem(UPDATED_AT_KEY, String(updatedAt));
   notifyHomeConfigChanged();
 }

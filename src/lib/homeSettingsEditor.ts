@@ -1,4 +1,5 @@
 import {
+  DEFAULT_HOME_SECTION_ORDER,
   applyHomeSectionToggles,
   homeSectionLabel,
   isHomeConfigConfigured,
@@ -54,13 +55,23 @@ export function buildSettingsDraft(
     ]),
   );
 
-  return normalizeHomeConfig({
+  // Keep configured:false so missing Lampa kind keys still mean "section on"
+  // (section endpoint lists may arrive later than categories/kinds).
+  const draft: CatalogHomeConfig = {
     ...config,
     configured: false,
     enabledContentTypes: resolveEnabledContentTypes(config, options.contentTypeIds),
     enabledAnimeShowcases: resolveAnimeShowcaseIds(config, options.showcaseIds),
     enabledLampaSections: lampaSections,
-  });
+    enabledAnimeCustomSections: config.enabledAnimeCustomSections ?? [],
+    homeSectionOrder: config.homeSectionOrder ?? [...DEFAULT_HOME_SECTION_ORDER],
+    hideAsianLiveAction: config.hideAsianLiveAction !== false,
+  };
+
+  return {
+    ...draft,
+    homeSectionOrder: resolveHomeSectionOrder(draft, resolveEnabledHomeSections(draft)),
+  };
 }
 
 export function toggleInList(

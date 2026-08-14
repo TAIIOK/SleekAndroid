@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { queryClient } from '@/providers/QueryProvider';
+import { isTvUi } from '@/lib/isTvUi';
+import { consumeWatchSession } from '@/lib/watchResumeSync';
 
 const PROGRESS_QUERY_KEYS = [
   ['anime-progress'],
@@ -19,15 +21,17 @@ function invalidateProgressQueries(): void {
 }
 
 /**
- * Refetch continue-watching sources when returning to Home or the app becomes active
- * so TV picks up progress written on phone/web.
+ * Refetch continue-watching sources when returning from the player or the app
+ * becomes active. Detail Back on TV must not start a query storm.
  */
 export function useRefreshProgressOnResume(): void {
   const appStateRef = useRef(AppState.currentState);
 
   useFocusEffect(
     useCallback(() => {
-      invalidateProgressQueries();
+      if (isTvUi() && consumeWatchSession()) {
+        invalidateProgressQueries();
+      }
     }, []),
   );
 

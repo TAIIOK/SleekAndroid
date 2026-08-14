@@ -1,17 +1,15 @@
-import { spacing } from '@/constants/aniverse';
 import { isTvUi } from '@/lib/isTvUi';
 
 /**
  * Vertical catalog ScrollView props for Android TV.
- * With `snapToAlignment="item"`, focus scrolls to the nearest ancestor that sets
- * `scrollSnapAlign` (rail section = header + posters) instead of only the card.
+ *
+ * Do not pass `snapToAlignment: 'item'` (or any value other than start/center/end).
+ * Fabric parses that enum in C++ and `abort()`s the JS thread — the TV app closes
+ * as soon as home/catalog mounts after login.
  */
 export const tvVerticalCatalogScrollProps = isTvUi()
   ? ({
-      snapToAlignment: 'item' as const,
-      snapToItemPadding: spacing.md,
-      // Instant snap — animated focus scrolling jerks the page when landing from the sidebar.
-      scrollAnimationEnabled: false,
+      // Android TV already scrolls the focused descendant into view.
     } as const)
   : ({} as const);
 
@@ -22,16 +20,14 @@ export const tvVerticalCatalogScrollProps = isTvUi()
  */
 export const tvHorizontalCatalogScrollProps = isTvUi()
   ? ({
-      scrollAnimationEnabled: false,
       // ScrollView must not compete with poster Pressables for D-pad focus.
       focusable: false,
     } as const)
   : ({} as const);
 
-/** Put on rail/continue section wrappers so the title stays visible when a card is focused. */
+/** Keep rail/continue section wrappers from collapsing so measure/focus restore works. */
 export const tvRailSectionSnapProps = isTvUi()
   ? ({
-      scrollSnapAlign: 'start' as const,
       collapsable: false,
     } as const)
   : ({} as const);

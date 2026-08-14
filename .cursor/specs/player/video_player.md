@@ -29,21 +29,20 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 ### TV UI and remote
 
-- [x] Panel: timeline → center dock (prev/play/next) → options; auto-hide 3s while playing; hint ~2.5s
+- [x] Panel: timeline → center dock (prev/play/next) → options; auto-hide 5s while playing; hint ~2.5s
 - [x] TV panel visual: compact site-like bottom card — meta, white timeline, times, option pills (no ±seek transport)
 - [x] Seek ±N via D-pad ←/→ only (hidden chrome or timeline focus), not bottom-bar buttons
-- [x] Mid-screen circular prev/play/next dock (site TV style); pause or ↓ focuses the dock
-- [x] Hidden panel: ←/→ seek (prefs seconds), ↑/↓ show panel, OK play/pause, Back exit
-- [x] Visible panel: D-pad focus; Back hides panel or closes overlay before exit
+- [x] Mid-screen circular prev/play/next dock (site TV style); native TV focus lands on pause/play
+- [x] Hidden panel: any D-pad / OK shows the HUD; ←/→ also seek (prefs seconds); OK play/pause (or skip CTA); Back exit
+- [x] Visible panel: D-pad moves native focus Play ↔ timeline ↔ option pills; Back hides panel or closes overlay before exit
 - [x] Overlays: dubbing, quality, connection, delivery, episodes, subtitles (when tracks exist), settings, external player
 - [x] Subtitle tracks from react-native-video text tracks; preferred language persisted in player prefs
 - [x] Long overlay lists scroll only when the focused row leaves the viewport; ↑/↓ navigation is rate-limited (~150ms)
 - [x] Panel options chip cycles video framing (`contain` → `cover` → `fill`) without opening settings
 - [x] Paused center badge; loading indicator; skip prompt button
-- [x] Skip CTA is software-focused while visible: OK/`select` applies skip (native focus stays on sink); focused visual + hint «OK — пропустить»
-- [x] Invisible focusable sink (`hasTVPreferredFocus`) so Android TV delivers HW keys to `useTVEventHandler` when the HUD is software-focus only
-- [x] Overlay / skip / error controls do not take native TV focus away from the sink
-- [x] Remote handler ignores `eventKeyAction === 0` (key-down) to avoid double seek/play
+- [x] Skip CTA is software-focused while visible: OK/`select` applies skip (native focus stays on the compact sink); focused visual + hint «OK — пропустить»
+- [x] Compact 72×72 `TvPlayerFocusSink` mounts only when chrome is hidden (or overlay is open). While the HUD is visible, Play / pills are native-focusable Pressables.
+- [x] Remote handler ignores OK / playPause key-up and HUD `select` onKeyDown (Pressable `onPress` activates). Duplicate key-down+key-up for other keys still debounce ~90ms. `tvKeyNativeEventToHw` maps `key` / `code` / Android `keyCode`. HUD starts visible and auto-hides after 5s while playing.
 
 ### Phone UI
 
@@ -52,6 +51,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] `controls={false}` plus config plugin forcing ExoPlayer `useController=false` (Fabric may omit the JS prop)
 - [x] Gestures (RNGH): tap shows chrome immediately when hidden, hides after double-tap window when visible; double-tap L/R seeks; vertical left third brightness; vertical right third volume; horizontal scrub; gesture lock in top bar
 - [x] Sheets for dubbing/quality/connection/delivery/episodes/subtitles/settings/external player (shared prefs)
+- [x] Skip ±N uses circular numbered glyphs (`rewind-*` / `fast-forward-*`); the seconds sit inside the icon, not over `play-back` triangles
 - [x] Phone PiP: top-bar button calls `enterPictureInPicture`; Android `supportsPictureInPicture` via RNV Expo plugin; chrome hidden while PiP active
 
 ### Skip OP/ED (anime + Lampa)
@@ -85,7 +85,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 ## Acceptance Criteria
 
-1. TV Watch: Enter play/pause, ← → seek, ↑ ↓ panel, Back closes overlay → panel → exit.
+1. TV Watch: Enter play/pause and shows HUD; ← → seek and show HUD; ↑ ↓ show panel; Back closes overlay → panel → exit.
 2. TV panel focus works across transport and option pills; overlays open and select with OK.
 3. Anime: switch dubbing/quality keeps playback time; episode next/prev and auto-next work.
 4. Lampa: quality/connection/delivery change URL with time preserved; progress resumes via payload or server; BAD_HTTP on direct auto-switches to proxy once; serials support prev/next, episode list, and auto-next.
@@ -102,7 +102,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 Code-verified against acceptance criteria and remote handler (device smoke still recommended on hardware):
 
-- [x] Watch: Enter — play/pause, ← → — seek, ↑ ↓ — panel, Back — exit (`useTvPlayerRemote`)
+- [x] Watch: Enter — play/pause + HUD, ← → — seek + HUD, ↑ ↓ — panel, Back — exit (`useTvPlayerRemote`)
 - [x] Watch: panel focus transport → options; Enter activates; Back hides panel
 - [x] Watch: hint disappears ~2.5s (`TV_PLAYER_HINT_HIDE_MS`)
 - [x] Watch: dubbing / quality / episodes / subtitles / settings / external overlays open and close with Back
@@ -115,7 +115,7 @@ Code-verified against acceptance criteria and remote handler (device smoke still
 
 - Source of truth: `site` `TvVideoPlayer`, `useTvPlayerRemote`, desktop `VideoPlayer` (mobile branch), `WatchPage`.
 - Phone visual language follows site mobile chrome (gradients, center pill, icon row); not TV panel density. Not pixel-perfect CSS copy.
-- Android TV: `useTVEventHandler` only fires when a focusable view is focused (rn-tvos#584); player HUD is software-focus, so `TvVideoPlayer` keeps a 1×1 focus sink.
+- Android TV (rn-tvos 0.85): `useTVEventHandler` is gone. Player D-pad uses Pressable `onKeyDown`/`onKeyUp`/`onPress` on compact `TvPlayerFocusSink` (`preventDefault` on key-down so focus does not leave). Video is `focusable={false}` + `ViewType.TEXTURE`; HUD chrome uses elevation so it composites over ExoPlayer. 1×1 / opacity-0 / fully transparent sinks reject `requestTVFocus`. Android remotes often send numeric `keyCode` (19–23) with empty `key`.
 - Subtitles appear only when the media container exposes text tracks (HLS/embedded); many anime sources have no CC tracks.
 - For heavy 4K streams prefer «Внешний плеер» (Lampa model) if in-app ExoPlayer stutters.
 - Out of scope: ambient backdrop, cast, hover scrub preview, Norigin spatial nav, IMA/ads.

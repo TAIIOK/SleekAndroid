@@ -10,10 +10,11 @@ import {
   type TvPlayerOverlay,
   type TvPlayerPanelFocus,
 } from '@/components/player/tv/tvPlayerTypes';
-import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
+import { useTvEventHandlerSafe, type TvHwEvent } from '@/lib/tvEventHandler';
 import type { ExternalPlayerTarget } from '@/lib/externalPlayer';
 import { cyclePlaybackRate, cycleVideoFit, type PlayerPreferences } from '@/lib/playerPreferences';
 import type { SubtitleTrackInfo } from '@/lib/subtitleTracks';
+import { isTvPlayerActivationKeyUp, mapHiddenHudKey } from '@/lib/tvPlayerRemote';
 
 /** Min interval between overlay ↑/↓ steps — held D-pad can fire faster than focus can follow. */
 const OVERLAY_NAV_MIN_MS = 150;
@@ -58,8 +59,10 @@ function isCenterButton(id: TvPlayerButtonId, enabled: Set<TvPlayerButtonId>): b
   return centerOrder(enabled).includes(id);
 }
 
-function isOptionsButton(id: TvPlayerButtonId): boolean {
-  return TV_PLAYER_OPTIONS_ORDER.includes(id);
+function isOptionsButton(
+  id: TvPlayerPanelFocus,
+): id is (typeof TV_PLAYER_OPTIONS_ORDER)[number] {
+  return (TV_PLAYER_OPTIONS_ORDER as readonly TvPlayerPanelFocus[]).includes(id);
 }
 
 function centerOrder(enabled: Set<TvPlayerButtonId>): TvPlayerButtonId[] {
@@ -165,8 +168,8 @@ function overlayInitialIndex(overlay: TvPlayerOverlay, options: UseTvPlayerRemot
 }
 
 export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
-  const [panelVisible, setPanelVisible] = useState(false);
-  const [panelFocus, setPanelFocus] = useState<TvPlayerPanelFocus>('timeline');
+  const [panelVisible, setPanelVisible] = useState(true);
+  const [panelFocus, setPanelFocus] = useState<TvPlayerPanelFocus>('play');
   const [overlay, setOverlay] = useState<TvPlayerOverlay>(null);
   const [overlayFocusIndex, setOverlayFocusIndex] = useState(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,7 +196,16 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
   }, [clearHideTimer]);
 
   const showPanel = useCallback(
-    (focus: TvPlayerPanelFocus = 'timeline') => {
+    (focus: TvPlayerPanelFocus = 'play') => {
+      setPanelVisible(true);
+      setPanelFocus(focus);
+      scheduleHide();
+    },
+    [scheduleHide],
+  );
+
+  const focusHud = useCallback(
+    (focus: TvPlayerPanelFocus) => {
       setPanelVisible(true);
       setPanelFocus(focus);
       scheduleHide();
@@ -204,7 +216,7 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
   const hidePanel = useCallback(() => {
     clearHideTimer();
     setPanelVisible(false);
-    setPanelFocus('timeline');
+    setPanelFocus('play');
   }, [clearHideTimer]);
 
   const openOverlay = useCallback(
@@ -416,8 +428,10 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
   useEffect(() => {
     if (!options.playing) {
       clearHideTimer();
+      return;
     }
-  }, [clearHideTimer, options.playing]);
+    if (panelVisible) scheduleHide();
+  }, [clearHideTimer, options.playing, panelVisible, scheduleHide]);
 
   // When skip first appears, drop chrome focus so OK maps to skip (not stuck next_episode).
   const hadSkipPromptRef = useRef(false);
@@ -428,89 +442,126 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
     if (appeared && !overlay) hidePanel();
   }, [hidePanel, options.hasSkipPrompt, overlay]);
 
-  useTvEventHandlerSafe((event) => {
-    if (event.eventType === 'focus' || event.eventType === 'blur') return;
-    // rn-tvos Android may emit key-down + key-up; handle key-up only.
-    if (event.eventKeyAction != null && event.eventKeyAction !== 1) return;
+  const lastHwRef = useRef({ type: '', at: 0 });
+  const panelVisibleRef = useRef(panelVisible);
+  const overlayRef = useRef(overlay);
+  const panelFocusRef = useRef(panelFocus);
+  panelVisibleRef.current = panelVisible;
+  overlayRef.current = overlay;
+  panelFocusRef.current = panelFocus;
 
-    const opts = optionsRef.current;
-    const type = event.eventType;
+  const handleHwEvent = useCallback(
+    (event: TvHwEvent) => {
+      if (event.eventType === 'focus' || event.eventType === 'blur') return;
+      // OK key-up must not toggle play again (keydown + onPress + keyup).
+      if (isTvPlayerActivationKeyUp(event)) return;
+      // Debounce key-down+key-up (or dropped key-up after preventDefault).
+      const type = event.eventType;
+      const now = Date.now();
+      if (type === lastHwRef.current.type && now - lastHwRef.current.at < 90) return;
+      lastHwRef.current = { type, at: now };
 
-    if (overlay) {
-      if (type === 'menu' || type === 'back') {
-        closeOverlay();
-        return;
-      }
-      if (type === 'select' || type === 'playPause') {
-        activateOverlayItem();
-        return;
-      }
-      const count = overlayItemCount(overlay, opts);
-      if (count > 0 && (type === 'down' || type === 'up')) {
-        const now = Date.now();
-        if (now - lastOverlayNavAtRef.current < OVERLAY_NAV_MIN_MS) return;
-        lastOverlayNavAtRef.current = now;
-        if (type === 'down') {
-          setOverlayFocusIndex((idx) => (idx + 1) % count);
-        } else {
-          setOverlayFocusIndex((idx) => (idx - 1 + count) % count);
+      const opts = optionsRef.current;
+      const overlay = overlayRef.current;
+      const panelVisible = panelVisibleRef.current;
+      const panelFocus = panelFocusRef.current;
+
+      if (overlay) {
+        if (type === 'menu' || type === 'back') {
+          closeOverlay();
+          return;
         }
+        if (type === 'select' || type === 'playPause') {
+          activateOverlayItem();
+          return;
+        }
+        const count = overlayItemCount(overlay, opts);
+        if (count > 0 && (type === 'down' || type === 'up')) {
+          if (now - lastOverlayNavAtRef.current < OVERLAY_NAV_MIN_MS) return;
+          lastOverlayNavAtRef.current = now;
+          if (type === 'down') {
+            setOverlayFocusIndex((idx) => (idx + 1) % count);
+          } else {
+            setOverlayFocusIndex((idx) => (idx - 1 + count) % count);
+          }
+        }
+        return;
       }
-      return;
-    }
 
-    if (type === 'menu' || type === 'back') {
       if (panelVisible) {
+        if (type === 'menu' || type === 'back') {
+          hidePanel();
+          return;
+        }
+        if (type === 'select' || type === 'playPause') {
+          if (isOptionsButton(panelFocus)) {
+            activateButton(panelFocus);
+            return;
+          }
+          if (opts.hasSkipPrompt && opts.onApplySkip) {
+            opts.onApplySkip();
+            hidePanel();
+            return;
+          }
+          if (panelFocus !== 'timeline') {
+            activateButton(panelFocus);
+            return;
+          }
+          opts.onTogglePlay();
+          showPanel(firstEnabledCenter(buildEnabledButtons(opts)));
+          return;
+        }
+        if (type === 'up' || type === 'down' || type === 'left' || type === 'right') {
+          if (panelFocus === 'timeline' && (type === 'left' || type === 'right')) {
+            handlePanelArrow(type);
+          }
+          // Other arrows: native TV focus moves Play ↔ pills.
+        }
+        return;
+      }
+
+      const command = mapHiddenHudKey(type, {
+        hasSkipPrompt: Boolean(opts.hasSkipPrompt),
+        centerFocus: firstEnabledCenter(buildEnabledButtons(opts)),
+      });
+      if (!command) return;
+      if (command.kind === 'back') {
+        opts.onBack();
+        return;
+      }
+      if (command.kind === 'skip') {
+        opts.onApplySkip?.();
         hidePanel();
         return;
       }
-      opts.onBack();
-      return;
-    }
-
-    if (type === 'select' || type === 'playPause') {
-      // Bottom option pills still activate when explicitly focused.
-      if (panelVisible && isOptionsButton(panelFocus)) {
-        activateButton(panelFocus);
+      if (command.kind === 'togglePlay') {
+        opts.onTogglePlay();
+        showPanel(command.focus);
         return;
       }
-      // Skip beats center dock (play/prev/next) — otherwise OK after "next" stays on next.
-      if (opts.hasSkipPrompt && opts.onApplySkip) {
-        opts.onApplySkip();
-        hidePanel();
+      if (command.kind === 'seekBack') {
+        opts.onSeekBack();
+        showPanel(command.focus);
         return;
       }
-      if (panelVisible && panelFocus !== 'timeline') {
-        activateButton(panelFocus);
+      if (command.kind === 'seekForward') {
+        opts.onSeekForward();
+        showPanel(command.focus);
         return;
       }
-      const enabled = buildEnabledButtons(opts);
-      const wasPlaying = opts.playing;
-      opts.onTogglePlay();
-      // After pause, open chrome focused on the center play dock.
-      if (wasPlaying) {
-        showPanel(firstEnabledCenter(enabled));
-      } else {
-        scheduleHide();
-      }
-      return;
-    }
+      showPanel(command.focus);
+    },
+    [
+      activateButton,
+      activateOverlayItem,
+      closeOverlay,
+      handlePanelArrow,
+      hidePanel,
+      showPanel,
+    ],
+  );
 
-    if (panelVisible) {
-      if (type === 'up' || type === 'down' || type === 'left' || type === 'right') {
-        handlePanelArrow(type);
-      }
-      return;
-    }
-
-    if (type === 'left') opts.onSeekBack();
-    else if (type === 'right') opts.onSeekForward();
-    else if (type === 'up') showPanel('timeline');
-    else if (type === 'down') {
-      const enabled = buildEnabledButtons(opts);
-      showPanel(firstEnabledCenter(enabled));
-    }
-  });
+  useTvEventHandlerSafe(handleHwEvent);
 
   useEffect(() => () => clearHideTimer(), [clearHideTimer]);
 
@@ -540,5 +591,7 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
     closeOverlay,
     enabledButtons,
     activateButton,
+    focusHud,
+    handleHwEvent,
   };
 }

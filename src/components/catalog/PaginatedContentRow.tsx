@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
 import {
+  FlatList,
   ScrollView,
   StyleSheet,
+  Text,
   View,
+  type ListRenderItemInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -30,6 +33,8 @@ interface PaginatedContentRowProps<T> {
   /** Nested in a padded parent — no extra horizontal gutter on title/rail. */
   flush?: boolean;
   layout?: 'rail' | 'grid' | 'showcase';
+  /** Poster card width for phone FlatList layout math. */
+  itemWidth?: number;
 }
 
 function maybeLoadMore(
@@ -44,6 +49,8 @@ function maybeLoadMore(
     onLoadMore();
   }
 }
+
+const RAIL_GAP = isTvUi() ? 10 : 12;
 
 export function PaginatedContentRow<T>({
   title,
@@ -60,6 +67,7 @@ export function PaginatedContentRow<T>({
   onSeeAll,
   hideTitle,
   flush = false,
+  itemWidth = layout.posterWidthRail,
 }: PaginatedContentRowProps<T>) {
   const horizontalPad = flush
     ? 0
@@ -67,10 +75,78 @@ export function PaginatedContentRow<T>({
       ? layout.gutterDesktop
       : layout.gutterMobile;
   const skeletonCount = isTvUi() ? 4 : 6;
+  const stride = itemWidth + RAIL_GAP;
 
-  if (!isLoading && (isError || items.length === 0)) {
-    return null;
-  }
+  const skeletonRow = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
+      {...tvHorizontalCatalogScrollProps}
+    >
+      {Array.from({ length: skeletonCount }).map((_, index) => (
+        <PosterSkeleton key={index} />
+      ))}
+    </ScrollView>
+  );
+
+  const tvRow = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
+      {...tvHorizontalCatalogScrollProps}
+      onScrollEndDrag={(event) =>
+        maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
+      }
+      onMomentumScrollEnd={(event) =>
+        maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
+      }
+      // TV focus jumps fire onScroll (no momentum); keep this for D-pad load-more.
+      onScroll={(event) => maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)}
+      scrollEventThrottle={64}
+    >
+      {items.map((item, index) => (
+        <View key={String(getItemKey(item, index))} collapsable={false}>
+          {renderItem(item, index)}
+        </View>
+      ))}
+      {isFetchingNextPage ? <PosterSkeleton /> : null}
+    </ScrollView>
+  );
+
+  const renderPhoneItem = ({ item, index }: ListRenderItemInfo<T>) => (
+    <View collapsable={false} style={{ width: itemWidth, marginRight: RAIL_GAP }}>
+      {renderItem(item, index)}
+    </View>
+  );
+
+  const phoneRow = (
+    <FlatList
+      horizontal
+      data={items}
+      keyExtractor={(item, index) => String(getItemKey(item, index))}
+      renderItem={renderPhoneItem}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.phoneScroll, { paddingHorizontal: horizontalPad }]}
+      initialNumToRender={6}
+      maxToRenderPerBatch={4}
+      windowSize={5}
+      removeClippedSubviews
+      nestedScrollEnabled
+      getItemLayout={(_data, index) => ({
+        length: stride,
+        offset: stride * index,
+        index,
+      })}
+      onEndReached={() => {
+        if (!hasNextPage || isFetchingNextPage || !onLoadMore) return;
+        onLoadMore();
+      }}
+      onEndReachedThreshold={0.4}
+      ListFooterComponent={isFetchingNextPage ? <PosterSkeleton /> : null}
+    />
+  );
 
   return (
     <View style={styles.section} {...tvRailSectionSnapProps}>
@@ -85,41 +161,17 @@ export function PaginatedContentRow<T>({
         />
       ) : null}
 
-      {isLoading && items.length === 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
-          {...tvHorizontalCatalogScrollProps}
-        >
-          {Array.from({ length: skeletonCount }).map((_, index) => (
-            <PosterSkeleton key={index} />
-          ))}
-        </ScrollView>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
-          {...tvHorizontalCatalogScrollProps}
-          onScrollEndDrag={(event) =>
-            maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
-          }
-          onMomentumScrollEnd={(event) =>
-            maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
-          }
-          // TV focus jumps fire onScroll (no momentum); keep this for D-pad load-more.
-          onScroll={(event) => maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)}
-          scrollEventThrottle={64}
-        >
-          {items.map((item, index) => (
-            <View key={String(getItemKey(item, index))} collapsable={false}>
-              {renderItem(item, index)}
-            </View>
-          ))}
-          {isFetchingNextPage ? <PosterSkeleton /> : null}
-        </ScrollView>
-      )}
+      {isLoading && items.length === 0
+        ? skeletonRow
+        : isError && items.length === 0
+          ? (
+              <Text style={[styles.error, { paddingHorizontal: horizontalPad }]}>
+                {errorMessage ?? 'Не удалось загрузить ленту'}
+              </Text>
+            )
+          : isTvUi()
+            ? tvRow
+            : phoneRow}
     </View>
   );
 }
@@ -133,6 +185,9 @@ const styles = StyleSheet.create({
     paddingTop: isTvUi() ? 8 : 0,
     paddingBottom: isTvUi() ? 10 : spacing.sm,
     gap: isTvUi() ? 10 : 12,
+  },
+  phoneScroll: {
+    paddingBottom: spacing.sm,
   },
   hint: {
     color: colors.textSecondary,

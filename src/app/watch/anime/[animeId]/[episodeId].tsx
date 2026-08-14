@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { fetchAnimeDetail, fetchAnimeEpisodes, fetchAnimeSkip } from '@/api/catalog';
+import { fetchAnimeDetail, fetchAnimeEpisodes, fetchAnimeSkip, fetchEpisodeById } from '@/api/catalog';
 import { fetchAnimeProgress } from '@/api/progress';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import type { PlayerControlHandle, PlayerEpisodeNav } from '@/components/player/types';
@@ -15,6 +15,7 @@ import {
 import { useWatchEpisodeNavigation } from '@/hooks/useWatchEpisodeNavigation';
 import { saveAnimeLastDubbing, loadAnimeLastDubbing } from '@/lib/animeLastDubbing';
 import {
+  EMPTY_ANIME_VIDEOS,
   getQualityOptionsForDubbing,
   getUniqueDubbingOptions,
   pickBestDubbingOption,
@@ -23,26 +24,45 @@ import {
   type PlaybackQuality,
 } from '@/lib/animePlaybackOptions';
 import { episodeNumber, isRedundantEpisodeTitle } from '@/lib/animeDetail';
+import { animePoster } from '@/lib/poster';
 import {
   buildSkipSegments,
+  EMPTY_SKIP_SEGMENTS,
   parseSkipInterval,
+  sameSkipSegments,
   skipSegmentsFromEpisode,
   skipSegmentsFromVideos,
 } from '@/lib/playerSkip';
 import { animeResumeProgress } from '@/lib/progressUtils';
+import {
+  animeWatchHistoryKey,
+  rememberWatchHistoryMeta,
+} from '@/lib/watchHistoryMeta';
 import { useAuth } from '@/providers/AuthProvider';
+import type { UserAnimeProgress } from '@/types/progress';
+
+function pickRouteParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+const EMPTY_ANIME_PROGRESS: UserAnimeProgress[] = [];
 
 export default function WatchAnimeScreen() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { animeId, episodeId, title: titleParam, startProgress, preferredDubbing } =
-    useLocalSearchParams<{
-      animeId: string;
-      episodeId: string;
-      title?: string;
-      startProgress?: string;
-      preferredDubbing?: string;
-    }>();
+  const params = useLocalSearchParams<{
+    animeId: string;
+    episodeId: string;
+    title?: string;
+    startProgress?: string;
+    preferredDubbing?: string;
+  }>();
+  const animeId = pickRouteParam(params.animeId);
+  const episodeId = pickRouteParam(params.episodeId);
+  const titleParam = pickRouteParam(params.title);
+  const startProgress = pickRouteParam(params.startProgress);
+  const preferredDubbing = pickRouteParam(params.preferredDubbing) || undefined;
 
   const numericAnimeId = Number(animeId);
   const numericEpisodeId = Number(episodeId);
@@ -61,15 +81,21 @@ export default function WatchAnimeScreen() {
     staleTime: 60_000,
   });
 
-  const { data: progressRows = [] } = useQuery({
+  const { data: progressData } = useQuery({
     queryKey: ['anime-progress', numericAnimeId],
     queryFn: () => fetchAnimeProgress(numericAnimeId),
     enabled: isAuthenticated && Number.isFinite(numericAnimeId),
     staleTime: 30_000,
   });
+  const progressRows = progressData ?? EMPTY_ANIME_PROGRESS;
 
-  const episode = episodesData?.episodes.find((e) => e.id === numericEpisodeId);
-  const videos = episode?.video ?? [];
+  const { data: currentEpisode, isLoading: currentEpisodeLoading } = useQuery({
+    queryKey: ['episode', numericEpisodeId],
+    queryFn: () => fetchEpisodeById(numericEpisodeId),
+    enabled: Number.isFinite(numericEpisodeId) && numericEpisodeId > 0,
+    staleTime: 60_000,
+  });
+
   const progressByEpisodeId = useMemo(() => {
     const map: Record<number, number> = {};
     for (const row of progressRows) {
@@ -84,6 +110,11 @@ export default function WatchAnimeScreen() {
     numericEpisodeId,
     progressByEpisodeId,
   );
+  const episode =
+    (currentEpisode && currentEpisode.id === numericEpisodeId ? currentEpisode : undefined) ??
+    episodeNavData.episodeById.get(numericEpisodeId) ??
+    episodesData?.episodes.find((e) => e.id === numericEpisodeId);
+  const videos = episode?.video ?? EMPTY_ANIME_VIDEOS;
   const episodeOrdinal = episode ? episodeNumber(episode) : undefined;
 
   const dubbingOptionsList = useMemo(() => getUniqueDubbingOptions(videos), [videos]);
@@ -91,7 +122,7 @@ export default function WatchAnimeScreen() {
   /** undefined = AsyncStorage load in flight */
   const [storedDubbing, setStoredDubbing] = useState<string | null | undefined>(undefined);
   const [selectedQuality, setSelectedQuality] = useState<PlaybackQuality>('720p');
-  const [skipSegments, setSkipSegments] = useState(buildSkipSegments());
+  const [skipSegments, setSkipSegments] = useState(EMPTY_SKIP_SEGMENTS);
   /** Unload native Video before applying the next episode URL. */
   const [unloadPlayer, setUnloadPlayer] = useState(false);
   const playbackTimeRef = useRef(0);
@@ -116,6 +147,17 @@ export default function WatchAnimeScreen() {
   const playerSrc = unloadPlayer ? '' : (streamSrc ?? '');
 
   const title = titleParam || detail?.title || 'Воспроизведение';
+
+  useEffect(() => {
+    if (!Number.isFinite(numericAnimeId) || numericAnimeId <= 0) return;
+    const rememberedTitle = title.trim() && title !== 'Воспроизведение' ? title.trim() : undefined;
+    rememberWatchHistoryMeta(animeWatchHistoryKey(numericAnimeId), {
+      title: rememberedTitle,
+      poster: detail ? animePoster(detail) : undefined,
+      kind: 'anime',
+    });
+  }, [detail, numericAnimeId, title]);
+
   const subtitle = useMemo(() => {
     const parts: string[] = [];
     if (episodeOrdinal) parts.push(`Эпизод ${episodeOrdinal}`);
@@ -161,11 +203,17 @@ export default function WatchAnimeScreen() {
     }
     let cancelled = false;
     setStoredDubbing(undefined);
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        setStoredDubbing((current) => (current === undefined ? null : current));
+      }
+    }, 300);
     void loadAnimeLastDubbing(numericAnimeId).then((value) => {
       if (!cancelled) setStoredDubbing(value);
     });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
   }, [numericAnimeId]);
 
@@ -194,15 +242,19 @@ export default function WatchAnimeScreen() {
   }, [qualityOptionsList, selectedQuality]);
 
   useEffect(() => {
+    const replaceSkipSegments = (next: typeof skipSegments) => {
+      setSkipSegments((prev) => (sameSkipSegments(prev, next) ? prev : next));
+    };
+
     if (!episodeOrdinal || !Number.isFinite(numericAnimeId)) {
-      setSkipSegments(buildSkipSegments());
+      replaceSkipSegments(EMPTY_SKIP_SEGMENTS);
       return;
     }
 
     const fromVideos = skipSegmentsFromVideos(videos);
     const fromEpisode = skipSegmentsFromEpisode(episode);
     const local = fromVideos.length ? fromVideos : fromEpisode;
-    setSkipSegments(local);
+    replaceSkipSegments(local);
 
     let cancelled = false;
     void (async () => {
@@ -215,7 +267,7 @@ export default function WatchAnimeScreen() {
         parseSkipInterval(openingRes, 'opening'),
         parseSkipInterval(endingRes, 'ending'),
       );
-      setSkipSegments(fromApi.length ? fromApi : local);
+      replaceSkipSegments(fromApi.length ? fromApi : local);
     })();
 
     return () => {
@@ -387,7 +439,7 @@ export default function WatchAnimeScreen() {
     return <Redirect href="/login" />;
   }
 
-  if (isLoading && !episode) {
+  if (!episode && (currentEpisodeLoading || isLoading)) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator color={colors.brand} size="large" />
@@ -395,7 +447,7 @@ export default function WatchAnimeScreen() {
     );
   }
 
-  if (!episode || isError) {
+  if (!episode) {
     return (
       <View style={styles.loader}>
         <Text style={styles.errorTitle}>Нет источника видео</Text>

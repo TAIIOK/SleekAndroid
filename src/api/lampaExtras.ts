@@ -1,5 +1,6 @@
 import type { LampaItem } from '@/api/catalog';
 import { watchHubUrl } from '@/lib/config';
+import { sortLampaItemsByYear } from '@/lib/lampaDetail';
 
 const TMDB_UID = '1q22w3e4';
 
@@ -41,6 +42,8 @@ export function mapTmdbMediaToLampaItem(
   if (!tmdbId) return null;
 
   const kind = inferMediaKind(item, fallbackKind);
+  const releaseDate = typeof item.release_date === 'string' ? item.release_date : undefined;
+  const firstAirDate = typeof item.first_air_date === 'string' ? item.first_air_date : undefined;
   return {
     id: tmdbId,
     kind,
@@ -48,7 +51,9 @@ export function mapTmdbMediaToLampaItem(
     name: typeof item.name === 'string' ? item.name : undefined,
     poster_path: typeof item.poster_path === 'string' ? item.poster_path : undefined,
     vote_average: typeof item.vote_average === 'number' ? item.vote_average : undefined,
-  };
+    release_date: releaseDate,
+    first_air_date: firstAirDate,
+  } as LampaItem;
 }
 
 function mapTmdbResults(payload: unknown, fallbackKind: 'movie' | 'tv'): LampaItem[] {
@@ -88,27 +93,41 @@ export async function fetchLampaRecommendations(
   return mapTmdbResults(payload, kind).filter((item) => Number(item.id) !== tmdbId);
 }
 
-/** Films from the same TMDB collection (franchise). Movies only. */
-export async function fetchLampaRelated(movieTmdbId: number): Promise<LampaItem[]> {
-  const detail = await fetchTmdbLampaDetail('movie', movieTmdbId);
-  const collection = detail?.belongs_to_collection as { id?: number } | undefined;
-  const collectionId = collection?.id;
-  if (!collectionId) return [];
+/** Titles from the same TMDB collection (franchise), oldest first. */
+export async function fetchLampaRelated(
+  kind: 'movie' | 'tv',
+  tmdbId: number,
+  collectionId?: number,
+): Promise<LampaItem[]> {
+  let resolvedId =
+    collectionId != null && Number.isFinite(collectionId) && collectionId > 0
+      ? collectionId
+      : undefined;
+  if (resolvedId == null) {
+    const detail = await fetchTmdbLampaDetail(kind, tmdbId);
+    const collection = detail?.belongs_to_collection as { id?: number } | undefined;
+    resolvedId =
+      collection?.id != null && Number.isFinite(collection.id) && collection.id > 0
+        ? collection.id
+        : undefined;
+  }
+  if (resolvedId == null) return [];
 
   const payload = await watchHubJson<{ parts?: unknown[] }>(
-    `/tmdb/api/3/collection/${collectionId}?${tmdbQuery()}`,
+    `/tmdb/api/3/collection/${resolvedId}?${tmdbQuery()}`,
   );
   if (!Array.isArray(payload?.parts)) return [];
 
   const seen = new Set<number>();
   const items: LampaItem[] = [];
   for (const raw of payload.parts) {
-    const mapped = mapTmdbMediaToLampaItem(raw, 'movie');
-    if (!mapped?.id || Number(mapped.id) === movieTmdbId || seen.has(Number(mapped.id))) continue;
-    seen.add(Number(mapped.id));
+    const mapped = mapTmdbMediaToLampaItem(raw, kind);
+    const id = Number(mapped?.id);
+    if (!mapped || !Number.isFinite(id) || id === tmdbId || seen.has(id)) continue;
+    seen.add(id);
     items.push(mapped);
   }
-  return items;
+  return sortLampaItemsByYear(items);
 }
 
 export interface LampaCastMember {

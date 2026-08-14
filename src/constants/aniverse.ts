@@ -50,12 +50,14 @@ export const layout = {
   posterAspect: 120 / 170,
   posterWidthRail: isTvUi() ? 120 : 120,
   /** Similar / recommendations rails on detail screens (phone denser than home). */
-  posterWidthDetail: isTvUi() ? 120 : 100,
+  posterWidthDetail: isTvUi() ? 120 : 84,
   posterWidthShowcase: isTvUi() ? 120 : 140,
   maxContentWidth: 1440,
-  continueCardWidth: isTvUi() ? 190 : 260,
+  continueCardWidth: isTvUi() ? 190 : 200,
   quickActionCardWidth: isTvUi() ? 200 : 168,
   quickActionCardHeight: isTvUi() ? 96 : 88,
+  /** Prefetch margin for home catalog lazy rails on phone (~one screen ahead). */
+  homeLazyRootMargin: 360,
 };
 
 export function mobileTopChromeInset(safeTop: number): number {

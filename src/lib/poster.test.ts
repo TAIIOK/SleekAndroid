@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectBackdropImageCandidates,
   extractPosterPath,
+  isHeroBackdropImageType,
   isPlausibleImageURL,
   pickFromPosterImages,
+  pickHeroPosterImageUrl,
   pickPosterImageUrl,
 } from './poster';
 
@@ -81,5 +84,46 @@ describe('pickFromPosterImages', () => {
         },
       ]),
     ).toBe('https://static.yani.tv/posters/full/1.jpg');
+  });
+});
+
+describe('isHeroBackdropImageType', () => {
+  it('accepts landscape hero types', () => {
+    expect(isHeroBackdropImageType('background')).toBe(true);
+    expect(isHeroBackdropImageType('Banner')).toBe(true);
+    expect(isHeroBackdropImageType('fanart')).toBe(true);
+    expect(isHeroBackdropImageType('landscape')).toBe(true);
+  });
+
+  it('rejects posters and screenshots', () => {
+    expect(isHeroBackdropImageType('poster')).toBe(false);
+    expect(isHeroBackdropImageType('screenshot')).toBe(false);
+  });
+});
+
+describe('pickHeroPosterImageUrl', () => {
+  it('skips Anilib source labels like source2', () => {
+    expect(
+      pickHeroPosterImageUrl({
+        type: 'background',
+        source: 'source2',
+        preview: 'https://cdn.example.com/bg.jpg',
+        optimized: 'https://cdn.example.com/bg.jpg',
+      }),
+    ).toBe('https://cdn.example.com/bg.jpg');
+  });
+});
+
+describe('collectBackdropImageCandidates', () => {
+  it('orders background before banner', () => {
+    expect(
+      collectBackdropImageCandidates([
+        { type: 'banner', source: 'https://cdn.example.com/banner.jpg' },
+        { type: 'background', source: 'https://cdn.example.com/background.jpg' },
+      ]),
+    ).toEqual([
+      'https://cdn.example.com/background.jpg',
+      'https://cdn.example.com/banner.jpg',
+    ]);
   });
 });

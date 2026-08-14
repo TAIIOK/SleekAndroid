@@ -17,6 +17,7 @@ import {
   type VideoFitMode,
 } from '@/lib/playerPreferences';
 import {
+  EMPTY_SKIP_SEGMENTS,
   findActiveSkipPrompt,
   isEndingLikeSkip,
   isOpeningLikeSkip,
@@ -89,6 +90,11 @@ export interface RNVideoEngineOptions {
   externalSubtitles?: SubtitleTrackInfo[];
   startTime?: number;
   startProgressFraction?: number;
+  /**
+   * When false, the engine mounts paused and stays paused until `play()`.
+   * Party watch uses this so join follows room pause instead of autoplaying.
+   */
+  autoPlay?: boolean;
   skipSegments?: PlayerSkipSegment[];
   onProgress?: (current: number, duration: number) => void;
   onEnded?: () => void;
@@ -103,7 +109,8 @@ export function useRNVideoEngine({
   externalSubtitles = EMPTY_SUBTITLES,
   startTime,
   startProgressFraction,
-  skipSegments = [],
+  autoPlay = true,
+  skipSegments = EMPTY_SKIP_SEGMENTS,
   onProgress,
   onEnded,
   onAutoPlayNext,
@@ -120,7 +127,7 @@ export function useRNVideoEngine({
   const [subtitleClock, setSubtitleClock] = useState(0);
   const [nativeCueText, setNativeCueText] = useState('');
   const [showBuffering, setShowBuffering] = useState(true);
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(autoPlay);
   const [volume, setVolumeState] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   /** Skip CTA only after loader is gone and we have a trusted playback position. */
@@ -129,7 +136,9 @@ export function useRNVideoEngine({
   const videoRef = useRef<VideoRef>(null);
   const dismissedSkipsRef = useRef(new Set<string>());
   const autoHandledSkipsRef = useRef(new Set<string>());
-  const wantPlayingRef = useRef(true);
+  const wantPlayingRef = useRef(autoPlay);
+  const autoPlayRef = useRef(autoPlay);
+  autoPlayRef.current = autoPlay;
   const hasBeenReadyRef = useRef(false);
   const showBufferingRef = useRef(true);
   const bufferSpinnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -297,7 +306,7 @@ export function useRNVideoEngine({
   }, [skipSegments, refreshSkipPrompt]);
 
   useEffect(() => {
-    wantPlayingRef.current = true;
+    wantPlayingRef.current = autoPlayRef.current;
     hasBeenReadyRef.current = false;
     dismissedSkipsRef.current = new Set();
     autoHandledSkipsRef.current = new Set();
@@ -321,7 +330,7 @@ export function useRNVideoEngine({
     setNativeCueText('');
     setSubtitleClock(0);
     setShowBuffering(true);
-    setPlaying(true);
+    setPlaying(autoPlayRef.current);
     if (bufferSpinnerTimerRef.current) {
       clearTimeout(bufferSpinnerTimerRef.current);
       bufferSpinnerTimerRef.current = null;
@@ -610,15 +619,19 @@ export function useRNVideoEngine({
     }
   }, [emitProgress, getPlaybackCapture]);
 
+  const play = useCallback(() => {
+    wantPlayingRef.current = true;
+    setPlaying(true);
+  }, []);
+
   const seekTo = useCallback((time: number) => {
     const dur = lastGoodDurationRef.current || durationRef.current || duration;
-    if (!dur) return;
-    const next = Math.max(0, Math.min(time, dur));
+    const next = dur > 0 ? Math.max(0, Math.min(time, dur)) : Math.max(0, time);
     videoRef.current?.seek(next);
     rememberTime(next);
     setCurrentTime(next);
     refreshSkipPrompt(next);
-    emitProgress(next, dur);
+    if (dur > 0) emitProgress(next, dur);
     if (wantPlayingRef.current) setPlaying(true);
   }, [duration, emitProgress, refreshSkipPrompt, rememberTime]);
 
@@ -739,6 +752,7 @@ export function useRNVideoEngine({
     nativeCueText: isExternalActive ? '' : nativeCueText,
     setSubtitleTrack,
     togglePlay,
+    play,
     pause,
     seekTo,
     seekBy,

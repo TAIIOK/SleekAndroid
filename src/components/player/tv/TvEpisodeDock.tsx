@@ -1,6 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { TvPlayerPanelFocus } from '@/components/player/tv/tvPlayerTypes';
+import { TvHudPressable } from '@/components/player/tv/TvHudPressable';
+import type { TvPlayerButtonId, TvPlayerPanelFocus } from '@/components/player/tv/tvPlayerTypes';
+import type { TvHwEvent } from '@/lib/tvEventHandler';
 import { spacing } from '@/constants/aniverse';
 
 interface TvEpisodeDockProps {
@@ -9,24 +11,15 @@ interface TvEpisodeDockProps {
   panelFocus: TvPlayerPanelFocus;
   hasPrev: boolean;
   hasNext: boolean;
-}
-
-function CircleButton({
-  focused,
-  play,
-  children,
-}: {
-  focused: boolean;
-  play?: boolean;
-  children: string;
-}) {
-  return (
-    <View style={[styles.btn, play && styles.btnPlay, focused && styles.btnFocused]}>
-      <Text style={[styles.icon, play && styles.iconPlay, focused && styles.iconFocused]}>
-        {children}
-      </Text>
-    </View>
-  );
+  onTvKey: (event: TvHwEvent) => void;
+  onFocusButton: (id: TvPlayerButtonId) => void;
+  onActivate: (id: TvPlayerButtonId) => void;
+  /** Dock-only (panel hidden): ↑/↓ must show the bottom bar, not native-search. */
+  captureVertical?: boolean;
+  nextFocusDown?: number;
+  nextFocusUp?: number;
+  nextFocusLeft?: number;
+  nextFocusRight?: number;
 }
 
 /** Mid-screen transport: prev / play / next — site TV-style circular controls. */
@@ -36,22 +29,73 @@ export function TvEpisodeDock({
   panelFocus,
   hasPrev,
   hasNext,
+  onTvKey,
+  onFocusButton,
+  onActivate,
+  captureVertical = false,
+  nextFocusDown,
+  nextFocusUp,
+  nextFocusLeft,
+  nextFocusRight,
 }: TvEpisodeDockProps) {
   if (!visible) return null;
 
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.row}>
         {hasPrev ? (
-          <CircleButton focused={panelFocus === 'prev_episode'}>⏮</CircleButton>
+          <TvHudPressable
+            style={[styles.btn, panelFocus === 'prev_episode' && styles.btnFocused]}
+            onTvKey={onTvKey}
+            captureVertical={captureVertical}
+            onFocus={() => onFocusButton('prev_episode')}
+            onPress={() => onActivate('prev_episode')}
+          >
+            <Text
+              style={[styles.icon, panelFocus === 'prev_episode' && styles.iconFocused]}
+            >
+              ⏮
+            </Text>
+          </TvHudPressable>
         ) : (
           <View style={styles.spacer} />
         )}
-        <CircleButton focused={panelFocus === 'play'} play>
-          {playing ? '❚❚' : '▶'}
-        </CircleButton>
+        <TvHudPressable
+          hasTVPreferredFocus
+          style={[styles.btn, styles.btnPlay, panelFocus === 'play' && styles.btnFocused]}
+          onTvKey={onTvKey}
+          captureVertical={captureVertical}
+          nextFocusDown={nextFocusDown}
+          nextFocusUp={nextFocusUp}
+          nextFocusLeft={nextFocusLeft}
+          nextFocusRight={nextFocusRight}
+          onFocus={() => onFocusButton('play')}
+          onPress={() => onActivate('play')}
+        >
+          <Text
+            style={[
+              styles.icon,
+              styles.iconPlay,
+              panelFocus === 'play' && styles.iconFocused,
+            ]}
+          >
+            {playing ? '❚❚' : '▶'}
+          </Text>
+        </TvHudPressable>
         {hasNext ? (
-          <CircleButton focused={panelFocus === 'next_episode'}>⏭</CircleButton>
+          <TvHudPressable
+            style={[styles.btn, panelFocus === 'next_episode' && styles.btnFocused]}
+            onTvKey={onTvKey}
+            captureVertical={captureVertical}
+            onFocus={() => onFocusButton('next_episode')}
+            onPress={() => onActivate('next_episode')}
+          >
+            <Text
+              style={[styles.icon, panelFocus === 'next_episode' && styles.iconFocused]}
+            >
+              ⏭
+            </Text>
+          </TvHudPressable>
         ) : (
           <View style={styles.spacer} />
         )}

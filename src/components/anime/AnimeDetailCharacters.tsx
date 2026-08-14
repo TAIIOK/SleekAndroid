@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -10,7 +11,8 @@ import type { AnimeCharacter } from '@/api/catalog';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
-import { resolvePosterUrl } from '@/lib/config';
+import { resolveAnimePosterUrl } from '@/lib/config';
+import { hotlinkImageSource, resolveHotlinkDisplayUri } from '@/lib/hotlinkImage';
 import { isTvUi } from '@/lib/isTvUi';
 
 interface AnimeDetailCharactersProps {
@@ -18,22 +20,51 @@ interface AnimeDetailCharactersProps {
   loading?: boolean;
 }
 
+/**
+ * Defer mounting character images until after the first paint so a burst of
+ * native Image views cannot starve the detail back button on the JS/UI thread.
+ */
 export function AnimeDetailCharacters({ characters, loading }: AnimeDetailCharactersProps) {
+  const [mountImages, setMountImages] = useState(false);
+
+  useEffect(() => {
+    if (loading || !characters.length) {
+      setMountImages(false);
+      return;
+    }
+    const timer = setTimeout(() => setMountImages(true), 120);
+    return () => clearTimeout(timer);
+  }, [loading, characters.length]);
+
   if (!loading && !characters.length) return null;
 
+  const skeletonW = TILE;
+  const skeletonH = TILE_H + 36;
+  const showSkeleton = loading && !characters.length;
+  const showTiles = !showSkeleton && mountImages;
+
   return (
-    <View style={styles.wrap}>
-      <SectionHeader title="Персонажи" flush />
-      {loading && !characters.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} width={88} height={140} rounded={radii.md} />
-          ))}
-        </ScrollView>
+    <View style={styles.wrap} pointerEvents="box-none">
+      {isTvUi() ? (
+        <SectionHeader title="Персонажи" flush />
       ) : (
+        <Text style={styles.phoneTitle}>Персонажи</Text>
+      )}
+      {showTiles ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
           {characters.map((character, index) => (
             <CharacterTile key={character.id ?? index} character={character} />
+          ))}
+        </ScrollView>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+          pointerEvents="none"
+        >
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} width={skeletonW} height={skeletonH} rounded={radii.md} />
           ))}
         </ScrollView>
       )}
@@ -41,15 +72,59 @@ export function AnimeDetailCharacters({ characters, loading }: AnimeDetailCharac
   );
 }
 
+function characterImageUrl(character: AnimeCharacter): string | undefined {
+  return (
+    resolveAnimePosterUrl(character.thumbnail) ??
+    resolveAnimePosterUrl(character.image)
+  );
+}
+
+function characterRole(character: AnimeCharacter): string | undefined {
+  const role = (character.type ?? character.role)?.trim();
+  return role || undefined;
+}
+
 function CharacterTile({ character }: { character: AnimeCharacter }) {
-  const image = resolvePosterUrl(character.image);
-  const role = character.role?.trim();
+  const remoteUri = characterImageUrl(character);
+  const role = characterRole(character);
+  const fallbackTried = useRef(false);
+  const [source, setSource] = useState<{ uri: string; headers?: Record<string, string> } | null>(
+    () => (remoteUri ? hotlinkImageSource(remoteUri) : null),
+  );
+  const [failed, setFailed] = useState(!remoteUri);
+
+  useEffect(() => {
+    fallbackTried.current = false;
+    setFailed(!remoteUri);
+    setSource(remoteUri ? hotlinkImageSource(remoteUri) : null);
+  }, [remoteUri]);
+
+  const onImageError = () => {
+    if (!remoteUri || fallbackTried.current) {
+      setFailed(true);
+      return;
+    }
+    fallbackTried.current = true;
+    void resolveHotlinkDisplayUri(remoteUri).then((uri) => {
+      if (uri) {
+        setSource({ uri });
+        setFailed(false);
+      } else {
+        setFailed(true);
+      }
+    });
+  };
 
   return (
     <View style={styles.tile}>
       <View style={styles.avatar}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.image} />
+        {source && !failed ? (
+          <Image
+            source={source}
+            style={styles.image}
+            resizeMode="cover"
+            onError={onImageError}
+          />
         ) : (
           <View style={styles.fallback}>
             <Text style={styles.fallbackLetter}>
@@ -71,21 +146,31 @@ function CharacterTile({ character }: { character: AnimeCharacter }) {
 }
 
 const TILE = isTvUi() ? 88 : 72;
+const TILE_H = Math.round((TILE * 4) / 3);
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  row: { gap: isTvUi() ? spacing.md : spacing.sm, paddingRight: spacing.lg },
-  tile: { width: TILE, gap: 4 },
+  phoneTitle: {
+    color: colors.brand,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  row: { gap: isTvUi() ? spacing.md : 6, paddingRight: spacing.lg },
+  tile: { width: TILE, gap: 2 },
   avatar: {
     width: TILE,
-    aspectRatio: 3 / 4,
-    borderRadius: radii.sm,
+    height: TILE_H,
+    borderRadius: isTvUi() ? radii.sm : 8,
     overflow: 'hidden',
     backgroundColor: colors.bgCard,
   },
-  image: { width: '100%', height: '100%' },
+  image: {
+    width: TILE,
+    height: TILE_H,
+  },
   fallback: {
-    flex: 1,
+    width: TILE,
+    height: TILE_H,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgElevated,

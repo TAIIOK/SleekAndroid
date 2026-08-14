@@ -165,7 +165,8 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
-    paddingVertical: spacing.xl,
+    // Explicit paddingTop (not paddingVertical) so MobileChromeScroll can merge top inset.
+    paddingTop: spacing.xl,
     gap: spacing.lg,
     // Room so the last rail can snap fully into view on TV.
     paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xl,

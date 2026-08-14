@@ -7,12 +7,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import Video from 'react-native-video';
+import Video, { ViewType } from 'react-native-video';
 
 import { PlayerPerfOverlay } from '@/components/player/PlayerPerfOverlay';
 import { SubtitleOverlay } from '@/components/player/SubtitleOverlay';
 import type { VideoPlayerProps } from '@/components/player/types';
 import { TvEpisodeDock } from '@/components/player/tv/TvEpisodeDock';
+import { TvPlayerFocusSink, type TvDpadRevealTags } from '@/components/player/tv/TvPlayerFocusSink';
 import { TvPlayerOverlays } from '@/components/player/tv/TvPlayerOverlays';
 import { TvPlayerPanel } from '@/components/player/tv/TvPlayerPanel';
 import {
@@ -28,7 +29,9 @@ import {
   listInstalledExternalPlayers,
   type ExternalPlayerTarget,
 } from '@/lib/externalPlayer';
+import { EMPTY_SKIP_SEGMENTS } from '@/lib/playerSkip';
 import { isPlayerPerfOverlayEnabled } from '@/lib/playerPerf';
+import { shouldIgnorePartyToggleRepeat } from '@/lib/partyPlaybackSyncLogic';
 import { cyclePlaybackRate, cycleVideoFit } from '@/lib/playerPreferences';
 import { subtitleTrackLabel } from '@/lib/subtitleTracks';
 
@@ -44,7 +47,7 @@ export function TvVideoPlayer({
   onEnded,
   onAutoPlayNext,
   onPlaybackError,
-  skipSegments = [],
+  skipSegments = EMPTY_SKIP_SEGMENTS,
   episodeNav,
   onBack,
   dubbingOptions,
@@ -53,6 +56,15 @@ export function TvVideoPlayer({
   deliveryOptions,
   playbackCaptureRef,
   playbackControlRef,
+  partyControlled = false,
+  canPlayPause = true,
+  canSeek = true,
+  onPartyPlay,
+  onPartyPause,
+  onPartySeek,
+  partyRemoteCommand,
+  onPlayingChange,
+  onControlsVisibleChange,
 }: VideoPlayerProps) {
   const handleBack = onBack ?? (() => undefined);
   const perfEnabled = isPlayerPerfOverlayEnabled();
@@ -65,6 +77,8 @@ export function TvVideoPlayer({
     externalSubtitles: subtitles,
     startTime,
     startProgressFraction,
+    // Party: mount paused; play only after room sync says so (phone parity).
+    autoPlay: !partyControlled,
     skipSegments,
     onProgress,
     onEnded,
@@ -87,6 +101,66 @@ export function TvVideoPlayer({
       playbackControlRef.current = null;
     };
   }, [engine.pause, playbackControlRef]);
+
+  const partyPlayLocked = partyControlled && !canPlayPause;
+  const partySeekLocked = partyControlled && !canSeek;
+  const lastAppliedPartySeqRef = useRef(-1);
+  const lastPartyToggleAtRef = useRef(0);
+  const partyPlayingIntentRef = useRef(engine.playing);
+
+  useEffect(() => {
+    partyPlayingIntentRef.current = engine.playing;
+  }, [engine.playing]);
+
+  useEffect(() => {
+    onPlayingChange?.(engine.playing);
+  }, [engine.playing, onPlayingChange]);
+
+  useEffect(() => {
+    if (!partyRemoteCommand || partyRemoteCommand.seq === lastAppliedPartySeqRef.current) return;
+    lastAppliedPartySeqRef.current = partyRemoteCommand.seq;
+    if (typeof partyRemoteCommand.time === 'number') {
+      engine.seekTo(partyRemoteCommand.time);
+    }
+    if (partyRemoteCommand.isPlaying === true) {
+      partyPlayingIntentRef.current = true;
+      engine.play();
+    } else if (partyRemoteCommand.isPlaying === false) {
+      partyPlayingIntentRef.current = false;
+      engine.pause();
+    }
+  }, [partyRemoteCommand, engine.seekTo, engine.play, engine.pause]);
+
+  const guardedTogglePlay = useCallback(() => {
+    if (partyPlayLocked) return;
+    if (partyControlled) {
+      const now = Date.now();
+      // OK key-down + Pressable onPress must not play-then-pause the room.
+      if (shouldIgnorePartyToggleRepeat(lastPartyToggleAtRef.current, now)) return;
+      lastPartyToggleAtRef.current = now;
+      if (partyPlayingIntentRef.current) {
+        partyPlayingIntentRef.current = false;
+        onPartyPause?.();
+        engine.pause();
+      } else {
+        partyPlayingIntentRef.current = true;
+        onPartyPlay?.();
+        engine.play();
+      }
+      return;
+    }
+    engine.togglePlay();
+  }, [partyPlayLocked, partyControlled, engine, onPartyPlay, onPartyPause]);
+
+  const guardedSeekBy = useCallback(
+    (delta: number) => {
+      if (partySeekLocked) return;
+      const next = Math.max(0, engine.currentTime + delta);
+      engine.seekBy(delta);
+      if (partyControlled) onPartySeek?.(next);
+    },
+    [partySeekLocked, partyControlled, engine, onPartySeek],
+  );
 
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
   const [externalError, setExternalError] = useState<string | null>(null);
@@ -142,9 +216,9 @@ export function TvVideoPlayer({
     hasNextEpisode: Boolean(episodeNav?.hasNext),
     hasSkipPrompt: Boolean(engine.visibleSkip),
     onBack: handleBack,
-    onTogglePlay: engine.togglePlay,
-    onSeekBack: () => engine.seekBy(-engine.prefs.skipBackwardSeconds),
-    onSeekForward: () => engine.seekBy(engine.prefs.skipForwardSeconds),
+    onTogglePlay: guardedTogglePlay,
+    onSeekBack: () => guardedSeekBy(-engine.prefs.skipBackwardSeconds),
+    onSeekForward: () => guardedSeekBy(engine.prefs.skipForwardSeconds),
     onPrevEpisode: episodeNav?.onPrevious,
     onNextEpisode: episodeNav?.onNext,
     onApplySkip: () => {
@@ -158,6 +232,10 @@ export function TvVideoPlayer({
     },
     onPrefsChange: engine.updatePrefs,
   });
+
+  useEffect(() => {
+    onControlsVisibleChange?.(remote.panelVisible || !!remote.overlay);
+  }, [remote.panelVisible, remote.overlay, onControlsVisibleChange]);
 
   const handleSettingsAction = useCallback(
     (action: 'rate' | 'fit' | 'autonext' | 'skip_open' | 'skip_end') => {
@@ -187,7 +265,6 @@ export function TvVideoPlayer({
   const showCenterDock =
     !remote.overlay &&
     !engine.playbackError &&
-    !engine.isLoading &&
     (remote.panelVisible || !engine.playing);
   // Skip owns OK unless a bottom options pill (or overlay) is focused.
   const skipActionable =
@@ -200,6 +277,7 @@ export function TvVideoPlayer({
 
   const [hintVisible, setHintVisible] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [revealTags, setRevealTags] = useState<TvDpadRevealTags>({});
 
   useEffect(() => {
     if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
@@ -249,6 +327,8 @@ export function TvVideoPlayer({
           selectedTextTrack={engine.selectedTextTrack}
           bufferConfig={engine.bufferConfig}
           controls={false}
+          focusable={false}
+          viewType={Platform.OS === 'android' ? ViewType.TEXTURE : undefined}
           playInBackground={false}
           ignoreSilentSwitch="ignore"
           onLoad={engine.onLoad}
@@ -262,13 +342,13 @@ export function TvVideoPlayer({
         />
       ) : null}
 
-      {/* Android TV only delivers HW keys when a focusable view is focused. */}
-      <Pressable
-        focusable
-        hasTVPreferredFocus
-        accessible={false}
-        style={styles.focusSink}
-      />
+      <View style={styles.chrome} pointerEvents="box-none" collapsable={false}>
+        <TvPlayerFocusSink
+          sinkActive={!showCenterDock}
+          revealEdges={!remote.panelVisible && !remote.overlay}
+          onRevealTags={setRevealTags}
+          onTvKey={remote.handleHwEvent}
+        />
 
       <SubtitleOverlay cues={engine.activeSubtitleCues} text={engine.nativeCueText} />
 
@@ -284,6 +364,14 @@ export function TvVideoPlayer({
         panelFocus={remote.panelFocus}
         hasPrev={remote.enabledButtons.has('prev_episode')}
         hasNext={remote.enabledButtons.has('next_episode')}
+        onTvKey={remote.handleHwEvent}
+        onFocusButton={remote.focusHud}
+        onActivate={remote.activateButton}
+        captureVertical={!remote.panelVisible}
+        nextFocusDown={!remote.panelVisible ? revealTags.down : undefined}
+        nextFocusUp={!remote.panelVisible ? revealTags.up : undefined}
+        nextFocusLeft={!remote.panelVisible ? revealTags.left : undefined}
+        nextFocusRight={!remote.panelVisible ? revealTags.right : undefined}
       />
 
       {engine.playbackError || externalError ? (
@@ -354,6 +442,9 @@ export function TvVideoPlayer({
         selectedConnection={selectedConnection}
         selectedDelivery={selectedDelivery}
         selectedSubtitle={selectedSubtitle}
+        onTvKey={remote.handleHwEvent}
+        onFocusButton={remote.focusHud}
+        onActivate={remote.activateButton}
       />
 
       <TvPlayerOverlays
@@ -385,18 +476,18 @@ export function TvVideoPlayer({
           lines={perfLines}
         />
       ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  video: { flex: 1, width: '100%', height: '100%' },
-  focusSink: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
+  video: { flex: 1, width: '100%', height: '100%', zIndex: 0 },
+  chrome: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 20,
+    elevation: 24,
   },
   center: {
     ...StyleSheet.absoluteFill,

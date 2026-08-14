@@ -10,12 +10,15 @@ import {
   StyleSheet,
   Text,
   View,
+  BackHandler,
+  findNodeHandle,
   type View as ViewType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SleekLogo } from '@/components/brand/SleekLogo';
 import { SleekWordmark } from '@/components/brand/SleekWordmark';
+import { DownloadNavIndicator } from '@/components/download/DownloadNavIndicator';
 import { NavIcon } from '@/components/navigation/NavIcon';
 import { TvFocusGuide } from '@/components/tv/TvFocusGuide';
 import { GlassSurface } from '@/components/ui/GlassSurface';
@@ -30,13 +33,25 @@ import {
   typography,
 } from '@/constants/aniverse';
 import { openHomeSettings } from '@/lib/homeSettingsBridge';
-import { isMobileChromeHiddenRoute, isMobileDetailRoute } from '@/lib/mobileRoutes';
+import {
+  isMobileChromeHiddenRoute,
+  isMobileChromeScrollPinnedRoute,
+  isMobileChromeShellLayoutRoute,
+  isMobileDetailRoute,
+} from '@/lib/mobileRoutes';
+import { navigateBackFromDetail, setDetailReturnPath } from '@/lib/detailNavigation';
 import {
   clearCatalogScrollSnapshot,
   clearPendingCatalogFocusRestore,
   clearCatalogActiveFocus,
+  markCatalogFreshLanding,
 } from '@/lib/tvCatalogScrollRestore';
 import { isTvAllowedPath, tvRedirectPath } from '@/lib/tvRoutes';
+import {
+  shouldKeepClosedMenuSidebarAnchor,
+  shouldParkSidebarOnRouteChange,
+  topLevelNavKey,
+} from '@/lib/tvSidebarHandoff';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   MobileChromeAnimated,
@@ -46,6 +61,8 @@ import {
 } from '@/providers/MobileChromeScroll';
 import { TvShellFocusProvider, useTvShellFocus } from '@/providers/TvShellFocus';
 import { isTvUi } from '@/lib/isTvUi';
+import { useTvImmersiveFocusLock } from '@/lib/tvImmersiveFocus';
+import { notifyViewportScroll } from '@/lib/viewportScroll';
 
 const TV_NAV_ITEMS = [
   { label: 'Поиск', path: '/search' },
@@ -53,6 +70,8 @@ const TV_NAV_ITEMS = [
   { label: 'Аниме', path: '/anime' },
   { label: 'Фильмы', path: '/movies' },
   { label: 'Сериалы', path: '/series' },
+  { label: 'Совместный просмотр', path: '/party' },
+  { label: 'Друзья', path: '/friends/feed' },
   { label: 'Медиатека', path: '/library/lists' },
   { label: 'История', path: '/history' },
 ] as const;
@@ -66,10 +85,10 @@ const MOBILE_NAV_ITEMS = [
 
 const MORE_LINKS = [
   { label: 'Медиатека', path: '/library/lists' },
-  { label: 'Поиск', path: '/search' },
+  { label: 'Совместный просмотр', path: '/party' },
+  { label: 'Друзья', path: '/friends/feed' },
   { label: 'История', path: '/history' },
   { label: 'Загрузки', path: '/downloads' },
-  { label: 'Профиль', path: '/profile' },
 ] as const;
 
 function normalizePath(segments: string[]): string {
@@ -84,17 +103,19 @@ function isActivePath(currentPath: string, itemPath: string): boolean {
   if (itemPath === '/library/lists') {
     return currentPath === '/library' || currentPath.startsWith('/library/');
   }
+  if (itemPath === '/friends/feed') {
+    return (
+      currentPath === '/friends' ||
+      currentPath.startsWith('/friends/') ||
+      currentPath.startsWith('/users/')
+    );
+  }
   return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
 }
 
-/** Top-level nav segment for sidebar park handoff (ignore detail push within hub). */
-function topLevelNavKey(path: string): string {
-  if (!path || path === '/') return '/';
-  const segment = path.split('/').filter(Boolean)[0] ?? '';
-  if (!segment) return '/';
-  if (segment === 'library') return '/library/lists';
-  if (segment === 'accounts' || segment === 'settings') return '/profile';
-  return `/${segment}`;
+function nativeTagOf(node: unknown): number | undefined {
+  if (node == null) return undefined;
+  return findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -129,11 +150,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const moreActive = MORE_LINKS.some((item) => isActivePath(currentPath, item.path));
   const isDetail = isMobileDetailRoute(currentPath);
   const hideChrome = isMobileChromeHiddenRoute(currentPath);
-  const overlayChrome = !hideChrome;
+  const shellLayout = !hideChrome && isMobileChromeShellLayoutRoute(currentPath);
+  // Overlay mode (home/catalog/library): content scrolls under floating islands and pads itself.
+  // Shell mode (party lobby): nav | body | footer — content never under chrome.
+  const overlayChrome = !hideChrome && !shellLayout;
   const topChrome = 0;
-  const bottomChrome = hideChrome
-    ? Math.max(insets.bottom, isDetail ? 8 : 0)
-    : 0;
+  // Detail pages keep a bottom safe inset for scroll content. Fullscreen party /
+  // watch chrome-hidden routes must be edge-to-edge — the player handles its own
+  // home-indicator padding on the control bar.
+  const bottomChrome = hideChrome && isDetail ? Math.max(insets.bottom, 8) : 0;
   const topContentInset = overlayChrome ? mobileTopChromeInset(insets.top) : 0;
   const bottomContentInset = overlayChrome ? mobileBottomChromeInset(insets.bottom) : 0;
   const topHideDistance = Math.max(insets.top, 12) + layout.mobileTopBarHeight + 8;
@@ -142,6 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <MobileChromeScrollProvider
       hideDistance={topHideDistance}
       contentInsetsEnabled={overlayChrome}
+      scrollPinned={!hideChrome && isMobileChromeScrollPinnedRoute(currentPath)}
       topContentInset={topContentInset}
       bottomContentInset={bottomContentInset}
     >
@@ -150,6 +176,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         isHome={isHome}
         isDetail={isDetail}
         hideChrome={hideChrome}
+        shellLayout={shellLayout}
         topChrome={topChrome}
         bottomChrome={bottomChrome}
         moreActive={moreActive}
@@ -170,6 +197,7 @@ function MobileAppChrome({
   isHome,
   isDetail,
   hideChrome,
+  shellLayout,
   topChrome,
   bottomChrome,
   moreActive,
@@ -183,6 +211,7 @@ function MobileAppChrome({
   isHome: boolean;
   isDetail: boolean;
   hideChrome: boolean;
+  shellLayout: boolean;
   topChrome: number;
   bottomChrome: number;
   moreActive: boolean;
@@ -194,6 +223,26 @@ function MobileAppChrome({
   const router = useRouter();
   const chromeScroll = useMobileChromeScroll();
   const topAnimatedStyle = useMobileChromeTopAnimatedStyle();
+  const showChrome = !isDetail && !hideChrome;
+
+  useEffect(() => {
+    if (!isDetail) return;
+    const onBack = () => {
+      navigateBackFromDetail(null, currentPath);
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, [isDetail, router, currentPath]);
+
+  const prevPathRef = useRef(currentPath);
+  useEffect(() => {
+    const prev = prevPathRef.current;
+    if (isMobileDetailRoute(currentPath) && !isMobileDetailRoute(prev)) {
+      setDetailReturnPath(prev);
+    }
+    prevPathRef.current = currentPath;
+  }, [currentPath]);
 
   useEffect(() => {
     chromeScroll?.reset();
@@ -201,30 +250,95 @@ function MobileAppChrome({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- path-only
   }, [currentPath]);
 
+  const topNav = (
+    <GlassSurface
+      style={Platform.OS === 'web' ? undefined : styles.mobileTopIsland}
+      className={
+        Platform.OS === 'web' ? 'liquid-glass floating-island mobile-top-island' : undefined
+      }
+    >
+      <SleekWordmark onPress={() => router.navigate('/')} size="md" />
+      <View
+        style={Platform.OS === 'web' ? undefined : styles.mobileTopActions}
+        className={Platform.OS === 'web' ? 'mobile-top-actions' : undefined}
+      >
+        <IconButton
+          icon="search-outline"
+          label="Поиск"
+          onPress={() => router.navigate('/search')}
+        />
+        <DownloadNavIndicator />
+        {isHome ? (
+          <IconButton
+            icon="settings-outline"
+            label="Настройки главной"
+            onPress={openHomeSettings}
+            ring
+          />
+        ) : null}
+        <IconButton
+          icon="person-outline"
+          label="Профиль"
+          onPress={() => router.navigate('/profile')}
+          accent
+        />
+      </View>
+    </GlassSurface>
+  );
+
+  const bottomTabs = (
+    <View
+      style={Platform.OS === 'web' ? undefined : styles.mobileBottomShell}
+      className={Platform.OS === 'web' ? 'mobile-bottom-shell' : undefined}
+    >
+      <GlassSurface
+        style={styles.mobileBottomIsland}
+        className={
+          Platform.OS === 'web' ? 'liquid-glass floating-island mobile-bottom-island' : undefined
+        }
+      >
+        {MOBILE_NAV_ITEMS.map((item) => (
+          <TabItem
+            key={item.path}
+            label={item.label}
+            path={item.path}
+            active={isActivePath(currentPath, item.path)}
+            onPress={() => {
+              router.navigate(item.path as '/');
+            }}
+          />
+        ))}
+        <TabItem
+          label="Ещё"
+          path="/more"
+          active={moreActive || moreOpen}
+          onPress={() => setMoreOpen(true)}
+        />
+      </GlassSurface>
+    </View>
+  );
+
   return (
     <View style={styles.mobileRoot}>
+      {/* Shell layout: nav (fixed) → body (scroll) → footer (fixed). */}
+      {showChrome && shellLayout ? (
+        <View style={[styles.mobileTopBarFlow, { paddingTop: Math.max(insetsTop, 12) }]}>
+          {topNav}
+        </View>
+      ) : null}
+
       <View style={[styles.mobileContent, { paddingTop: topChrome, paddingBottom: bottomChrome }]}>
         {children}
       </View>
 
-      {isDetail ? (
-        <View
-          style={[styles.mobileDetailTopBar, { paddingTop: Math.max(insetsTop, 8) }]}
-          pointerEvents="box-none"
-        >
-          <Pressable
-            onPress={() => {
-              if (router.canGoBack()) router.back();
-              else router.replace('/' as '/');
-            }}
-            accessibilityLabel="Назад"
-            hitSlop={10}
-            style={styles.mobileDetailBack}
-          >
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </Pressable>
+      {showChrome && shellLayout ? (
+        <View style={[styles.mobileBottomBarFlow, { paddingBottom: Math.max(insetsBottom, 12) }]}>
+          {bottomTabs}
         </View>
-      ) : hideChrome ? null : (
+      ) : null}
+
+      {/* Overlay layout (home/catalog): floating islands over scrolling content. */}
+      {showChrome && !shellLayout ? (
         <>
           <MobileChromeAnimated.View
             style={[
@@ -234,38 +348,7 @@ function MobileAppChrome({
             ]}
             pointerEvents="box-none"
           >
-            <GlassSurface
-              style={Platform.OS === 'web' ? undefined : styles.mobileTopIsland}
-              className={
-                Platform.OS === 'web' ? 'liquid-glass floating-island mobile-top-island' : undefined
-              }
-            >
-              <SleekWordmark onPress={() => router.push('/')} size="md" />
-              <View
-                style={Platform.OS === 'web' ? undefined : styles.mobileTopActions}
-                className={Platform.OS === 'web' ? 'mobile-top-actions' : undefined}
-              >
-                <IconButton
-                  icon="search-outline"
-                  label="Поиск"
-                  onPress={() => router.push('/search')}
-                />
-                {isHome ? (
-                  <IconButton
-                    icon="settings-outline"
-                    label="Настройки главной"
-                    onPress={openHomeSettings}
-                    ring
-                  />
-                ) : null}
-                <IconButton
-                  icon="person-outline"
-                  label="Профиль"
-                  onPress={() => router.push('/profile')}
-                  accent
-                />
-              </View>
-            </GlassSurface>
+            {topNav}
           </MobileChromeAnimated.View>
 
           <View
@@ -275,40 +358,10 @@ function MobileAppChrome({
             ]}
             pointerEvents="box-none"
           >
-            <LinearGradient
-              colors={['rgba(19,18,27,0)', 'rgba(19,18,27,0.72)', 'rgba(19,18,27,0.92)']}
-              locations={[0, 0.45, 1]}
-              style={styles.mobileBottomScrim}
-              pointerEvents="none"
-            />
-            <View
-              style={Platform.OS === 'web' ? undefined : styles.mobileBottomShell}
-              className={Platform.OS === 'web' ? 'mobile-bottom-shell' : undefined}
-            >
-              <View
-                style={Platform.OS === 'web' ? undefined : styles.mobileBottomIsland}
-                className={Platform.OS === 'web' ? 'mobile-bottom-island' : undefined}
-              >
-                {MOBILE_NAV_ITEMS.map((item) => (
-                  <TabItem
-                    key={item.path}
-                    label={item.label}
-                    path={item.path}
-                    active={isActivePath(currentPath, item.path)}
-                    onPress={() => router.push(item.path as '/')}
-                  />
-                ))}
-                <TabItem
-                  label="Ещё"
-                  path="/more"
-                  active={moreActive || moreOpen}
-                  onPress={() => setMoreOpen(true)}
-                />
-              </View>
-            </View>
+            {bottomTabs}
           </View>
         </>
-      )}
+      ) : null}
 
       <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
         <Pressable style={styles.moreBackdrop} onPress={() => setMoreOpen(false)}>
@@ -320,7 +373,7 @@ function MobileAppChrome({
                 style={styles.moreItem}
                 onPress={() => {
                   setMoreOpen(false);
-                  router.push(item.path as '/');
+                  router.navigate(item.path as '/');
                 }}
               >
                 <NavIcon path={item.path} size={22} />
@@ -349,41 +402,52 @@ function TvAppShellFrame({
   const menuOpen = shellFocus?.menuOpen ?? false;
   const profileActive = isActivePath(currentPath, '/profile') || isActivePath(currentPath, '/accounts');
   const activeNavIndex = TV_NAV_ITEMS.findIndex((item) => isActivePath(currentPath, item.path));
-  // On profile/accounts the chip is the sidebar return target; otherwise the active nav row.
-  const sidebarAnchorIndex = profileActive ? -1 : activeNavIndex >= 0 ? activeNavIndex : 0;
+  // HW Left/Up target: profile chip on profile/accounts, otherwise the active hub row.
+  const hwAnchorIndex = profileActive ? -1 : activeNavIndex >= 0 ? activeNavIndex : 0;
+  // Closed menu: no hidden fallback on detail — Android would open the overlay.
+  const sidebarAnchorIndex = shouldKeepClosedMenuSidebarAnchor(currentPath) ? hwAnchorIndex : -1;
+  const hideSidebar = isMobileChromeHiddenRoute(currentPath);
+  const immersiveLock = useTvImmersiveFocusLock();
 
   /**
-   * After any in-shell route change: close the overlay and park nav focus so
-   * Android relocates into content via hasTVPreferredFocus. Without parking,
-   * detail pushes briefly land focus on the sidebar anchor → menu flashes open.
-   * Unpark once content owns focus, or timeout. Catalog restore is cleared only
-   * on true top-level hub switches (not /movies → /movies/123).
+   * Park/close the overlay only on top-level hub switches. Detail push within a
+   * hub only resets Left/Up arms so a stuck rail-edge cannot steal the next Left.
    */
   const [parkSidebarFocus, setParkSidebarFocus] = useState(false);
+  const [lastNavTag, setLastNavTag] = useState<number | undefined>();
+  const [profileChipTag, setProfileChipTag] = useState<number | undefined>();
   const contentTag = shellFocus?.contentNativeTag;
   const navKey = topLevelNavKey(currentPath);
+  const lastNavIndex = TV_NAV_ITEMS.length - 1;
   const prevPathRef = useRef(currentPath);
   const prevNavKeyRef = useRef(navKey);
 
+  // Render-phase: tab useFocusEffect must see a cleared snapshot / fresh-landing
+  // flag before it runs. An effect here would lose the race and restore leftover scroll.
+  if (prevNavKeyRef.current !== navKey) {
+    clearCatalogScrollSnapshot(navKey);
+    clearPendingCatalogFocusRestore(navKey);
+    clearCatalogActiveFocus(navKey);
+    if (isTvUi()) {
+      markCatalogFreshLanding(navKey);
+      notifyViewportScroll(0);
+    }
+    prevNavKeyRef.current = navKey;
+  }
+
   useEffect(() => {
     const prevPath = prevPathRef.current;
-    const prevKey = prevNavKeyRef.current;
     prevPathRef.current = currentPath;
-    prevNavKeyRef.current = navKey;
     if (prevPath === currentPath) return;
 
-    shellFocus?.resetExitFlags();
-    setParkSidebarFocus(true);
-
-    // Fresh top-level landing only: don't restore a prior feed-rail focus
-    // (e.g. Home should land on «Продолжить просмотр», not the last catalog rail).
-    if (prevKey !== navKey) {
-      clearCatalogScrollSnapshot(navKey);
-      clearPendingCatalogFocusRestore(navKey);
-      clearCatalogActiveFocus(navKey);
+    if (shouldParkSidebarOnRouteChange(prevPath, currentPath)) {
+      shellFocus?.resetExitFlags();
+      setParkSidebarFocus(true);
+    } else {
+      shellFocus?.resetExitArms();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- path handoff only
-  }, [currentPath, navKey]);
+  }, [currentPath]);
 
   useEffect(() => {
     if (!parkSidebarFocus) return;
@@ -399,8 +463,25 @@ function TvAppShellFrame({
     };
   }, [parkSidebarFocus, contentTag]);
 
+  useEffect(() => {
+    if (!hideSidebar) return;
+    shellFocus?.closeMenu();
+    shellFocus?.resetExitArms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- immersive lock only
+  }, [hideSidebar, currentPath]);
+
+  // Party room / watch / invite sit inside (main). The catalog TvFocusGuide
+  // swallows D-pad, and a late-mounted player sink never wins hasTVPreferredFocus.
+  // Render children full-bleed like the root `/watch` modal.
+  if (hideSidebar) {
+    return <View style={styles.tvRoot}>{children}</View>;
+  }
+
   return (
-    <View style={[styles.tvRoot, { paddingTop: insets.top }]}>
+    <View
+      style={[styles.tvRoot, { paddingTop: insets.top }]}
+      pointerEvents={immersiveLock ? 'none' : 'auto'}
+    >
       {/*
         Sidebar before content (focus tree). Keep on-screen with opacity only when
         closed — translateX off-screen breaks nextFocusLeft / requestTVFocus.
@@ -408,6 +489,7 @@ function TvAppShellFrame({
       <TvFocusGuide
         style={[styles.tvSideNav, !menuOpen && styles.tvSideNavHidden]}
         trapFocusLeft
+        pointerEvents={hideSidebar || immersiveLock ? 'none' : undefined}
       >
         {/* Glass paint layer — keep out of the flex/focus column or TVFocusGuide collapses. */}
         <View style={styles.tvSideNavGlass} pointerEvents="none">
@@ -446,32 +528,48 @@ function TvAppShellFrame({
                 path={item.path}
                 active={isActivePath(currentPath, item.path)}
                 isSidebarAnchor={index === sidebarAnchorIndex}
+                isHwAnchor={index === hwAnchorIndex}
                 menuOpen={menuOpen}
                 parkFocus={parkSidebarFocus}
                 contentNativeTag={contentTag}
+                nextFocusDown={index === lastNavIndex ? profileChipTag : undefined}
+                onNativeTag={index === lastNavIndex ? setLastNavTag : undefined}
                 onPress={() => {
                   shellFocus?.closeMenu();
-                  router.push(item.path as '/');
+                  router.navigate(item.path as '/');
                 }}
               />
             ))}
+            {/*
+              Keep the profile chip in the same ScrollView as hub rows. A sibling
+              footer is unreachable: Android TV ScrollView swallows Down.
+              flexGrow spacer pins the chip to the bottom when the list is short.
+            */}
+            <View style={styles.tvNavFooterSpacer} pointerEvents="none" />
+            <ProfileChip
+              nickname={userNickname}
+              active={profileActive}
+              isSidebarAnchor={profileActive}
+              isHwAnchor={profileActive}
+              menuOpen={menuOpen}
+              parkFocus={parkSidebarFocus}
+              contentNativeTag={contentTag}
+              nextFocusUp={lastNavTag}
+              onNativeTag={setProfileChipTag}
+              onPress={() => {
+                shellFocus?.closeMenu();
+                router.navigate('/profile');
+              }}
+            />
           </ScrollView>
-          <ProfileChip
-            nickname={userNickname}
-            active={profileActive}
-            isSidebarAnchor={profileActive}
-            menuOpen={menuOpen}
-            parkFocus={parkSidebarFocus}
-            contentNativeTag={contentTag}
-            onPress={() => {
-              shellFocus?.closeMenu();
-              router.push('/profile');
-            }}
-          />
         </View>
       </TvFocusGuide>
 
-      <TvFocusGuide style={styles.tvContent} autoFocus>
+      <TvFocusGuide
+        style={styles.tvContent}
+        autoFocus={!immersiveLock}
+        pointerEvents={immersiveLock ? 'none' : undefined}
+      >
         {children}
       </TvFocusGuide>
 
@@ -488,19 +586,26 @@ function NavItem({
   active,
   onPress,
   isSidebarAnchor,
+  isHwAnchor,
   menuOpen,
   parkFocus = false,
   contentNativeTag,
+  nextFocusDown,
+  onNativeTag,
 }: {
   label: string;
   path: string;
   active: boolean;
   onPress: () => void;
   isSidebarAnchor?: boolean;
+  /** Publish as Left/Up HW target even when the closed menu has no fallback. */
+  isHwAnchor?: boolean;
   menuOpen: boolean;
   /** True briefly after route change — forces focus out of the sidebar. */
   parkFocus?: boolean;
   contentNativeTag?: number;
+  nextFocusDown?: number;
+  onNativeTag?: (tag: number | undefined) => void;
 }) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
@@ -510,9 +615,10 @@ function NavItem({
   const focusable = !parkFocus && (menuOpen || Boolean(isSidebarAnchor));
 
   const publishAnchor = () => {
-    if (isSidebarAnchor && pressableRef.current) {
+    if ((isHwAnchor || isSidebarAnchor) && pressableRef.current) {
       shellFocus?.registerSidebarAnchor(pressableRef.current);
     }
+    onNativeTag?.(nativeTagOf(pressableRef.current));
   };
 
   return (
@@ -523,6 +629,7 @@ function NavItem({
       }}
       onLayout={publishAnchor}
       focusable={focusable}
+      hasTVPreferredFocus={menuOpen && Boolean(isSidebarAnchor) && !parkFocus}
       onFocus={() => {
         setFocused(true);
         shellFocus?.setSidebarFocused(true);
@@ -533,6 +640,7 @@ function NavItem({
       }}
       onPress={onPress}
       {...(contentNativeTag != null ? { nextFocusRight: contentNativeTag } : {})}
+      {...(nextFocusDown != null ? { nextFocusDown } : {})}
       style={[
         styles.sideItem,
         active && styles.sideItemActive,
@@ -564,17 +672,23 @@ function ProfileChip({
   active,
   onPress,
   isSidebarAnchor,
+  isHwAnchor,
   menuOpen,
   parkFocus = false,
   contentNativeTag,
+  nextFocusUp,
+  onNativeTag,
 }: {
   nickname?: string | null;
   active: boolean;
   onPress: () => void;
   isSidebarAnchor?: boolean;
+  isHwAnchor?: boolean;
   menuOpen: boolean;
   parkFocus?: boolean;
   contentNativeTag?: number;
+  nextFocusUp?: number;
+  onNativeTag?: (tag: number | undefined) => void;
 }) {
   const [focused, setFocused] = useState(false);
   const shellFocus = useTvShellFocus();
@@ -582,9 +696,10 @@ function ProfileChip({
   const focusable = !parkFocus && (menuOpen || Boolean(isSidebarAnchor));
 
   const publishAnchor = () => {
-    if (isSidebarAnchor && pressableRef.current) {
+    if ((isHwAnchor || isSidebarAnchor) && pressableRef.current) {
       shellFocus?.registerSidebarAnchor(pressableRef.current);
     }
+    onNativeTag?.(nativeTagOf(pressableRef.current));
   };
 
   return (
@@ -595,6 +710,7 @@ function ProfileChip({
       }}
       onLayout={publishAnchor}
       focusable={focusable}
+      hasTVPreferredFocus={menuOpen && Boolean(isSidebarAnchor) && !parkFocus}
       onFocus={() => {
         setFocused(true);
         shellFocus?.setSidebarFocused(true);
@@ -605,6 +721,7 @@ function ProfileChip({
       }}
       onPress={onPress}
       {...(contentNativeTag != null ? { nextFocusRight: contentNativeTag } : {})}
+      {...(nextFocusUp != null ? { nextFocusUp } : {})}
       style={[
         styles.tvProfile,
         active && styles.tvProfileActive,
@@ -775,9 +892,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tvNavList: {
+    flexGrow: 1,
     paddingHorizontal: 8,
     paddingVertical: spacing.sm,
     gap: 2,
+  },
+  tvNavFooterSpacer: {
+    flexGrow: 1,
+    minHeight: 8,
   },
   tvContent: {
     flex: 1,
@@ -831,10 +953,14 @@ const styles = StyleSheet.create({
   },
   mobileRoot: {
     flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
     backgroundColor: colors.bg,
   },
   mobileContent: {
     flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
   },
   mobileTopBar: {
     position: 'absolute',
@@ -843,28 +969,21 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: layout.gutterMobile,
     paddingBottom: spacing.sm,
+    backgroundColor: 'transparent',
     zIndex: 10,
   },
-  mobileDetailTopBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  /** In-flow nav for shell layout routes (party). No solid bar behind the island. */
+  mobileTopBarFlow: {
     paddingHorizontal: layout.gutterMobile,
     paddingBottom: spacing.sm,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: 'transparent',
+    zIndex: 2,
   },
-  mobileDetailBack: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
+  mobileBottomBarFlow: {
+    paddingHorizontal: 12,
+    paddingTop: spacing.sm,
+    backgroundColor: 'transparent',
+    zIndex: 2,
   },
   mobileTopIsland: {
     height: layout.mobileTopBarHeight,
@@ -907,39 +1026,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 12,
     paddingTop: spacing.sm,
+    backgroundColor: 'transparent',
     zIndex: 10,
-  },
-  mobileBottomScrim: {
-    ...StyleSheet.absoluteFill,
-    top: -36,
   },
   mobileBottomShell: {
     width: '100%',
     maxWidth: layout.mobileTabMaxWidth,
     alignSelf: 'center',
+    backgroundColor: 'transparent',
   },
   mobileBottomIsland: {
     flexDirection: 'row',
     alignItems: 'stretch',
     paddingHorizontal: 6,
     paddingVertical: 6,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    backgroundColor: 'rgba(19,18,27,0.62)',
-    overflow: 'hidden',
+    backgroundColor: 'rgba(19,18,27,0.72)',
     shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    ...(Platform.OS === 'web'
-      ? ({
-          // @ts-expect-error web-only
-          backdropFilter: 'blur(28px) saturate(160%)',
-          // @ts-expect-error web-only
-          WebkitBackdropFilter: 'blur(28px) saturate(160%)',
-        } as object)
-      : {}),
+    shadowOpacity: 0.5,
+    shadowRadius: 25,
+    shadowOffset: { width: 0, height: 12 },
   },
   tabItem: {
     flex: 1,

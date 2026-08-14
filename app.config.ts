@@ -14,7 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: isTvBuild ? 'Sleek TV' : 'Sleek',
   slug: 'sleek',
-  version: '1.0.15',
+  version: '1.0.16',
   scheme: 'sleek',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -43,7 +43,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     predictiveBackGestureEnabled: false,
     package: isTvBuild ? 'ru.taiiok.aniverse.tv' : 'ru.taiiok.aniverse.app',
-    versionCode: 16,
+    versionCode: 17,
+    softwareKeyboardLayoutMode: 'pan',
     intentFilters: [
       {
         action: 'VIEW',
@@ -100,6 +101,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           targetSdkVersion: 35,
           manifestQueries: {
             package: ['com.brouken.player', 'org.videolan.vlc', 'is.xyz.mpv'],
+            intent: [{ action: 'android.speech.action.RECOGNIZE_SPEECH' }],
           },
         },
       },

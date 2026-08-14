@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type ScrollView,
@@ -8,21 +8,23 @@ import {
 import {
   fetchLampaSectionItems,
   fetchLampaSections,
-  isLampaRecommendationEndpoint,
   mapLampaToRailItem,
   type LampaSection,
 } from '@/api/catalog';
 import { CatalogBrowseSkeleton } from '@/components/catalog/CatalogBrowseSkeleton';
 import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
+import { useDeferredMount } from '@/hooks/useDeferredMount';
 import {
   filterLampaSectionsForHomeKind,
   resolveHideAsianLiveAction,
   resolveLampaSectionEndpoints,
   shouldExcludeCjkFromLampaSection,
 } from '@/lib/homeSettings';
+import { lampaItemsQueryKey } from '@/lib/lampaBrowse';
+import { orderLampaSectionsByEndpoints } from '@/lib/lampaSectionOrder';
 import type { ContinueWatchingDedupeKeys } from '@/lib/continueWatchingDedupe';
-import { CATALOG_RAIL_PAGE_SIZE } from '@/lib/catalogRailPage';
+import { CATALOG_RAIL_PAGE_SIZE, TV_CATALOG_EAGER_RAILS } from '@/lib/catalogRailPage';
 import { uniqueById } from '@/lib/searchConfig';
 import type { CatalogHomeConfig } from '@/types/homeConfig';
 import { isTvUi } from '@/lib/isTvUi';
@@ -30,50 +32,29 @@ import { isTvUi } from '@/lib/isTvUi';
 /** Minimum skeleton time so cached data does not flash unfinished rails. */
 const TV_BROWSE_MIN_SKELETON_MS = 400;
 
-function lampaItemsQueryKey(
-  kind: string,
-  section: LampaSection,
-  pageSize: number,
-  excludeCjk: boolean,
-) {
-  return [
-    'lampa-items',
-    kind,
-    section.endpoint,
-    section.fetch?.urlPath,
-    pageSize,
-    excludeCjk,
-  ] as const;
-}
-
 function LampaSectionRail({
   kind,
   section,
   onItemPress,
   excludeLampaKeys,
   excludeCjk = false,
-  enabled = true,
-  onSettled,
   restorePath,
+  railFocusPriority,
 }: {
   kind: string;
   section: LampaSection;
   onItemPress: (item: RailItem) => void;
   excludeLampaKeys?: ReadonlySet<string>;
   excludeCjk?: boolean;
-  /** When false, do not fetch yet (TV browse loads top → bottom). */
-  enabled?: boolean;
-  onSettled?: () => void;
   restorePath?: string;
+  railFocusPriority?: number;
 }) {
-  const isRecommendation = isLampaRecommendationEndpoint(section.endpoint);
   const pageSize = CATALOG_RAIL_PAGE_SIZE;
   const {
     data,
     isLoading,
     isError,
     error,
-    isFetched,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -86,39 +67,14 @@ function LampaSectionRail({
       if (lastPage.length < pageSize) return undefined;
       return allPages.length + 1;
     },
-    enabled,
-    retry: isRecommendation ? false : 1,
+    retry: 1,
   });
 
   const rawItems = useMemo(() => uniqueById((data?.pages ?? []).flat()), [data]);
-  const settledOnceRef = useRef(false);
-
-  useEffect(() => {
-    if (!enabled) {
-      settledOnceRef.current = false;
-      return;
-    }
-    if (settledOnceRef.current) return;
-    if (!isFetched && !isError) return;
-    settledOnceRef.current = true;
-    onSettled?.();
-  }, [enabled, isFetched, isError, onSettled]);
-
-  if (!enabled) {
-    return null;
-  }
-
-  if (!isLoading && (isError || rawItems.length === 0)) {
-    return null;
-  }
 
   const visibleItems = excludeLampaKeys?.size
     ? rawItems.filter((item) => !excludeLampaKeys.has(`${kind}:${item.id}`))
     : rawItems;
-
-  if (!isLoading && visibleItems.length === 0) {
-    return null;
-  }
 
   return (
     <PosterRail
@@ -126,7 +82,7 @@ function LampaSectionRail({
       items={visibleItems.map(mapLampaToRailItem)}
       loading={isLoading}
       onItemPress={onItemPress}
-      errorMessage={isError && !isRecommendation ? (error as Error).message : undefined}
+      errorMessage={isError ? (error as Error).message : undefined}
       hasNextPage={hasNextPage}
       isFetchingNextPage={isFetchingNextPage}
       onLoadMore={() => {
@@ -134,6 +90,7 @@ function LampaSectionRail({
       }}
       restorePath={restorePath}
       restoreRailKey={`${kind}:${section.endpoint}`}
+      railFocusPriority={railFocusPriority}
     />
   );
 }
@@ -172,18 +129,14 @@ export function LampaKindRails({
 
   const visibleSections = useMemo(() => {
     if (!sections.length) return [];
-    if (!home) return sections;
-
     const endpoints = resolveLampaSectionEndpoints(
       config,
       kind,
       sections.map((section) => section.endpoint),
     );
-    return filterLampaSectionsForHomeKind(
-      sections.filter((section) => endpoints.includes(section.endpoint)),
-      kind,
-      firstKindId,
-    );
+    const ordered = orderLampaSectionsByEndpoints(sections, endpoints);
+    if (!home) return ordered;
+    return filterLampaSectionsForHomeKind(ordered, kind, firstKindId);
   }, [sections, home, config, kind, firstKindId]);
 
   // Prefetch first section so skeleton waits until the top rail can paint.
@@ -205,11 +158,10 @@ export function LampaKindRails({
       return allPages.length + 1;
     },
     enabled: browseGate && Boolean(firstSection),
-    retry: firstSection && isLampaRecommendationEndpoint(firstSection.endpoint) ? false : 1,
+    retry: 1,
   });
 
-  // Remount with cached first page — skip skeleton (do not key off live fetch, or cold
-  // start would unlock every rail as soon as rail 0 settles).
+  // Cached first page: skip the cold-start skeleton. Remaining rails stay viewport-gated.
   const cacheWarm = useMemo(() => {
     if (!browseGate || !firstSection) return false;
     return (
@@ -234,24 +186,17 @@ export function LampaKindRails({
     return () => clearTimeout(timer);
   }, [browseGate, kind, cacheWarm]);
 
-  // Unlock rails 1 → N after each settles (top → bottom). No focus/scroll steering.
-  const [enabledCount, setEnabledCount] = useState(() =>
-    !browseGate || cacheWarm ? Number.MAX_SAFE_INTEGER : 0,
-  );
   const [revealed, setRevealed] = useState(() => !browseGate || cacheWarm);
 
   useEffect(() => {
     if (!browseGate) {
-      setEnabledCount(Number.MAX_SAFE_INTEGER);
       setRevealed(true);
       return;
     }
     if (cacheWarm) {
-      setEnabledCount(Number.MAX_SAFE_INTEGER);
       setRevealed(true);
       return;
     }
-    setEnabledCount(0);
     setRevealed(false);
   }, [browseGate, kind, cacheWarm]);
 
@@ -270,7 +215,6 @@ export function LampaKindRails({
 
   useEffect(() => {
     if (!canReveal || revealed) return;
-    setEnabledCount(1);
     setRevealed(true);
   }, [canReveal, revealed]);
 
@@ -293,44 +237,62 @@ export function LampaKindRails({
 
   if (!visibleSections.length) return null;
 
-  if (!browseGate) {
-    return (
-      <>
-        {visibleSections.map((section) => (
-          <LazyCatalogRail key={`${kind}-${section.endpoint}`}>
-            <LampaSectionRail
-              kind={kind}
-              section={section}
-              onItemPress={openItem}
-              excludeCjk={shouldExcludeCjkFromLampaSection(section.endpoint, hideAsian)}
-              excludeLampaKeys={home ? continueWatchingDedupe?.lampaKeys : undefined}
-              restorePath={restorePath}
-            />
-          </LazyCatalogRail>
-        ))}
-      </>
-    );
-  }
+  return (
+    <LampaKindRailsList
+      kind={kind}
+      sections={visibleSections}
+      hideAsian={hideAsian}
+      home={home}
+      continueWatchingDedupe={continueWatchingDedupe}
+      restorePath={restorePath}
+      onItemPress={openItem}
+    />
+  );
+}
+
+function LampaKindRailsList({
+  kind,
+  sections,
+  hideAsian,
+  home,
+  continueWatchingDedupe,
+  restorePath,
+  onItemPress,
+}: {
+  kind: 'movie' | 'tv';
+  sections: LampaSection[];
+  hideAsian: boolean;
+  home: boolean;
+  continueWatchingDedupe?: ContinueWatchingDedupeKeys;
+  restorePath?: string;
+  onItemPress: (item: RailItem) => void;
+}) {
+  const belowFoldReady = useDeferredMount(!home);
 
   return (
     <>
-      {visibleSections.map((section, index) => (
-        <LampaSectionRail
-          key={`${kind}-${section.endpoint}`}
-          kind={kind}
-          section={section}
-          onItemPress={openItem}
-          excludeCjk={shouldExcludeCjkFromLampaSection(section.endpoint, hideAsian)}
-          enabled={index < enabledCount}
-          restorePath={restorePath}
-          onSettled={() => {
-            setEnabledCount((count) => {
-              if (index !== count - 1) return count;
-              return Math.min(count + 1, visibleSections.length);
-            });
-          }}
-        />
-      ))}
+      {sections.map((section, index) => {
+        const eager = index < TV_CATALOG_EAGER_RAILS;
+        if (!home && !eager && !belowFoldReady) return null;
+        return (
+          <LazyCatalogRail
+            key={`${kind}-${section.endpoint}`}
+            eager={eager}
+            homeLazy={home}
+            sessionKey={home ? `home:lampa:${kind}:${section.endpoint}` : undefined}
+          >
+            <LampaSectionRail
+              kind={kind}
+              section={section}
+              onItemPress={onItemPress}
+              excludeCjk={shouldExcludeCjkFromLampaSection(section.endpoint, hideAsian)}
+              excludeLampaKeys={home ? continueWatchingDedupe?.lampaKeys : undefined}
+              restorePath={restorePath}
+              railFocusPriority={index}
+            />
+          </LazyCatalogRail>
+        );
+      })}
     </>
   );
 }

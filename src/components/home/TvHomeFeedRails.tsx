@@ -2,16 +2,19 @@ import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
 import { PosterRail } from '@/components/catalog/PosterRail';
 import { useTvHomeFeedSource } from '@/hooks/useTvHomeFeedSource';
 import type { CatalogHomeConfig } from '@/lib/homeSettings';
+import { TV_CATALOG_EAGER_RAILS } from '@/lib/catalogRailPage';
 import type { TvHomeFeedSource } from '@/lib/tvHomeFeeds';
 
 function TvHomeSourceRail({
   source,
   config,
   restorePath,
+  homeFocusPriority,
 }: {
   source: TvHomeFeedSource;
   config: CatalogHomeConfig;
   restorePath?: string;
+  homeFocusPriority: number;
 }) {
   const {
     items,
@@ -24,9 +27,7 @@ function TvHomeSourceRail({
     openItem,
   } = useTvHomeFeedSource(source, config);
 
-  if (!isLoading && (isError || items.length === 0)) {
-    return null;
-  }
+  if (!isLoading && !isError && items.length === 0) return null;
 
   return (
     <PosterRail
@@ -40,6 +41,7 @@ function TvHomeSourceRail({
       onLoadMore={fetchNextPage}
       restorePath={restorePath}
       restoreRailKey={source.key}
+      railFocusPriority={homeFocusPriority}
     />
   );
 }
@@ -54,8 +56,13 @@ export function TvHomeFeedRails({ sources, config, restorePath }: TvHomeFeedRail
   return (
     <>
       {sources.map((source, index) => (
-        <LazyCatalogRail key={source.key} eager={index < 2}>
-          <TvHomeSourceRail source={source} config={config} restorePath={restorePath} />
+        <LazyCatalogRail key={source.key} eager={index < TV_CATALOG_EAGER_RAILS}>
+          <TvHomeSourceRail
+            source={source}
+            config={config}
+            restorePath={restorePath}
+            homeFocusPriority={index}
+          />
         </LazyCatalogRail>
       ))}
     </>

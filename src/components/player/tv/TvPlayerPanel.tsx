@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View, type DimensionValue } from 'react-native';
 
+import { TvHudPressable } from '@/components/player/tv/TvHudPressable';
 import type { TvPlayerButtonId, TvPlayerPanelFocus } from '@/components/player/tv/tvPlayerTypes';
 import { radii, spacing } from '@/constants/aniverse';
 import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
@@ -10,6 +11,7 @@ import {
   type PlayerPreferences,
 } from '@/lib/playerPreferences';
 import { isOpeningLikeSkip, type PlayerSkipSegment } from '@/lib/playerSkip';
+import type { TvHwEvent } from '@/lib/tvEventHandler';
 
 function pct(value: number): DimensionValue {
   return `${Math.min(100, Math.max(0, value))}%`;
@@ -36,6 +38,9 @@ interface TvPlayerPanelProps {
   selectedConnection?: string;
   selectedDelivery?: string;
   selectedSubtitle?: string;
+  onTvKey: (event: TvHwEvent) => void;
+  onFocusButton: (id: TvPlayerPanelFocus) => void;
+  onActivate: (id: TvPlayerButtonId) => void;
 }
 
 function OptionPill({
@@ -43,14 +48,25 @@ function OptionPill({
   value,
   focused,
   compact,
+  onTvKey,
+  onFocus,
+  onPress,
 }: {
   label?: string;
   value: string;
   focused: boolean;
   compact?: boolean;
+  onTvKey: (event: TvHwEvent) => void;
+  onFocus: () => void;
+  onPress: () => void;
 }) {
   return (
-    <View style={[styles.pill, compact && styles.pillCompact, focused && styles.pillFocused]}>
+    <TvHudPressable
+      style={[styles.pill, compact && styles.pillCompact, focused && styles.pillFocused]}
+      onTvKey={onTvKey}
+      onFocus={onFocus}
+      onPress={onPress}
+    >
       {label ? (
         <Text style={[styles.pillLabel, focused && styles.pillLabelFocused]} numberOfLines={1}>
           {label}
@@ -59,7 +75,7 @@ function OptionPill({
       <Text style={[styles.pillValue, focused && styles.pillValueFocused]} numberOfLines={1}>
         {value}
       </Text>
-    </View>
+    </TvHudPressable>
   );
 }
 
@@ -85,6 +101,9 @@ export function TvPlayerPanel({
   selectedConnection,
   selectedDelivery,
   selectedSubtitle,
+  onTvKey,
+  onFocusButton,
+  onActivate,
 }: TvPlayerPanelProps) {
   if (!visible) return null;
 
@@ -93,11 +112,12 @@ export function TvPlayerPanel({
   const progressWidth = pct(progress);
 
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    <View style={styles.wrap} pointerEvents="box-none">
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.82)']}
         locations={[0, 0.5, 1]}
         style={styles.fade}
+        pointerEvents="none"
       />
 
       <View style={styles.body}>
@@ -116,7 +136,13 @@ export function TvPlayerPanel({
           </View>
         )}
 
-        <View style={[styles.timeline, timelineFocused && styles.timelineFocused]}>
+        <TvHudPressable
+          captureHorizontal
+          style={[styles.timeline, timelineFocused && styles.timelineFocused]}
+          onTvKey={onTvKey}
+          onFocus={() => onFocusButton('timeline')}
+          onPress={() => onActivate('play')}
+        >
           <View style={styles.track}>
             {duration > 0
               ? skipSegments.map((segment) => {
@@ -138,7 +164,7 @@ export function TvPlayerPanel({
               <View style={styles.thumb} />
             </View>
           </View>
-        </View>
+        </TvHudPressable>
 
         <View style={styles.times}>
           <Text style={styles.time}>{formatPlaybackTime(currentTime)}</Text>
@@ -151,6 +177,9 @@ export function TvPlayerPanel({
               label="Озвучка"
               value={selectedDubbing ?? '—'}
               focused={isFocused('dubbing')}
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('dubbing')}
+              onPress={() => onActivate('dubbing')}
             />
           ) : null}
           {hasQuality ? (
@@ -158,6 +187,9 @@ export function TvPlayerPanel({
               label="Качество"
               value={selectedQuality ?? '—'}
               focused={isFocused('quality')}
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('quality')}
+              onPress={() => onActivate('quality')}
             />
           ) : null}
           {hasConnection ? (
@@ -165,6 +197,9 @@ export function TvPlayerPanel({
               label="Сеть"
               value={selectedConnection ?? '—'}
               focused={isFocused('connection')}
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('connection')}
+              onPress={() => onActivate('connection')}
             />
           ) : null}
           {hasDelivery ? (
@@ -172,30 +207,56 @@ export function TvPlayerPanel({
               label="Поток"
               value={selectedDelivery ?? '—'}
               focused={isFocused('delivery')}
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('delivery')}
+              onPress={() => onActivate('delivery')}
             />
           ) : null}
           {enabledButtons.has('episodes') ? (
-            <OptionPill value="Эпизоды" focused={isFocused('episodes')} compact />
+            <OptionPill
+              value="Эпизоды"
+              focused={isFocused('episodes')}
+              compact
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('episodes')}
+              onPress={() => onActivate('episodes')}
+            />
           ) : null}
           {hasSubtitles ? (
             <OptionPill
               label="CC"
               value={selectedSubtitle ?? 'Выкл'}
               focused={isFocused('subtitles')}
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('subtitles')}
+              onPress={() => onActivate('subtitles')}
             />
           ) : null}
           <OptionPill
             label="Кадр"
             value={videoFitLabel(prefs.videoFit)}
             focused={isFocused('fit')}
+            onTvKey={onTvKey}
+            onFocus={() => onFocusButton('fit')}
+            onPress={() => onActivate('fit')}
           />
           {enabledButtons.has('external') ? (
-            <OptionPill value="Внешний" focused={isFocused('external')} compact />
+            <OptionPill
+              value="Внешний"
+              focused={isFocused('external')}
+              compact
+              onTvKey={onTvKey}
+              onFocus={() => onFocusButton('external')}
+              onPress={() => onActivate('external')}
+            />
           ) : null}
           <OptionPill
             label="Скорость"
             value={formatPlaybackRate(prefs.playbackRate)}
             focused={isFocused('settings')}
+            onTvKey={onTvKey}
+            onFocus={() => onFocusButton('settings')}
+            onPress={() => onActivate('settings')}
           />
         </View>
       </View>

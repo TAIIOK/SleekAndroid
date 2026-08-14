@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 
 import { ProfileSection } from '@/components/profile/ProfileSection';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -24,34 +25,59 @@ const LINKS = [
     icon: '📚',
   },
   {
+    to: '/friends/feed',
+    title: 'Друзья',
+    subtitle: 'Лента, список и заявки',
+    icon: '👥',
+  },
+  {
     to: '/downloads',
     title: 'Загрузки',
     subtitle: 'Офлайн-контент',
     icon: '⬇️',
+    phoneOnly: true,
   },
 ] as const;
 
 export function ProfileQuickLinks() {
   const router = useRouter();
-
-  if (isTvUi()) return null;
+  const tv = isTvUi();
+  const links = LINKS.filter((link) => !(tv && 'phoneOnly' in link && link.phoneOnly));
 
   return (
     <ProfileSection title="Быстрые ссылки">
       <View style={styles.grid}>
-        {LINKS.map((link) => (
-          <Pressable
-            key={link.to}
-            style={styles.card}
-            onPress={() => router.push(link.to as '/')}
-          >
-            <Text style={styles.icon}>{link.icon}</Text>
-            <View style={styles.text}>
-              <Text style={styles.title}>{link.title}</Text>
-              <Text style={styles.subtitle}>{link.subtitle}</Text>
-            </View>
-          </Pressable>
-        ))}
+        {links.map((link) => {
+          const content = (
+            <>
+              <Text style={styles.icon}>{link.icon}</Text>
+              <View style={styles.text}>
+                <Text style={styles.title}>{link.title}</Text>
+                <Text style={styles.subtitle}>{link.subtitle}</Text>
+              </View>
+            </>
+          );
+          if (tv) {
+            return (
+              <TvFocusable
+                key={link.to}
+                style={styles.card}
+                onPress={() => router.push(link.to as '/')}
+              >
+                {content}
+              </TvFocusable>
+            );
+          }
+          return (
+            <Pressable
+              key={link.to}
+              style={styles.card}
+              onPress={() => router.push(link.to as '/')}
+            >
+              {content}
+            </Pressable>
+          );
+        })}
       </View>
     </ProfileSection>
   );

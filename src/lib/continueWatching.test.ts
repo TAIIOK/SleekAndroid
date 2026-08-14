@@ -17,6 +17,10 @@ vi.mock('@/lib/isTvUi', () => ({
 }));
 
 import { buildContinueWatchingItems } from './continueWatching';
+import {
+  animeWatchHistoryKey,
+  rememberWatchHistoryMeta,
+} from './watchHistoryMeta';
 import type { UserAnimeProgress, UserLampaProgress } from '../types/progress';
 
 describe('buildContinueWatchingItems', () => {
@@ -148,5 +152,102 @@ describe('buildContinueWatchingItems', () => {
     expect(card).toBeTruthy();
     expect(card?.episode).not.toBe(3);
     expect(card?.episode).toBe(8);
+  });
+
+  it('resolves Lampa posters from image objects instead of String(object)', () => {
+    const lampaProgress: UserLampaProgress[] = [
+      {
+        lampaId: '55',
+        seasonOrdinal: 0,
+        episodeOrdinal: 0,
+        progress: 0.4,
+        completed: false,
+        updatedAt: '2026-08-14T10:00:00.000Z',
+      },
+    ];
+
+    const items = buildContinueWatchingItems(
+      [],
+      [
+        {
+          status: 'watching',
+          lampaObjectId: '55',
+          lampa: {
+            objectId: '55',
+            id: 55,
+            tmdbId: 55,
+            kind: 'movie',
+            title: 'Poster Object',
+            poster: { source: 'https://image.tmdb.org/t/p/w342/obj.jpg' },
+          },
+        },
+      ],
+      [],
+      lampaProgress,
+      [],
+    );
+
+    const card = items.find((item) => item.title === 'Poster Object');
+    expect(card?.poster).toBe('https://image.tmdb.org/t/p/w342/obj.jpg');
+    expect(card?.poster).not.toContain('[object Object]');
+  });
+
+  it('uses local watch-history meta for progress-only anime posters', () => {
+    rememberWatchHistoryMeta(animeWatchHistoryKey(77), {
+      title: 'Cached Title',
+      poster: 'https://static.yani.tv/posters/full/77.jpg',
+      kind: 'anime',
+    });
+
+    const progress: UserAnimeProgress[] = [
+      {
+        episodeId: 9,
+        animeId: 77,
+        progress: 0.4,
+        completed: false,
+        updatedAt: '2026-08-14T10:00:00.000Z',
+      },
+    ];
+
+    const items = buildContinueWatchingItems([], [], progress, [], []);
+    const card = items.find((item) => item.kind === 'anime' && item.animeId === 77);
+    expect(card?.title).toBe('Cached Title');
+    expect(card?.poster).toBe('https://static.yani.tv/posters/full/77.jpg');
+  });
+
+  it('extracts anime posters from nested catalog poster objects', () => {
+    const progress: UserAnimeProgress[] = [
+      {
+        episodeId: 2,
+        animeId: 12,
+        progress: 0.4,
+        completed: false,
+        updatedAt: '2026-08-14T10:00:00.000Z',
+      },
+    ];
+
+    const items = buildContinueWatchingItems(
+      [
+        {
+          animeId: 12,
+          status: 'watching',
+          anime: {
+            id: 12,
+            title: 'Nested Poster',
+            poster: [
+              { type: 'poster', source: 'https://static.yani.tv/posters/full/12.jpg' },
+            ],
+          },
+        },
+      ],
+      [],
+      progress,
+      [],
+      [],
+    );
+
+    const card = items.find((item) => item.animeId === 12);
+    expect(card?.poster).toBe('https://static.yani.tv/posters/full/12.jpg');
+    expect(card?.poster).not.toContain('[object Object]');
   });
 });

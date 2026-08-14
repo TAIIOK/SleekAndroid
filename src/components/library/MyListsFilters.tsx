@@ -60,8 +60,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: 'rgba(195,192,255,0.18)',
-    borderColor: colors.brand,
+    backgroundColor: colors.brandAccent,
+    borderColor: colors.brandAccent,
   },
   chipFocused: {
     borderColor: '#ffffff',
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   chipFocusedActive: {
     borderColor: '#ffffff',
-    backgroundColor: 'rgba(195,192,255,0.32)',
+    backgroundColor: colors.brandAccent,
   },
   chipLabel: {
     color: colors.textSecondary,
@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chipLabelActive: {
-    color: colors.brandTint,
+    color: colors.text,
   },
 });

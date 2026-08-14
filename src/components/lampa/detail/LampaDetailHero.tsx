@@ -11,7 +11,9 @@ import type { LampaDetail } from '@/api/catalog';
 import { DetailLibraryActions } from '@/components/library/DetailLibraryActions';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
+import { useCreatePartyFromLampa } from '@/hooks/useCreatePartyFromLampa';
 import type { UserListStatus } from '@/lib/libraryStatus';
+import { resolveLampaTmdbId } from '@/lib/lampaDetail';
 import {
   buildLampaHeroInfoRows,
   lampaAltTitle,
@@ -75,6 +77,7 @@ export function LampaDetailHero({
   onToggleFavorite,
 }: LampaDetailHeroProps) {
   const tv = isTvUi();
+  const { createParty, creating: creatingParty } = useCreatePartyFromLampa();
   const [overviewExpanded, setOverviewExpanded] = useState(false);
   const title = lampaTitle(detail);
   const alt = lampaAltTitle(detail);
@@ -84,7 +87,7 @@ export function LampaDetailHero({
   const statusLabel = lampaStatus(detail)
     ? localizedLampaStatus(lampaStatus(detail))
     : undefined;
-  const backdrop = lampaBackdrop(detail, tv ? 'original' : 'w780');
+  const backdrop = lampaBackdrop(detail, 'w780');
   const genres = lampaGenreNames(detail.genres).slice(0, 4);
   const infoRows = buildLampaHeroInfoRows(detail, isSerial);
   const overview = (detail.overview ?? detail.description ?? '').trim();
@@ -92,13 +95,16 @@ export function LampaDetailHero({
   const overviewText =
     overviewExpanded || !truncated.needsExpand ? overview : truncated.text;
 
-  const playLabel = hasHistory ? 'Продолжить просмотр' : 'Смотреть сейчас';
+  const playLabel = hasHistory ? 'Продолжить' : 'Смотреть сейчас';
   const playHint =
     hasHistory && isSerial
       ? lastProgress > 0 && lastProgress < 1
         ? `S${lastSeason} · E${lastEpisode} · ${Math.round(lastProgress * 100)}%`
         : `S${lastSeason} · E${lastEpisode}`
       : undefined;
+
+  const mediaKind = kind === 'home' || kind === 'tv' ? 'tv' : 'movie';
+  const tmdbId = resolveLampaTmdbId(detail, String(detail.id ?? ''));
 
   const library = (
     <DetailLibraryActions
@@ -108,13 +114,33 @@ export function LampaDetailHero({
       collectionItem={
         collectionItem ?? {
           mediaType: 'lampa',
-          mediaId: `${kind === 'home' ? 'tv' : kind}:${detail.id ?? ''}`,
+          mediaId: `${mediaKind}:${detail.id ?? ''}`,
           title: title || undefined,
           poster: lampaPosterPath(detail),
         }
       }
       onStatusChange={onStatusChange}
       onToggleFavorite={onToggleFavorite}
+      extraActions={
+        tmdbId ? (
+          <TvFocusable
+            disabled={creatingParty || libraryDisabled}
+            onPress={() =>
+              createParty({
+                tmdbId,
+                kind: mediaKind,
+                title,
+                poster: lampaPosterPath(detail),
+                season: isSerial ? lastSeason : undefined,
+                episode: isSerial ? lastEpisode : undefined,
+              })
+            }
+            style={styles.extraBtn}
+          >
+            <Text style={styles.extraLabel}>{creatingParty ? '…' : '👥'}</Text>
+          </TvFocusable>
+        ) : null
+      }
     />
   );
 
@@ -161,21 +187,39 @@ export function LampaDetailHero({
       </View>
 
       <View style={styles.actions}>
-        <TvFocusable
-          onPress={onWatch}
-          hasTVPreferredFocus={tv}
-          contentEntry={tv}
-          railStart={tv}
-          style={styles.playBtn}
+        <View
+          style={[
+            styles.watchRow,
+            hasHistory && onOpenSources ? styles.watchRowSplit : styles.watchRowSolo,
+          ]}
         >
-          <Text style={styles.playLabel}>▶ {playLabel}</Text>
-          {playHint ? <Text style={styles.playHint}>{playHint}</Text> : null}
-        </TvFocusable>
-        {hasHistory && onOpenSources ? (
-          <TvFocusable onPress={onOpenSources} style={styles.sourcesBtn}>
-            <Text style={styles.sourcesLabel}>Выбрать источник</Text>
+          <TvFocusable
+            onPress={onWatch}
+            hasTVPreferredFocus={tv}
+            contentEntry={tv}
+            railStart={tv}
+            style={[
+              styles.playBtn,
+              hasHistory && onOpenSources ? styles.playBtnCompact : styles.playBtnSolo,
+            ]}
+          >
+            <Text style={styles.playLabel} numberOfLines={1}>
+              ▶ {playLabel}
+            </Text>
+            {playHint ? (
+              <Text style={styles.playHint} numberOfLines={1}>
+                {playHint}
+              </Text>
+            ) : null}
           </TvFocusable>
-        ) : null}
+          {hasHistory && onOpenSources ? (
+            <TvFocusable onPress={onOpenSources} style={styles.sourcesBtn}>
+              <Text style={styles.sourcesLabel} numberOfLines={1}>
+                Выбрать источник
+              </Text>
+            </TvFocusable>
+          ) : null}
+        </View>
         {library}
       </View>
     </View>
@@ -305,9 +349,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: PAGE_PAD,
-    paddingTop: isTvUi() ? spacing.xxl : spacing.xl + 28,
-    paddingBottom: isTvUi() ? spacing.xl : spacing.md,
-    gap: spacing.md,
+    paddingTop: isTvUi() ? spacing.xxl : spacing.sm,
+    paddingBottom: isTvUi() ? spacing.xl : spacing.sm,
+    gap: isTvUi() ? spacing.md : spacing.sm,
     zIndex: 1,
   },
   contentTv: {
@@ -319,8 +363,10 @@ const styles = StyleSheet.create({
   leftCol: {
     flex: 1.2,
     minWidth: 0,
-    gap: spacing.sm,
+    gap: isTvUi() ? spacing.sm : 6,
     justifyContent: 'flex-start',
+    // Match anime detail — clear floating back button / status bar on phone.
+    paddingTop: isTvUi() ? 0 : 120,
   },
   aside: {
     flex: 0.85,
@@ -384,33 +430,52 @@ const styles = StyleSheet.create({
   },
   actions: {
     marginTop: spacing.sm,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
     gap: spacing.sm,
+  },
+  watchRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+    width: '100%',
+  },
+  watchRowSplit: {
+    flexWrap: 'nowrap',
+  },
+  watchRowSolo: {
+    flexWrap: 'wrap',
   },
   playBtn: {
     backgroundColor: colors.brandAccent,
-    borderRadius: 14,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
+    borderRadius: isTvUi() ? 14 : 12,
+    paddingVertical: isTvUi() ? 14 : 11,
     gap: 2,
-    minWidth: 220,
+    justifyContent: 'center',
+  },
+  playBtnCompact: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    paddingHorizontal: isTvUi() ? spacing.lg : spacing.md,
+  },
+  playBtnSolo: {
+    minWidth: isTvUi() ? 220 : 168,
+    paddingHorizontal: isTvUi() ? spacing.xl : spacing.lg,
   },
   playLabel: {
     color: '#fff',
-    fontSize: isTvUi() ? 16 : 15,
+    fontSize: isTvUi() ? 16 : 14,
     fontWeight: '700',
   },
   playHint: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 11,
+    fontSize: isTvUi() ? 11 : 10,
   },
   sourcesBtn: {
-    borderRadius: 14,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
-    minHeight: 48,
+    flexShrink: 0,
+    borderRadius: isTvUi() ? 14 : 12,
+    paddingHorizontal: isTvUi() ? spacing.lg : 12,
+    paddingVertical: isTvUi() ? 14 : 11,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -419,7 +484,7 @@ const styles = StyleSheet.create({
   },
   sourcesLabel: {
     color: '#fff',
-    fontSize: isTvUi() ? 15 : 14,
+    fontSize: isTvUi() ? 15 : 13,
     fontWeight: '700',
   },
   infoGrid: {
@@ -467,5 +532,19 @@ const styles = StyleSheet.create({
     color: colors.brand,
     fontSize: 14,
     fontWeight: '700',
+  },
+  extraBtn: {
+    width: isTvUi() ? 48 : 38,
+    height: isTvUi() ? 48 : 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  extraLabel: {
+    color: colors.brand,
+    fontSize: isTvUi() ? 18 : 16,
   },
 });

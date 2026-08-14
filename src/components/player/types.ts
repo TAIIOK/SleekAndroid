@@ -45,6 +45,13 @@ export interface PlayerControlHandle {
   pause: () => void;
 }
 
+/** Remote play/pause/seek command from Watch Party sync. */
+export interface PartyRemoteCommand {
+  seq: number;
+  time?: number;
+  isPlaying?: boolean;
+}
+
 export interface VideoPlayerProps {
   src: string;
   /** Optional HTTP headers for the media request (WatchHub / CDN). */
@@ -83,4 +90,15 @@ export interface VideoPlayerProps {
   qualityOptions?: PlayerMenuOption[];
   connectionOptions?: PlayerMenuOption[];
   deliveryOptions?: PlayerMenuOption[];
+  /** Watch Party: lock local controls and bridge play/pause/seek to the room. */
+  partyControlled?: boolean;
+  canControl?: boolean;
+  canPlayPause?: boolean;
+  canSeek?: boolean;
+  onPartyPlay?: () => void;
+  onPartyPause?: () => void;
+  onPartySeek?: (time: number) => void;
+  partyRemoteCommand?: PartyRemoteCommand;
+  onPlayingChange?: (playing: boolean) => void;
+  onControlsVisibleChange?: (visible: boolean) => void;
 }

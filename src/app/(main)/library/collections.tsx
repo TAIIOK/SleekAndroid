@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,27 +19,35 @@ import {
   removeCollectionItem,
 } from '@/api/collections';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
-import { PosterGrid } from '@/components/catalog/PosterGrid';
+import { PosterGrid, usePosterGridCardWidth } from '@/components/catalog/PosterGrid';
+import { LibraryShowMoreButton } from '@/components/library/LibraryShowMoreButton';
+import { LibraryHubChrome } from '@/components/library/LibraryHubChrome';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import {
   collectionItemPath,
   collectionItemPoster,
   formatCollectionItemCount,
 } from '@/lib/collectionItems';
-import { colors, layout, radii, spacing } from '@/constants/aniverse';
+import { colors, radii, spacing } from '@/constants/aniverse';
+import { LIBRARY_PAGE_SIZE } from '@/lib/libraryPaging';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
 import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
+import type { UserCollectionItem } from '@/types/collection';
 
 export default function CollectionsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const cardWidth = usePosterGridCardWidth();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
-  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content, {
-    padTop: false,
-  });
+  const [visibleCount, setVisibleCount] = useState(LIBRARY_PAGE_SIZE);
+  const chromeScrollProps = useMobileChromeScrollProps(undefined, styles.content);
+
+  useEffect(() => {
+    setVisibleCount(LIBRARY_PAGE_SIZE);
+  }, [selectedId]);
 
   const { data: collections = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['collections'],
@@ -119,6 +127,7 @@ export default function CollectionsScreen() {
       {...chromeScrollProps}
       {...tvVerticalCatalogScrollProps}
     >
+      <LibraryHubChrome />
       <View style={styles.createRow}>
         <TextInput
           style={styles.input}
@@ -211,33 +220,69 @@ export default function CollectionsScreen() {
               Пока пусто. Добавляйте тайтлы с карточки аниме или фильма.
             </Text>
           ) : (
-            <PosterGrid>
-              {detail.items.map((item, index) => (
-                <View key={item.id} style={styles.gridItem}>
-                  <CatalogPosterCard
-                    variant="grid"
-                    width={layout.posterWidthRail}
-                    title={item.title ?? item.mediaId}
-                    poster={collectionItemPoster(item.mediaType, item.poster)}
-                    subtitle={item.mediaType}
-                    onPress={() => router.push(collectionItemPath(item) as '/')}
-                    railStart={index === 0}
-                  />
-                  <TvFocusable
-                    style={styles.removeItemBtn}
-                    onPress={() =>
-                      removeItemMut.mutate({ collectionId: selectedId, itemId: item.id })
-                    }
-                  >
-                    <Text style={styles.removeItemLabel}>×</Text>
-                  </TvFocusable>
-                </View>
-              ))}
-            </PosterGrid>
+            <CollectionItemsGrid
+              items={detail.items}
+              cardWidth={cardWidth}
+              visibleCount={visibleCount}
+              onShowMore={() => setVisibleCount((n) => n + LIBRARY_PAGE_SIZE)}
+              onOpen={(item) => router.push(collectionItemPath(item) as '/')}
+              onRemove={(itemId) =>
+                removeItemMut.mutate({ collectionId: selectedId, itemId })
+              }
+            />
           )}
         </View>
       ) : null}
     </ScrollView>
+  );
+}
+
+function CollectionItemsGrid({
+  items,
+  cardWidth,
+  visibleCount,
+  onShowMore,
+  onOpen,
+  onRemove,
+}: {
+  items: UserCollectionItem[];
+  cardWidth: number;
+  visibleCount: number;
+  onShowMore: () => void;
+  onOpen: (item: UserCollectionItem) => void;
+  onRemove: (itemId: number) => void;
+}) {
+  const visible = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
+  const hasMore = items.length > visibleCount;
+
+  return (
+    <>
+      <PosterGrid>
+        {visible.map((item, index) => (
+          <View key={item.id} style={styles.gridItem}>
+            <CatalogPosterCard
+              variant="grid"
+              width={cardWidth}
+              title={item.title ?? item.mediaId}
+              poster={collectionItemPoster(item.mediaType, item.poster)}
+              subtitle={item.mediaType}
+              onPress={() => onOpen(item)}
+              railStart={index === 0}
+            />
+            <TvFocusable style={styles.removeItemBtn} onPress={() => onRemove(item.id)}>
+              <Text style={styles.removeItemLabel}>×</Text>
+            </TvFocusable>
+          </View>
+        ))}
+      </PosterGrid>
+      {hasMore ? (
+        <LibraryShowMoreButton
+          remaining={items.length - visibleCount}
+          pageSize={LIBRARY_PAGE_SIZE}
+          onPress={onShowMore}
+        />
+      ) : null}
+    </>
   );
 }
 

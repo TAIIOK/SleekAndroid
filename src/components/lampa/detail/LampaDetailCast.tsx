@@ -1,3 +1,5 @@
+import { usePathname, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -7,10 +9,12 @@ import {
 } from 'react-native';
 
 import type { LampaCastMember } from '@/api/lampaExtras';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { resolveLampaPosterUrl } from '@/lib/config';
+import { setDetailReturnPath } from '@/lib/detailNavigation';
 import { isTvUi } from '@/lib/isTvUi';
 
 interface LampaDetailCastProps {
@@ -19,21 +23,50 @@ interface LampaDetailCastProps {
 }
 
 export function LampaDetailCast({ cast, loading }: LampaDetailCastProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [mountImages, setMountImages] = useState(false);
+
+  useEffect(() => {
+    if (loading || !cast.length) {
+      setMountImages(false);
+      return;
+    }
+    const timer = setTimeout(() => setMountImages(true), 120);
+    return () => clearTimeout(timer);
+  }, [loading, cast.length]);
+
   if (!loading && !cast.length) return null;
 
+  const showSkeleton = loading && !cast.length;
+  const showTiles = !showSkeleton && mountImages;
+
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} pointerEvents="box-none">
       <SectionHeader title="Актёры" flush />
-      {loading && !cast.length ? (
+      {showTiles ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} width={88} height={140} rounded={radii.md} />
+          {cast.map((member) => (
+            <CastTile
+              key={member.id}
+              member={member}
+              onPress={() => {
+                if (!member.id) return;
+                if (!isTvUi()) setDetailReturnPath(pathname);
+                router.push(`/person/${member.id}`);
+              }}
+            />
           ))}
         </ScrollView>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {cast.map((member) => (
-            <CastTile key={member.id} member={member} />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+          pointerEvents="none"
+        >
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} width={TILE} height={140} rounded={radii.md} />
           ))}
         </ScrollView>
       )}
@@ -41,19 +74,27 @@ export function LampaDetailCast({ cast, loading }: LampaDetailCastProps) {
   );
 }
 
-function CastTile({ member }: { member: LampaCastMember }) {
+function CastTile({
+  member,
+  onPress,
+}: {
+  member: LampaCastMember;
+  onPress: () => void;
+}) {
   const image = member.profilePath
     ? resolveLampaPosterUrl(member.profilePath, 'w185')
     : undefined;
 
   return (
-    <View style={styles.tile}>
+    <TvFocusable onPress={onPress} style={styles.tile}>
       <View style={styles.avatar}>
         {image ? (
           <Image source={{ uri: image }} style={styles.image} />
         ) : (
           <View style={styles.fallback}>
-            <Text style={styles.fallbackLetter}>{member.name.slice(0, 1).toUpperCase()}</Text>
+            <Text style={styles.fallbackLetter}>
+              {(member.name ?? '?').slice(0, 1).toUpperCase()}
+            </Text>
           </View>
         )}
       </View>
@@ -65,7 +106,7 @@ function CastTile({ member }: { member: LampaCastMember }) {
           {member.character}
         </Text>
       ) : null}
-    </View>
+    </TvFocusable>
   );
 }
 

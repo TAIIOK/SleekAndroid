@@ -1,9 +1,11 @@
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   findNodeHandle,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,12 +17,13 @@ import {
 
 import { fetchGenres, fetchLampaGenres, lampaItemTitle, searchCatalog } from '@/api/catalog';
 import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
-import { OnScreenKeyboard } from '@/components/auth/OnScreenKeyboard';
 import { SearchFiltersPanel } from '@/components/search/SearchFiltersPanel';
 import { TvFocusable } from '@/components/tv/TvFocusable';
-import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
-import { lampaDetailPath } from '@/lib/lampaDetail';
-import { animePoster, animeTitle } from '@/lib/poster';
+import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { useSavedLibrary } from '@/hooks/useSavedLibrary';
+import { getLampaKind } from '@/lib/myLists';
+import { lampaDetailPath, lampaTitle } from '@/lib/lampaDetail';
+import { animePoster, animeTitle, lampaPosterPath } from '@/lib/poster';
 import { isTvUi } from '@/lib/isTvUi';
 import {
   EMPTY_SEARCH_FILTERS,
@@ -41,33 +44,46 @@ import {
   clearSearchHistory,
   getSearchHistory,
 } from '@/lib/searchHistory';
+import {
+  clearSearchSession,
+  getSearchSession,
+  patchSearchSession,
+  saveSearchSession,
+} from '@/lib/searchSession';
+import { launchTvVoiceSearch } from '@/lib/tvVoiceSearch';
 import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 type SearchLampaItem = RailItem & { kind?: string };
 
 export default function SearchScreen() {
   const router = useRouter();
+  const initialSession = getSearchSession();
   const scrollRef = useRef<ScrollView>(null);
-  const scrollYRef = useRef(0);
-  const [query, setQuery] = useState('');
+  const scrollYRef = useRef(initialSession?.scrollY ?? 0);
+  const [query, setQuery] = useState(() => initialSession?.query ?? '');
   const queryRef = useRef(query);
   queryRef.current = query;
-  const [media, setMedia] = useState<SearchMediaFilter>('all');
-  const [filters, setFilters] = useState<SearchFilterState>(EMPTY_SEARCH_FILTERS);
+  const [media, setMedia] = useState<SearchMediaFilter>(() => initialSession?.media ?? 'all');
+  const [filters, setFilters] = useState<SearchFilterState>(
+    () => initialSession?.filters ?? EMPTY_SEARCH_FILTERS,
+  );
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const mediaRef = useRef(media);
   mediaRef.current = media;
-  const [animeItems, setAnimeItems] = useState<RailItem[]>([]);
-  const [lampaItems, setLampaItems] = useState<SearchLampaItem[]>([]);
+  const [animeItems, setAnimeItems] = useState<RailItem[]>(() => initialSession?.animeItems ?? []);
+  const [lampaItems, setLampaItems] = useState<SearchLampaItem[]>(
+    () => initialSession?.lampaItems ?? [],
+  );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showKeyboard, setShowKeyboard] = useState(false);
+  const [error, setError] = useState<string | null>(() => initialSession?.error ?? null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(() => initialSession?.hasSearched ?? false);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const voiceListeningRef = useRef(false);
   /** Pin Down from the search row — otherwise Android may land on the hidden sidebar anchor. */
-  const [keyboardFirstTag, setKeyboardFirstTag] = useState<number | undefined>();
   const [historyFirstTag, setHistoryFirstTag] = useState<number | undefined>();
   const [popularFirstTag, setPopularFirstTag] = useState<number | undefined>();
 
@@ -76,11 +92,7 @@ export default function SearchScreen() {
   }, []);
   const chromeScrollProps = useMobileChromeScrollProps(trackScrollY, styles.content);
 
-  const searchNextFocusDown = showKeyboard
-    ? keyboardFirstTag
-    : history.length > 0
-      ? historyFirstTag
-      : popularFirstTag;
+  const searchNextFocusDown = history.length > 0 ? historyFirstTag : popularFirstTag;
 
   const bindNativeTag = useCallback(
     (setter: (tag: number | undefined) => void) => (node: View | null) => {
@@ -101,9 +113,84 @@ export default function SearchScreen() {
     staleTime: 60 * 60 * 1000,
   });
 
+  const { savedAnime, savedLampa } = useSavedLibrary();
+
+  const localLibraryItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [] as RailItem[];
+    const animeHits = savedAnime
+      .filter((item) => animeTitle(item).toLowerCase().includes(q))
+      .slice(0, 12)
+      .map((item) => ({
+        id: item.animeId ?? item.id ?? 0,
+        title: animeTitle(item),
+        poster: animePoster(item),
+        href: `/anime/${item.animeId ?? item.id}`,
+      }));
+    const lampaHits = (savedLampa as Array<Record<string, unknown>>)
+      .filter((row) => {
+        const nested = (row.lampa ?? row) as Record<string, unknown>;
+        const title = lampaTitle(nested).toLowerCase();
+        return title.includes(q);
+      })
+      .slice(0, 12)
+      .map((row) => {
+        const nested = (row.lampa ?? row) as Record<string, unknown>;
+        const kind = getLampaKind(row);
+        const path = lampaDetailPath(kind, nested);
+        return {
+          id: String(nested.id ?? nested.tmdbId ?? nested.objectId ?? path),
+          title: lampaTitle(nested),
+          poster: lampaPosterPath(nested),
+          href: path,
+          kind,
+        };
+      });
+    return [...animeHits, ...lampaHits];
+  }, [query, savedAnime, savedLampa]);
+
   useEffect(() => {
     void getSearchHistory().then(setHistory);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const saved = getSearchSession();
+      const y = saved?.scrollY ?? 0;
+      if (y > 0) {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({ y, animated: false });
+          scrollYRef.current = y;
+        });
+      }
+      return () => {
+        patchSearchSession({ scrollY: scrollYRef.current });
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    saveSearchSession({
+      query,
+      media,
+      filters,
+      animeItems,
+      lampaItems,
+      hasSearched,
+      error,
+      scrollY: scrollYRef.current,
+    });
+  }, [query, media, filters, animeItems, lampaItems, hasSearched, error]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setHasSearched(false);
+      setAnimeItems([]);
+      setLampaItems([]);
+      setError(null);
+      clearSearchSession();
+    }
+  }, [query]);
 
   const revealHeader = useCallback(() => {
     if (!isTvUi() || scrollYRef.current < 48) return;
@@ -114,7 +201,7 @@ export default function SearchScreen() {
     const currentMedia = mediaRef.current;
     const currentFilters = filtersRef.current;
     if (!canRunCatalogSearch(q, currentMedia, currentFilters)) return;
-    if (isTvUi()) setShowKeyboard(false);
+    if (isTvUi()) Keyboard.dismiss();
     setLoading(true);
     setError(null);
     setHasSearched(true);
@@ -178,15 +265,26 @@ export default function SearchScreen() {
     void clearSearchHistory().then(() => setHistory([]));
   }, []);
 
-  const handleKey = useCallback(
-    (key: string) => {
-      if (key === 'BACK') setQuery((v) => v.slice(0, -1));
-      else if (key === 'SPACE') setQuery((v) => `${v} `);
-      else if (key === 'SUBMIT') void runSearch(queryRef.current);
-      else setQuery((v) => v + key);
-    },
-    [runSearch],
-  );
+  const onVoiceSearch = useCallback(async () => {
+    if (voiceListeningRef.current) return;
+    voiceListeningRef.current = true;
+    revealHeader();
+    Keyboard.dismiss();
+    setVoiceListening(true);
+    try {
+      const result = await launchTvVoiceSearch();
+      if (result.status === 'cancelled') return;
+      if (result.status === 'unavailable') {
+        setError(result.message);
+        return;
+      }
+      setQuery(result.query);
+      await runSearch(result.query);
+    } finally {
+      voiceListeningRef.current = false;
+      setVoiceListening(false);
+    }
+  }, [revealHeader, runSearch]);
 
   const onMediaChange = useCallback((next: SearchMediaFilter) => {
     setMedia(next);
@@ -211,9 +309,46 @@ export default function SearchScreen() {
   }, [runSearch]);
 
   const showAnime = media === 'all' || media === 'anime';
-  const showLampa = media === 'all' || media === 'movie' || media === 'tv';
-  const lampaSectionTitle =
-    media === 'tv' ? 'Сериалы' : media === 'movie' ? 'Фильмы' : 'Фильмы и сериалы';
+  const showLampaMovies = media === 'all' || media === 'movie';
+  const showLampaTv = media === 'all' || media === 'tv';
+
+  const lampaMovieItems = useMemo(
+    () => lampaItems.filter((item) => (item.kind ?? 'movie') !== 'tv'),
+    [lampaItems],
+  );
+  const lampaTvItems = useMemo(
+    () => lampaItems.filter((item) => item.kind === 'tv'),
+    [lampaItems],
+  );
+
+  const buildSeeAllLampaParams = useCallback(
+    (kind: 'movie' | 'tv') => {
+      const params: Record<string, string> = {
+        q: query.trim(),
+        bucket: 'lampa',
+        kind,
+      };
+      const f = catalogSearchFilterParams(media, filters);
+      if (f.lampaGenre) params.lampaGenre = f.lampaGenre;
+      if (f.year) params.year = f.year;
+      if (f.lampaStatus) params.lampaStatus = f.lampaStatus;
+      if (f.lampaMinRating) params.lampaMinRating = f.lampaMinRating;
+      if (f.lampaLang) params.lampaLang = f.lampaLang;
+      if (f.lampaCountry) params.lampaCountry = f.lampaCountry;
+      if (f.sortBy) params.sortBy = f.sortBy;
+      if (f.order) params.order = f.order;
+      return params;
+    },
+    [query, media, filters],
+  );
+
+  const onLampaItemPress = useCallback(
+    (item: SearchLampaItem) => {
+      const kind = item.kind ?? 'movie';
+      router.push(lampaDetailPath(kind, { id: item.id }) as never);
+    },
+    [router],
+  );
 
   const seeAllAnimeParams = useMemo(() => {
     const params: Record<string, string> = {
@@ -228,24 +363,6 @@ export default function SearchScreen() {
     if (f.season) params.season = f.season;
     if (f.ageRating) params.ageRating = f.ageRating;
     if (f.ratingMin) params.ratingMin = f.ratingMin;
-    if (f.sortBy) params.sortBy = f.sortBy;
-    if (f.order) params.order = f.order;
-    return params;
-  }, [query, media, filters]);
-
-  const seeAllLampaParams = useMemo(() => {
-    const params: Record<string, string> = {
-      q: query.trim(),
-      bucket: 'lampa',
-      kind: media === 'tv' ? 'tv' : 'movie',
-    };
-    const f = catalogSearchFilterParams(media, filters);
-    if (f.lampaGenre) params.lampaGenre = f.lampaGenre;
-    if (f.year) params.year = f.year;
-    if (f.lampaStatus) params.lampaStatus = f.lampaStatus;
-    if (f.lampaMinRating) params.lampaMinRating = f.lampaMinRating;
-    if (f.lampaLang) params.lampaLang = f.lampaLang;
-    if (f.lampaCountry) params.lampaCountry = f.lampaCountry;
     if (f.sortBy) params.sortBy = f.sortBy;
     if (f.order) params.order = f.order;
     return params;
@@ -266,68 +383,123 @@ export default function SearchScreen() {
         keyboardShouldPersistTaps="handled"
         {...chromeScrollProps}
       >
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, !isTvUi() && styles.mobileInset]}>
           <Text style={styles.title}>Поиск</Text>
 
-          <View style={styles.searchRow}>
-            {isTvUi() ? (
-              <TvFocusable
-                onPress={() => {
-                  revealHeader();
-                  setShowKeyboard(true);
-                }}
-                onFocus={revealHeader}
-                nextFocusDown={searchNextFocusDown}
-                style={styles.inputFocus}
-                focusedStyle={styles.inputFocused}
-              >
-                <Text style={query ? styles.inputValue : styles.inputPlaceholder} numberOfLines={1}>
-                  {query || 'Название аниме, фильма или сериала'}
-                </Text>
-              </TvFocusable>
-            ) : (
+          {isTvUi() ? (
+            <View style={styles.searchRow}>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.inputFocus,
+                  styles.inputValue,
+                  inputFocused && styles.inputFocused,
+                ]}
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Название аниме, фильма или сериала"
                 placeholderTextColor={colors.textSecondary}
+                showSoftInputOnFocus
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
+                underlineColorAndroid="transparent"
+                textAlignVertical="center"
+                {...(searchNextFocusDown != null
+                  ? ({ nextFocusDown: searchNextFocusDown } as Record<string, number>)
+                  : null)}
                 onSubmitEditing={() => void runSearch(query)}
+                onFocus={() => {
+                  revealHeader();
+                  setInputFocused(true);
+                }}
+                onBlur={() => setInputFocused(false)}
               />
-            )}
-            <TvFocusable
-              onPress={() => void runSearch(query)}
-              onFocus={revealHeader}
-              nextFocusDown={searchNextFocusDown}
-              style={styles.searchButton}
-              focusedStyle={styles.searchButtonFocused}
-            >
-              <Text style={styles.searchButtonLabel}>Найти</Text>
-            </TvFocusable>
-            <TvFocusable
-              onPress={() => {
-                revealHeader();
-                setShowKeyboard(false);
-                setFiltersOpen(true);
-              }}
-              onFocus={revealHeader}
-              nextFocusDown={searchNextFocusDown}
-              style={[styles.filtersBtn, filtersActive && styles.filtersBtnActive]}
-              focusedStyle={styles.filtersBtnFocused}
-            >
-              <Text style={styles.filtersBtnLabel} numberOfLines={1}>
-                {filtersActive && filtersSummary ? `Фильтры · ${filtersSummary}` : 'Фильтры'}
-              </Text>
-            </TvFocusable>
-          </View>
-
-          {isTvUi() && showKeyboard ? (
-            <OnScreenKeyboard onKey={handleKey} onFirstKeyNativeTag={setKeyboardFirstTag} />
-          ) : null}
+              <TvFocusable
+                onPress={() => void onVoiceSearch()}
+                onFocus={revealHeader}
+                nextFocusDown={searchNextFocusDown}
+                disabled={voiceListening}
+                accessibilityLabel="Голосовой поиск"
+                style={styles.micBtn}
+                focusedStyle={styles.micBtnFocused}
+              >
+                <Ionicons
+                  name={voiceListening ? 'mic' : 'mic-outline'}
+                  size={22}
+                  color={colors.text}
+                />
+              </TvFocusable>
+              <TvFocusable
+                onPress={() => void runSearch(query)}
+                onFocus={revealHeader}
+                nextFocusDown={searchNextFocusDown}
+                style={styles.searchButton}
+                focusedStyle={styles.searchButtonFocused}
+              >
+                <Text style={styles.searchButtonLabel}>Найти</Text>
+              </TvFocusable>
+              <TvFocusable
+                onPress={() => {
+                  revealHeader();
+                  Keyboard.dismiss();
+                  setFiltersOpen(true);
+                }}
+                onFocus={revealHeader}
+                nextFocusDown={searchNextFocusDown}
+                style={[styles.filtersBtn, filtersActive && styles.filtersBtnActive]}
+                focusedStyle={styles.filtersBtnFocused}
+              >
+                <Text style={styles.filtersBtnLabel} numberOfLines={1}>
+                  {filtersActive && filtersSummary ? `Фильтры · ${filtersSummary}` : 'Фильтры'}
+                </Text>
+              </TvFocusable>
+            </View>
+          ) : (
+            <View style={styles.mobileSearch}>
+              <View style={styles.mobileSearchField}>
+                <Ionicons name="search-outline" size={22} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.mobileInput}
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Аниме, фильмы, сериалы…"
+                  placeholderTextColor={colors.textMuted}
+                  onSubmitEditing={() => void runSearch(query)}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  clearButtonMode="while-editing"
+                />
+              </View>
+              <View style={styles.mobileActionsRow}>
+                <TvFocusable
+                  onPress={() => void runSearch(query)}
+                  style={styles.mobileSearchButton}
+                  focusedStyle={styles.searchButtonFocused}
+                >
+                  <Text style={styles.mobileSearchButtonLabel}>Найти</Text>
+                </TvFocusable>
+                <TvFocusable
+                  onPress={() => setFiltersOpen(true)}
+                  style={[styles.mobileFiltersBtn, filtersActive && styles.filtersBtnActive]}
+                  focusedStyle={styles.filtersBtnFocused}
+                >
+                  <Ionicons
+                    name="options-outline"
+                    size={18}
+                    color={filtersActive ? colors.brand : colors.textSecondary}
+                  />
+                  <Text style={styles.mobileFiltersBtnLabel} numberOfLines={1}>
+                    {filtersActive && filtersSummary ? filtersSummary : 'Фильтры'}
+                  </Text>
+                </TvFocusable>
+              </View>
+            </View>
+          )}
         </View>
 
         {history.length > 0 ? (
-          <View style={styles.popular}>
+          <View style={[styles.popular, !isTvUi() && styles.mobileInset]}>
             <View style={styles.historyHeader}>
               <Text style={styles.popularTitle}>Недавние</Text>
               <TvFocusable
@@ -355,32 +527,52 @@ export default function SearchScreen() {
           </View>
         ) : null}
 
-        <View style={styles.popular}>
-          <Text style={styles.popularTitle}>Популярные запросы</Text>
-          <View style={styles.popularRow}>
-            {SEARCH_POPULAR_QUERIES.map((item, index) => (
-              <FilterChip
-                key={item}
-                label={item}
-                active={false}
-                hostRef={index === 0 ? bindNativeTag(setPopularFirstTag) : undefined}
-                onPress={() => {
-                  setQuery(item);
-                  void runSearch(item);
-                }}
-              />
-            ))}
+        {!hasSearched ? (
+          <View style={[styles.popular, !isTvUi() && styles.mobileInset]}>
+            <Text style={styles.popularTitle}>Популярные запросы</Text>
+            <View style={styles.popularRow}>
+              {SEARCH_POPULAR_QUERIES.map((item, index) => (
+                <FilterChip
+                  key={item}
+                  label={item}
+                  active={false}
+                  hostRef={index === 0 ? bindNativeTag(setPopularFirstTag) : undefined}
+                  onPress={() => {
+                    setQuery(item);
+                    void runSearch(item);
+                  }}
+                />
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        {loading ? <ActivityIndicator color={colors.brand} style={styles.loader} /> : null}
+        {error ? <Text style={[styles.error, !isTvUi() && styles.mobileInset]}>{error}</Text> : null}
+        {loading ? (
+          <ActivityIndicator
+            color={colors.brand}
+            style={[styles.loader, !isTvUi() && styles.mobileInset]}
+          />
+        ) : null}
+
+        {localLibraryItems.length > 0 ? (
+          <PosterRail
+            title="В вашей библиотеке"
+            items={localLibraryItems}
+            itemWidth={isTvUi() ? undefined : layout.posterWidthDetail}
+            onItemPress={(item) => {
+              const href = (item as RailItem & { href?: string }).href;
+              if (href) router.push(href as '/');
+            }}
+          />
+        ) : null}
 
         {showAnime && animeItems.length > 0 ? (
           <PosterRail
             title="Аниме"
             items={animeItems}
             loading={loading}
+            itemWidth={isTvUi() ? undefined : layout.posterWidthDetail}
             onItemPress={(item) => router.push(`/anime/${item.id}`)}
             onSeeAll={
               canRunCatalogSearch(query, media, filters)
@@ -394,28 +586,47 @@ export default function SearchScreen() {
           />
         ) : null}
 
-        {showLampa && lampaItems.length > 0 ? (
+        {showLampaMovies && lampaMovieItems.length > 0 ? (
           <PosterRail
-            title={lampaSectionTitle}
-            items={lampaItems}
+            title="Фильмы"
+            items={lampaMovieItems}
             loading={loading}
-            onItemPress={(item) => {
-              const kind = (item as SearchLampaItem).kind ?? 'movie';
-              router.push(lampaDetailPath(kind, { id: item.id }) as never);
-            }}
+            itemWidth={isTvUi() ? undefined : layout.posterWidthDetail}
+            onItemPress={onLampaItemPress}
             onSeeAll={
               canRunCatalogSearch(query, media, filters)
                 ? () =>
                     router.push({
                       pathname: '/search/all',
-                      params: seeAllLampaParams,
+                      params: buildSeeAllLampaParams('movie'),
                     })
                 : undefined
             }
           />
         ) : null}
 
-        {showEmpty ? <Text style={styles.empty}>Ничего не найдено</Text> : null}
+        {showLampaTv && lampaTvItems.length > 0 ? (
+          <PosterRail
+            title="Сериалы"
+            items={lampaTvItems}
+            loading={loading}
+            itemWidth={isTvUi() ? undefined : layout.posterWidthDetail}
+            onItemPress={onLampaItemPress}
+            onSeeAll={
+              canRunCatalogSearch(query, media, filters)
+                ? () =>
+                    router.push({
+                      pathname: '/search/all',
+                      params: buildSeeAllLampaParams('tv'),
+                    })
+                : undefined
+            }
+          />
+        ) : null}
+
+        {showEmpty ? (
+          <Text style={[styles.empty, !isTvUi() && styles.mobileInset]}>Ничего не найдено</Text>
+        ) : null}
       </ScrollView>
 
       <SearchFiltersPanel
@@ -457,10 +668,19 @@ function FilterChip({
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
-  content: {
-    padding: isTvUi() ? spacing.lg : spacing.xxl,
-    gap: isTvUi() ? spacing.md : spacing.lg,
-    paddingBottom: isTvUi() ? spacing.xxl * 2 : spacing.xxl,
+  content: isTvUi()
+    ? {
+        padding: spacing.lg,
+        gap: spacing.md,
+        paddingBottom: spacing.xxl * 2,
+      }
+    : {
+        paddingTop: spacing.md,
+        gap: spacing.lg,
+        paddingBottom: spacing.xxl,
+      },
+  mobileInset: {
+    paddingHorizontal: layout.gutterMobile,
   },
   topBar: {
     gap: isTvUi() ? spacing.md : spacing.lg,
@@ -477,7 +697,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgCard,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    maxWidth: isTvUi() ? 280 : 200,
+    maxWidth: 280,
   },
   filtersBtnActive: {
     borderColor: colors.brand,
@@ -497,15 +717,66 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     alignItems: 'center',
   },
-  input: {
-    flex: 1,
+  mobileSearch: {
+    gap: spacing.md,
+  },
+  mobileSearchField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 52,
     backgroundColor: colors.bgCard,
-    borderRadius: 12,
-    padding: spacing.md,
-    color: colors.text,
-    fontSize: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+  },
+  mobileInput: {
+    flex: 1,
+    minHeight: 52,
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    paddingVertical: spacing.sm,
+  },
+  mobileActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'stretch',
+  },
+  mobileSearchButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandAccent,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    minHeight: 48,
+  },
+  mobileSearchButtonLabel: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  mobileFiltersBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgCard,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    minHeight: 48,
+  },
+  mobileFiltersBtnLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    flexShrink: 1,
   },
   inputFocus: {
     flex: 1,
@@ -522,10 +793,21 @@ const styles = StyleSheet.create({
   inputValue: {
     color: colors.text,
     fontSize: 16,
+    minHeight: 48,
   },
-  inputPlaceholder: {
-    color: colors.textSecondary,
-    fontSize: 16,
+  micBtn: {
+    borderRadius: 12,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.bgCard,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.fill,
   },
   searchButton: {
     backgroundColor: colors.brandAccent,

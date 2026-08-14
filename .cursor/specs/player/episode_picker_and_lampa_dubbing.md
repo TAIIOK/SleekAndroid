@@ -2,7 +2,7 @@
 
 ## Description
 
-TV player episode overlay groups episodes by season with a «Сейчас» marker. Lampa watch exposes in-player озвучка (translator) switching when multiple translators exist, preserving playback position.
+TV player episode overlay groups episodes by season with a «Сейчас» marker. Phone player uses a numbered tile grid (site `PlayerEpisodePicker`). Lampa watch exposes in-player озвучка (translator) switching when multiple translators exist, preserving playback position.
 
 ## Requirements
 
@@ -15,6 +15,7 @@ TV player episode overlay groups episodes by season with a «Сейчас» mark
 5. [x] Lampa: build sections from `payload.seasons` (not a flat unlabeled list).
 6. [x] D-pad focus moves within the overlay list/sections without stealing the focus sink incorrectly.
 7. [x] Netflix-style right-rail panel with episode cards (thumbnail, title, duration, progress).
+8. [x] Phone episode sheet is a numbered tile grid (site `PlayerEpisodePicker`): season headers, «Сейчас» on the current tile, caption of the current episode.
 
 ### Lampa dubbing
 
@@ -26,6 +27,7 @@ TV player episode overlay groups episodes by season with a «Сейчас» mark
 ## Acceptance Criteria
 
 - Serial with multiple seasons shows season headers in the episodes overlay.
+- Phone player episode sheet shows a 5-column number grid, not a flat label list.
 - Switching Lampa озвучка mid-watch continues near the same timestamp.
 - Anime with one dubbing / Lampa with one translator does not show the dubbing menu.
 
@@ -33,3 +35,4 @@ TV player episode overlay groups episodes by season with a «Сейчас» mark
 
 - Source: site `PlayerEpisodePicker`, `WatchPage` `switchLampaTranslator`.
 - TV overlays live in `TvPlayerOverlays` / `useTvPlayerRemote`.
+- Phone grid picker lives in `PhoneEpisodePicker`; season grouping is shared via `buildEpisodeSections`.

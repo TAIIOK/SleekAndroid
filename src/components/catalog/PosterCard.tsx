@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useRef, useState } from 'react';
 import {
   findNodeHandle,
   Pressable,
@@ -9,21 +9,11 @@ import {
 } from 'react-native';
 
 import { colors, layout, radii, tvFocus, typography } from '@/constants/aniverse';
-import {
-  reportDeadPoster,
-  subscribeAnimePosterRefresh,
-} from '@/lib/animePosterRefresh';
-import { resolvePosterUrl } from '@/lib/config';
-import {
-  reportYaniPosterLoadError,
-  reportYaniPosterLoadSuccess,
-} from '@/lib/imageCdn';
-import {
-  isPlausibleImageURL,
-  normalizedAbsoluteURLString,
-} from '@/lib/poster';
-import { useTvShellFocus } from '@/providers/TvShellFocus';
+import { usePosterDisplayUri } from '@/hooks/usePosterDisplayUri';
+import { catalogPosterDecodeSize } from '@/lib/catalogRailLayout';
 import { isTvUi } from '@/lib/isTvUi';
+import { tvNextFocusLeft } from '@/lib/tvRailFocus';
+import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 export interface PosterCardProps {
   title: string;
@@ -46,20 +36,8 @@ export interface PosterCardProps {
    * Cleared by caller after a short arm window so intentional Up/Down still works.
    */
   pinVerticalFocus?: boolean;
-}
-
-function resolveDisplayPosterUrl(poster?: string | null): string | undefined {
-  if (typeof poster !== 'string') return undefined;
-  if (
-    poster.startsWith('http://') ||
-    poster.startsWith('https://') ||
-    poster.startsWith('//')
-  ) {
-    const normalized = normalizedAbsoluteURLString(poster);
-    if (!normalized || !isPlausibleImageURL(normalized)) return undefined;
-    return normalized;
-  }
-  return resolvePosterUrl(poster);
+  nextFocusUp?: number;
+  nextFocusDown?: number;
 }
 
 export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
@@ -77,51 +55,31 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
     railStart = false,
     contentEntry = false,
     pinVerticalFocus = false,
+    nextFocusUp,
+    nextFocusDown,
   },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
   const [selfTag, setSelfTag] = useState<number | undefined>();
-  const [overridePoster, setOverridePoster] = useState<string | null>(null);
-  const didReportUnresolvedRef = useRef(false);
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<View | null>(null);
   const displayTitle = title.trim() || 'Без названия';
   const cardWidth = width ?? (variant === 'grid' ? undefined : layout.posterWidthRail);
-  const imageUrl = resolveDisplayPosterUrl(overridePoster ?? poster);
+  const decodeSize = catalogPosterDecodeSize(cardWidth ?? layout.posterWidthRail);
+  const { displayUrl, imageSource, onLoad, onError } = usePosterDisplayUri({
+    poster,
+    animeId,
+  });
   const ratingLabel = score != null && Number.isFinite(score) ? score.toFixed(1) : undefined;
   const exitLeft = isTvUi() && railStart;
   const exitUp = isTvUi() && contentEntry;
-  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
+  const pinnedLeft = tvNextFocusLeft({
+    railStart: exitLeft,
+    exitTag: shellFocus?.sidebarNativeTag,
+  });
   const pinVertical =
     isTvUi() && variant === 'rail' && focused && pinVerticalFocus && selfTag != null;
-
-  useEffect(() => {
-    setOverridePoster(null);
-    didReportUnresolvedRef.current = false;
-  }, [poster, animeId]);
-
-  useEffect(() => {
-    if (animeId == null || !Number.isFinite(animeId) || animeId <= 0) return;
-    return subscribeAnimePosterRefresh((event) => {
-      if (event.animeId !== animeId) return;
-      setOverridePoster(event.posterURLString);
-    });
-  }, [animeId]);
-
-  useEffect(() => {
-    if (didReportUnresolvedRef.current) return;
-    if (animeId == null || !Number.isFinite(animeId) || animeId <= 0) return;
-    const raw = (overridePoster ?? poster)?.trim();
-    if (!raw) return;
-    const isAbsolute =
-      raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('//');
-    if (!isAbsolute) return;
-    const normalized = normalizedAbsoluteURLString(raw);
-    if (normalized && isPlausibleImageURL(normalized)) return;
-    didReportUnresolvedRef.current = true;
-    reportDeadPoster({ animeId, failedUrl: null, rawPath: raw });
-  }, [animeId, poster, overridePoster]);
 
   const setRefs = useCallback(
     (node: View | null) => {
@@ -171,31 +129,26 @@ export const PosterCard = forwardRef<View, PosterCardProps>(function PosterCard(
         focused && styles.cardFocused,
       ]}
       {...(contentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
-      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
+      {...(pinnedLeft != null ? { nextFocusLeft: pinnedLeft } : {})}
       {...(pinVertical
         ? { nextFocusUp: selfTag, nextFocusDown: selfTag }
-        : {})}
+        : {
+            ...(nextFocusUp != null ? { nextFocusUp } : {}),
+            ...(nextFocusDown != null ? { nextFocusDown } : {}),
+          })}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
         <View style={[styles.poster, { aspectRatio: layout.posterAspect }]}>
-          {imageUrl ? (
+          {imageSource ? (
             <Image
-              source={{ uri: imageUrl }}
+              source={{ ...imageSource, width: decodeSize.width, height: decodeSize.height }}
               style={styles.image}
               contentFit="cover"
               cachePolicy="memory-disk"
-              recyclingKey={imageUrl}
-              onLoad={() => reportYaniPosterLoadSuccess()}
-              onError={() => {
-                reportYaniPosterLoadError(imageUrl);
-                if (animeId != null) {
-                  reportDeadPoster({
-                    animeId,
-                    failedUrl: imageUrl,
-                    rawPath: overridePoster ?? poster,
-                  });
-                }
-              }}
+              recyclingKey={displayUrl}
+              transition={0}
+              onLoad={onLoad}
+              onError={onError}
             />
           ) : (
             <Text style={styles.fallback}>{displayTitle.slice(0, 1) || '?'}</Text>

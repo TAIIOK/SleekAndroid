@@ -1,15 +1,21 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 
-import { fetchAnimeCharacters, fetchAnimeDetail, fetchAnimeRelated } from '@/api/catalog';
+import {
+  fetchAnimeCharacters,
+  fetchAnimeDetail,
+  fetchAnimeRelated,
+  fetchAnimeSimilar,
+} from '@/api/catalog';
 import {
   fetchSavedAnimeLibrary,
   toggleAnimeFavorite,
@@ -22,11 +28,18 @@ import { AnimeDetailHero } from '@/components/anime/AnimeDetailHero';
 import { AnimeDetailPlot } from '@/components/anime/AnimeDetailPlot';
 import { AnimeDetailSidebar } from '@/components/anime/AnimeDetailSidebar';
 import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
+import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
+import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBackButton';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { useAccumulatedEpisodes } from '@/hooks/useAccumulatedEpisodes';
+import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
 import { useResumeEpisode } from '@/hooks/useResumeEpisode';
-import { extractRelatedItems } from '@/lib/animeDetail';
+import {
+  excludeRelatedFromSimilar,
+  extractRelatedItems,
+  sortAnimeItemsByYear,
+} from '@/lib/animeDetail';
 import { loadAnimeLastDubbing, saveAnimeLastDubbing } from '@/lib/animeLastDubbing';
 import {
   filterEpisodesByDubbing,
@@ -40,18 +53,17 @@ import { useAuth } from '@/providers/AuthProvider';
 import { pickPlaybackUrl } from '@aniverse/playback';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
+import { notifyViewportScroll } from '@/lib/viewportScroll';
 
 const DEFAULT_QUALITY = '720p' as const;
 
 export default function AnimeDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { width } = useWindowDimensions();
-  // Site desktop/TV: plot + «Похожее» side-by-side. Phone stays stacked unless wide tablet.
-  const useWideLayout = isTvUi() || width >= 960;
   const { id } = useLocalSearchParams<{ id: string }>();
   const animeId = Number(id);
   const { isAuthenticated } = useAuth();
+  const belowFoldReady = useBelowFoldReady();
 
   const {
     episodes: allEpisodes,
@@ -97,22 +109,32 @@ export default function AnimeDetailScreen() {
   const { data: related = [], isLoading: relatedLoading } = useQuery({
     queryKey: ['anime-related', animeId],
     queryFn: () => fetchAnimeRelated(animeId),
-    enabled: Number.isFinite(animeId),
+    enabled: belowFoldReady && Number.isFinite(animeId),
+  });
+
+  const { data: similar = [], isLoading: similarLoading } = useQuery({
+    queryKey: ['anime-similar', animeId],
+    queryFn: () => fetchAnimeSimilar(animeId),
+    enabled: belowFoldReady && Number.isFinite(animeId),
   });
 
   const { data: characters = [], isLoading: charactersLoading } = useQuery({
     queryKey: ['anime-characters', animeId],
     queryFn: () => fetchAnimeCharacters(animeId),
-    enabled: Number.isFinite(animeId),
+    enabled: belowFoldReady && Number.isFinite(animeId),
   });
 
   const relatedItems = useMemo(
-    () => extractRelatedItems(related, animeId, false),
+    () => sortAnimeItemsByYear(extractRelatedItems(related, animeId, false)),
     [related, animeId],
   );
   const recommendationItems = useMemo(
     () => extractRelatedItems(related, animeId, true),
     [related, animeId],
+  );
+  const similarItems = useMemo(
+    () => excludeRelatedFromSimilar(similar, relatedItems),
+    [similar, relatedItems],
   );
 
   const allVideos = useMemo(
@@ -208,26 +230,6 @@ export default function AnimeDetailScreen() {
     ).then(invalidateLibrary);
   };
 
-  if (isLoading) return <AnimeDetailSkeleton />;
-
-  if (isError || !detail) {
-    return (
-      <View style={styles.loader}>
-        <Text style={styles.errorTitle}>Не удалось загрузить</Text>
-        <Text style={styles.errorBody}>Проверьте подключение или попробуйте позже</Text>
-        <TvFocusable
-          hasTVPreferredFocus={isTvUi()}
-          onPress={() => {
-            void refetch();
-          }}
-          style={styles.retryBtn}
-        >
-          <Text style={styles.retryLabel}>Повторить</Text>
-        </TvFocusable>
-      </View>
-    );
-  }
-
   const onPlayEpisode = (episode: AnimeEpisode) => {
     const progress = savedState.progressByEpisodeId[episode.id];
     playEpisode(
@@ -236,11 +238,17 @@ export default function AnimeDetailScreen() {
     );
   };
 
+  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    notifyViewportScroll(event.nativeEvent.contentOffset.y);
+  }, []);
+
   const sidebar = (
     <AnimeDetailSidebar
-      similarItems={relatedItems}
+      relatedItems={relatedItems}
       recommendationItems={recommendationItems}
-      similarLoading={relatedLoading}
+      similarItems={similarItems}
+      relatedLoading={relatedLoading}
+      similarLoading={similarLoading}
     />
   );
 
@@ -255,97 +263,102 @@ export default function AnimeDetailScreen() {
       onPlay={onPlayEpisode}
       dubbingOptions={dubbingOptions}
       selectedDubbing={activeDubbing}
-      watchedDubbing={watchedDubbing}
       onSelectDubbing={onSelectDubbing}
       filteredEmptyWhileLoading={filteredEmptyWhileLoading}
     />
   );
 
-  // Episodes right under hero; then plot | similar. Genres live in hero pills only.
-  const body = useWideLayout ? (
+  // Episodes right under hero; then plot, characters, related rails.
+  const body = (
     <View style={styles.stack}>
       {episodesBlock}
-      <View style={styles.wideGrid}>
-        <View style={styles.wideMain}>
-          <AnimeDetailPlot detail={detail} />
+      {detail ? <AnimeDetailPlot detail={detail} /> : null}
+      {charactersLoading || characters.length > 0 ? (
+        <LazyCatalogRail placeholderMinHeight={180}>
           <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
-        </View>
-        <View style={styles.wideSide}>{sidebar}</View>
-      </View>
-    </View>
-  ) : (
-    <View style={styles.stack}>
-      {episodesBlock}
-      <AnimeDetailPlot detail={detail} />
-      <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
+        </LazyCatalogRail>
+      ) : null}
       {sidebar}
     </View>
   );
 
+  // Single root so the back control never unmounts across skeleton → content.
+  let main: ReactNode;
+  if (isLoading) {
+    main = <AnimeDetailSkeleton />;
+  } else if (isError || !detail) {
+    main = (
+      <View style={styles.loader}>
+        <Text style={styles.errorTitle}>Не удалось загрузить</Text>
+        <Text style={styles.errorBody}>Проверьте подключение или попробуйте позже</Text>
+        <TvFocusable
+          hasTVPreferredFocus={isTvUi()}
+          onPress={() => {
+            void refetch();
+          }}
+          style={styles.retryBtn}
+        >
+          <Text style={styles.retryLabel}>Повторить</Text>
+        </TvFocusable>
+      </View>
+    );
+  } else {
+    main = (
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        nestedScrollEnabled
+        onScroll={onScroll}
+        scrollEventThrottle={64}
+      >
+        <AnimeDetailHero
+          detail={detail}
+          resumeEpisode={resumeEpisode}
+          resumeLoading={resumeLoading}
+          hasHistory={savedState.hasHistory}
+          lastProgress={savedState.lastProgress}
+          episodesTotal={detail.episodesTotal}
+          userStatus={savedState.userStatus}
+          isFavorite={savedState.isFavorite}
+          libraryDisabled={!isAuthenticated}
+          collectionItem={{
+            mediaType: 'anime',
+            mediaId: String(animeId),
+            title: detail.title ?? undefined,
+            poster: animePoster(detail),
+          }}
+          onPlay={playResume}
+          onStatusChange={onStatusChange}
+          onToggleFavorite={onToggleFavorite}
+        />
+        {body}
+      </ScrollView>
+    );
+  }
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      nestedScrollEnabled
-    >
-      <AnimeDetailHero
-        detail={detail}
-        resumeEpisode={resumeEpisode}
-        resumeLoading={resumeLoading}
-        hasHistory={savedState.hasHistory}
-        lastProgress={savedState.lastProgress}
-        episodesTotal={detail.episodesTotal}
-        userStatus={savedState.userStatus}
-        isFavorite={savedState.isFavorite}
-        libraryDisabled={!isAuthenticated}
-        collectionItem={{
-          mediaType: 'anime',
-          mediaId: String(animeId),
-          title: detail.title ?? undefined,
-          poster: animePoster(detail),
-        }}
-        onPlay={playResume}
-        onStatusChange={onStatusChange}
-        onToggleFavorite={onToggleFavorite}
-      />
-      {body}
-    </ScrollView>
+    <View style={styles.root} collapsable={false}>
+      {main}
+      <MobileDetailBackButton />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: {
     // flexGrow:0 — never stretch ScrollView children to the viewport (pushes body down).
     flexGrow: 0,
     padding: isTvUi() ? spacing.lg : spacing.md,
-    gap: isTvUi() ? spacing.sm : spacing.md,
+    gap: isTvUi() ? spacing.sm : spacing.sm,
     paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
   },
   stack: {
     width: '100%',
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: spacing.md,
-  },
-  wideGrid: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.lg,
-  },
-  wideMain: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    minWidth: 0,
-    gap: spacing.md,
-  },
-  wideSide: {
-    width: isTvUi() ? 300 : 280,
-    flexGrow: 0,
-    flexShrink: 0,
-    gap: spacing.md,
+    gap: isTvUi() ? spacing.md : spacing.sm,
   },
   loader: {
     flex: 1,

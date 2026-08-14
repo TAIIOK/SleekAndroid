@@ -17,6 +17,7 @@ import type {
 import type { TvPlayerOverlay } from '@/components/player/tv/tvPlayerTypes';
 import { colors, spacing } from '@/constants/aniverse';
 import type { ExternalPlayerTarget } from '@/lib/externalPlayer';
+import { buildEpisodeSections } from '@/lib/playerEpisodeSections';
 import {
   formatPlaybackRate,
   videoFitLabel,
@@ -174,39 +175,6 @@ function toMenuItems(
     selected: option.selected,
     onPress: () => onSelect(option),
   }));
-}
-
-type EpisodeSection = {
-  season?: number;
-  items: { item: PlayerEpisodeNav['items'][number]; index: number }[];
-};
-
-function buildEpisodeSections(items: PlayerEpisodeNav['items']): EpisodeSection[] {
-  const seasons = new Set<number>();
-  for (const item of items) {
-    if (item.season != null) seasons.add(item.season);
-  }
-
-  if (seasons.size <= 1) {
-    return [
-      {
-        season: seasons.size === 1 ? [...seasons][0] : undefined,
-        items: items.map((item, index) => ({ item, index })),
-      },
-    ];
-  }
-
-  const bySeason = new Map<number, { item: PlayerEpisodeNav['items'][number]; index: number }[]>();
-  items.forEach((item, index) => {
-    const season = item.season ?? 0;
-    const list = bySeason.get(season) ?? [];
-    list.push({ item, index });
-    bySeason.set(season, list);
-  });
-
-  return [...bySeason.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([season, sectionItems]) => ({ season, items: sectionItems }));
 }
 
 const SEASON_HEADER_HEIGHT = 40;

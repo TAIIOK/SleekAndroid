@@ -43,6 +43,20 @@ export function clearCatalogScrollSnapshot(path: string): void {
   snapshots.delete(path.trim() || '/');
 }
 
+const freshLandings = new Set<string>();
+
+/** TV sidebar hub switch: destination catalog should land at y=0, not leftover scroll. */
+export function markCatalogFreshLanding(path: string): void {
+  freshLandings.add(path.trim() || '/');
+}
+
+export function takeCatalogFreshLanding(path: string): boolean {
+  const key = path.trim() || '/';
+  if (!freshLandings.has(key)) return false;
+  freshLandings.delete(key);
+  return true;
+}
+
 /** Live focus tracker for the active catalog screen (updated by rails). */
 let activeFocus: { path: string; railKey: string; itemIndex: number } | null = null;
 

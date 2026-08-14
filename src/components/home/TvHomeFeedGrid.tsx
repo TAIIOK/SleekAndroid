@@ -6,6 +6,7 @@ import { colors, spacing } from '@/constants/aniverse';
 import { usePosterGridLayout } from '@/hooks/usePosterGridLayout';
 import { useTvHomeFeedSource } from '@/hooks/useTvHomeFeedSource';
 import type { CatalogHomeConfig } from '@/lib/homeSettings';
+import { registerTvHomeCatalogFocus } from '@/lib/tvHomeFocusHandoff';
 import type { TvHomeFeedSource } from '@/lib/tvHomeFeeds';
 
 interface TvHomeFeedGridProps {
@@ -53,6 +54,11 @@ export function TvHomeFeedGrid({
           return (
             <CatalogPosterCard
               key={`${source.key}-${item.id}`}
+              ref={
+                index === 0
+                  ? (node) => registerTvHomeCatalogFocus(node, 0)
+                  : undefined
+              }
               variant="grid"
               width={cardWidth}
               title={item.title}

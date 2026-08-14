@@ -91,3 +91,18 @@ export async function fetchLeaderboard(
     return { data: [], meta: { period, type } };
   }
 }
+
+export async function updateProfile(payload: {
+  nickname?: string;
+  email?: string;
+  avatar?: string;
+}): Promise<UserProfile | null> {
+  try {
+    return await requestData<UserProfile>('/api/user', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return null;
+  }
+}

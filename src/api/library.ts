@@ -104,7 +104,7 @@ function normalizeList<T>(payload: unknown, mapRow: (raw: unknown) => T | null):
 
 function libraryAnimeNeedsEnrich(entry: LibraryAnimeEntry): boolean {
   if (!entry.animeId) return false;
-  if (entry.anime && resolveAnimeListTitle(entry.anime)) return false;
+  if (entry.anime && resolveAnimeListTitle(entry.anime) && animePoster(entry.anime)) return false;
   return true;
 }
 
@@ -198,6 +198,22 @@ export async function fetchSavedAnimeLibrary(): Promise<SavedAnimeItem[]> {
 export async function fetchSavedLampaLibrary(): Promise<unknown[]> {
   const rows = await fetchLibraryLampa({ include: 'lampa' });
   return rows.map(mapLibraryLampaToSavedRow);
+}
+
+/** Map public `/api/user/:id/library/*` rows into the same shapes as own My Lists. */
+export async function mapPublicLibraryAnime(rawRows: unknown[]): Promise<SavedAnimeItem[]> {
+  const entries = rawRows
+    .map(normalizeLibraryAnimeRow)
+    .filter((row): row is LibraryAnimeEntry => row != null);
+  const enriched = await enrichLibraryAnimeEntries(entries);
+  return enriched.map(mapLibraryAnimeToSavedItem);
+}
+
+export function mapPublicLibraryLampa(rawRows: unknown[]): Array<Record<string, unknown>> {
+  return rawRows
+    .map(normalizeLibraryLampaRow)
+    .filter((row): row is LibraryLampaEntry => row != null)
+    .map(mapLibraryLampaToSavedRow);
 }
 
 export async function putLibraryAnime(

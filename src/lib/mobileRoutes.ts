@@ -5,7 +5,8 @@ export function isMobileDetailRoute(pathname: string): boolean {
   return (
     /^\/anime\/[^/]+$/.test(pathname) ||
     /^\/movies\/[^/]+$/.test(pathname) ||
-    /^\/series\/[^/]+$/.test(pathname)
+    /^\/series\/[^/]+$/.test(pathname) ||
+    /^\/person\/[^/]+$/.test(pathname)
   );
 }
 
@@ -16,5 +17,23 @@ export function isMobileDetailRoute(pathname: string): boolean {
  */
 export function isMobileChromeHiddenRoute(pathname: string): boolean {
   if (isMobileDetailRoute(pathname)) return true;
-  return pathname === '/watch' || pathname.startsWith('/watch/');
+  if (pathname === '/watch' || pathname.startsWith('/watch/')) return true;
+  // Fullscreen party room / invite accept
+  if (/^\/party\/[^/]+/.test(pathname) && pathname !== '/party/invite') return true;
+  if (pathname.startsWith('/party/invite/')) return true;
+  return false;
+}
+
+/**
+ * Hubs that keep classic shell: fixed nav + scrollable body + footer in document flow.
+ * Library uses overlay chrome so the top nav scrolls away with content (same as home).
+ */
+export function isMobileChromeShellLayoutRoute(pathname: string): boolean {
+  if (pathname === '/party') return true;
+  return false;
+}
+
+/** Routes where the floating top island stays put while the page scrolls. */
+export function isMobileChromeScrollPinnedRoute(pathname: string): boolean {
+  return isMobileChromeShellLayoutRoute(pathname);
 }

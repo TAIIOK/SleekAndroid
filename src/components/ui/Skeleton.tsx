@@ -35,6 +35,7 @@ export function Skeleton({ width = '100%', height = 16, style, rounded = radii.m
   if (isTvUi()) {
     return (
       <View
+        pointerEvents="none"
         style={[
           styles.base,
           { width, height, borderRadius: rounded, opacity: 0.55 },
@@ -46,6 +47,7 @@ export function Skeleton({ width = '100%', height = 16, style, rounded = radii.m
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         styles.base,
         { width, height, borderRadius: rounded, opacity },

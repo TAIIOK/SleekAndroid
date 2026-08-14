@@ -21,8 +21,9 @@ import {
   touchSavedAccount,
 } from '@/lib/savedAccounts';
 import { onSessionExpired } from '@/lib/sessionEvents';
-import { clearTokens, getToken, setTokens } from '@/lib/storage';
 import { flushProgressQueue } from '@/lib/progressQueue';
+import { clearTokens, getToken, setTokens } from '@/lib/storage';
+import { hydrateTokenCache, setTokenCache } from '@/lib/tokenCache';
 
 interface AuthContextValue {
   user: Account | null;
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyAuthResult = useCallback(
     async (result: AuthResult) => {
       await setTokens(result.accessToken, result.refreshToken);
+      setTokenCache(result.accessToken);
       await syncAuthState();
       const me = result.user ?? (await fetchMe());
       setUser(me);
@@ -114,7 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void (async () => {
       try {
-        if (await getToken()) {
+        const token = await hydrateTokenCache();
+        if (token) {
           await refreshUser();
           void flushProgressQueue();
         }
@@ -144,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentId = user?.id != null ? String(user.id) : null;
       await apiLogout();
       await clearTokens();
+      setTokenCache(null);
       if (options?.removeSaved && currentId) {
         await removeSavedAccount(currentId);
       }

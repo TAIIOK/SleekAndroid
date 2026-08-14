@@ -4,11 +4,11 @@ TV lean-back schedule of anime air dates for the current / next week.
 
 ## Description
 
-Show `/api/base/schedule` results grouped by weekday with poster rails. Accessible from the TV sidebar.
+Show `/api/base/schedule` results grouped by weekday with poster rails. The screen stays routable on TV; it is not listed in the sidebar.
 
 ## Requirements
 
-- [x] Route `/schedule` allowed in `tvRoutes` and listed in TV sidebar nav
+- [x] Route `/schedule` allowed in `tvRoutes`; not listed in TV sidebar nav
 - [x] Fetch schedule with `week` (0 current / 1 next) and `limit`
 - [x] Group entries by local air day; day rails titled Сегодня / Завтра / weekday
 - [x] Poster press opens `/anime/[id]`

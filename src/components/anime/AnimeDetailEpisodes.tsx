@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
 import {
-  ScrollView,
+  FlatList,
   StyleSheet,
   Text,
   View,
   type DimensionValue,
+  type ListRenderItemInfo,
 } from 'react-native';
 
 import { AnimeDubbingSelector } from '@/components/anime/AnimeDubbingSelector';
@@ -25,7 +26,9 @@ import {
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
 
-const CARD_WIDTH = isTvUi() ? 200 : 136;
+const CARD_WIDTH = isTvUi() ? 200 : 112;
+const CARD_GAP = 6;
+const CARD_STRIDE = CARD_WIDTH + CARD_GAP;
 const FILL: DimensionValue = '100%';
 
 interface AnimeDetailEpisodesProps {
@@ -38,7 +41,6 @@ interface AnimeDetailEpisodesProps {
   onPlay: (episode: AnimeEpisode) => void;
   dubbingOptions?: string[];
   selectedDubbing?: string;
-  watchedDubbing?: string | null;
   onSelectDubbing?: (value: string) => void;
   filteredEmptyWhileLoading?: boolean;
 }
@@ -53,7 +55,6 @@ export function AnimeDetailEpisodes({
   onPlay,
   dubbingOptions = [],
   selectedDubbing = '',
-  watchedDubbing,
   onSelectDubbing,
   filteredEmptyWhileLoading,
 }: AnimeDetailEpisodesProps) {
@@ -66,7 +67,6 @@ export function AnimeDetailEpisodes({
         <AnimeDubbingSelector
           options={dubbingOptions}
           selected={selectedDubbing}
-          watchedOption={watchedDubbing}
           onSelect={onSelectDubbing}
         />
       ) : null}
@@ -94,7 +94,7 @@ export function AnimeDetailEpisodes({
     return null;
   }
 
-  const cards = episodes.map((episode, index) => {
+  const renderCard = (episode: AnimeEpisode, index: number) => {
     const progress = progressByEpisodeId[episode.id] ?? 0;
     const playable = hasPlayableVideo(episode);
     const thumb = resolveAnimePosterUrl(episodeThumbnail(episode));
@@ -153,7 +153,7 @@ export function AnimeDetailEpisodes({
         </View>
       </TvFocusable>
     );
-  });
+  };
 
   const loadMore = hasMore ? (
     <TvFocusable
@@ -167,6 +167,10 @@ export function AnimeDetailEpisodes({
     </TvFocusable>
   ) : null;
 
+  const renderPhoneItem = ({ item, index }: ListRenderItemInfo<AnimeEpisode>) => (
+    <View style={styles.phoneCardWrap}>{renderCard(item, index)}</View>
+  );
+
   return (
     <View style={styles.section}>
       {header}
@@ -175,26 +179,37 @@ export function AnimeDetailEpisodes({
         // sibling rails ("Похожее") on Android TV when the hero had no poster.
         <View style={styles.listShell}>
           <View style={styles.listContent}>
-            {cards}
+            {episodes.map((episode, index) => renderCard(episode, index))}
             {loadMore}
           </View>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
           horizontal
+          data={episodes}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderPhoneItem}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.rail}
-        >
-          {cards}
-          {loadMore}
-        </ScrollView>
+          initialNumToRender={6}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews
+          nestedScrollEnabled
+          getItemLayout={(_data, index) => ({
+            length: CARD_STRIDE,
+            offset: CARD_STRIDE * index,
+            index,
+          })}
+          ListFooterComponent={loadMore}
+        />
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { gap: spacing.sm },
+  section: { gap: isTvUi() ? spacing.sm : 6 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -203,19 +218,21 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.brand,
-    fontSize: isTvUi() ? 20 : 16,
+    fontSize: isTvUi() ? 22 : 16,
     fontWeight: '700',
-    flexShrink: 1,
-    minWidth: 0,
+    flexShrink: 0,
   },
   meta: {
     color: colors.textSecondary,
     fontSize: isTvUi() ? 14 : 13,
   },
   rail: {
-    gap: isTvUi() ? spacing.md : spacing.sm,
     paddingVertical: spacing.xs,
     alignItems: 'flex-start',
+  },
+  phoneCardWrap: {
+    width: CARD_WIDTH,
+    marginRight: CARD_GAP,
   },
   listShell: {
     borderRadius: radii.md,
@@ -282,27 +299,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   playBadge: {
-    width: isTvUi() ? 32 : 28,
-    height: isTvUi() ? 32 : 28,
-    borderRadius: isTvUi() ? 16 : 14,
+    width: isTvUi() ? 32 : 24,
+    height: isTvUi() ? 32 : 24,
+    borderRadius: isTvUi() ? 16 : 12,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   playBadgeText: {
     color: colors.text,
-    fontSize: isTvUi() ? 12 : 11,
+    fontSize: isTvUi() ? 12 : 10,
   },
   cardBody: {
     flex: 1,
-    paddingHorizontal: isTvUi() ? spacing.md : 10,
-    paddingVertical: isTvUi() ? spacing.sm : 8,
+    paddingHorizontal: isTvUi() ? spacing.md : 8,
+    paddingVertical: isTvUi() ? spacing.sm : 6,
     justifyContent: 'center',
-    minHeight: isTvUi() ? undefined : 40,
+    minHeight: isTvUi() ? undefined : 32,
   },
   epTitle: {
     color: colors.text,
-    fontSize: isTvUi() ? 15 : 12,
+    fontSize: isTvUi() ? 15 : 13,
     fontWeight: '600',
     lineHeight: isTvUi() ? 20 : 16,
   },
@@ -320,13 +337,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   loadMore: {
-    width: 100,
-    height: CARD_WIDTH * (9 / 16) + 48,
-    borderRadius: radii.lg,
+    width: 88,
+    height: CARD_WIDTH * (9 / 16) + 40,
+    borderRadius: radii.md,
     backgroundColor: colors.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.md,
+    padding: spacing.sm,
   },
   loadMoreTv: {
     width: FILL,
@@ -340,6 +357,6 @@ const styles = StyleSheet.create({
   loadMoreLabel: {
     color: colors.text,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: isTvUi() ? 14 : 12,
   },
 });

@@ -1,0 +1,46 @@
+import {
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
+
+import { CatalogBrowseSkeleton } from '@/components/catalog/CatalogBrowseSkeleton';
+import { LampaKindRails } from '@/components/catalog/LampaKindRails';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { colors, spacing } from '@/constants/aniverse';
+import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
+import { useTvCatalogScrollRestore } from '@/hooks/useTvCatalogScrollRestore';
+import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import { isTvUi } from '@/lib/isTvUi';
+import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
+
+export default function MoviesBrowseScreen() {
+  const { config, ready } = useHomeCatalogConfig();
+  const catalogScroll = useTvCatalogScrollRestore('/movies');
+  const chromeScrollProps = useMobileChromeScrollProps(catalogScroll.onScroll, styles.content);
+
+  return (
+    <ScrollView
+      ref={catalogScroll.scrollRef}
+      style={styles.scroll}
+      {...chromeScrollProps}
+      {...tvVerticalCatalogScrollProps}
+    >
+      {isTvUi() ? (
+        <SectionHeader title="Фильмы" showAccent tvFocusEntry tvFocusPath="/movies" />
+      ) : null}
+      {ready ? (
+        <LampaKindRails kind="movie" config={config} restorePath="/movies" />
+      ) : (
+        <CatalogBrowseSkeleton />
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  scroll: { flex: 1, backgroundColor: colors.bg },
+  content: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+});

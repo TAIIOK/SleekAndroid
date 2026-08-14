@@ -17,8 +17,10 @@ import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-ha
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video, { ViewType } from 'react-native-video';
 
+import { PhoneEpisodePicker } from '@/components/player/phone/PhoneEpisodePicker';
 import { PhoneGestureHud } from '@/components/player/phone/PhoneGestureHud';
 import { PhoneScrubBar } from '@/components/player/phone/PhoneScrubBar';
+import { PhoneSkipIcon } from '@/components/player/phone/PhoneSkipIcon';
 import { PlayerPerfOverlay } from '@/components/player/PlayerPerfOverlay';
 import { SubtitleOverlay } from '@/components/player/SubtitleOverlay';
 import type { PlayerMenuOption, VideoPlayerProps } from '@/components/player/types';
@@ -31,14 +33,23 @@ import {
   listInstalledExternalPlayers,
   type ExternalPlayerTarget,
 } from '@/lib/externalPlayer';
+import { EMPTY_SKIP_SEGMENTS } from '@/lib/playerSkip';
 import { isPlayerPerfOverlayEnabled } from '@/lib/playerPerf';
+import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
 import {
   cyclePlaybackRate,
   cycleVideoFit,
   formatPlaybackRate,
   videoFitLabel,
+  type VideoFitMode,
 } from '@/lib/playerPreferences';
 import { subtitleTrackLabel } from '@/lib/subtitleTracks';
+
+function videoFitIcon(fit: VideoFitMode): keyof typeof Ionicons.glyphMap {
+  if (fit === 'cover') return 'expand';
+  if (fit === 'fill') return 'resize';
+  return 'contract';
+}
 
 type PhoneSheet =
   | 'dubbing'
@@ -69,7 +80,7 @@ export function PhoneVideoPlayer({
   onEnded,
   onAutoPlayNext,
   onPlaybackError,
-  skipSegments = [],
+  skipSegments = EMPTY_SKIP_SEGMENTS,
   episodeNav,
   onBack,
   dubbingOptions,
@@ -78,6 +89,15 @@ export function PhoneVideoPlayer({
   deliveryOptions,
   playbackCaptureRef,
   playbackControlRef,
+  partyControlled = false,
+  canPlayPause = true,
+  canSeek = true,
+  onPartyPlay,
+  onPartyPause,
+  onPartySeek,
+  partyRemoteCommand,
+  onPlayingChange,
+  onControlsVisibleChange,
 }: VideoPlayerProps) {
   const insets = useSafeAreaInsets();
   const perfEnabled = isPlayerPerfOverlayEnabled();
@@ -90,6 +110,8 @@ export function PhoneVideoPlayer({
     externalSubtitles: subtitles,
     startTime,
     startProgressFraction,
+    // Party: mount paused; play only after room sync says so (site parity).
+    autoPlay: !partyControlled,
     skipSegments,
     onProgress,
     onEnded,
@@ -113,6 +135,27 @@ export function PhoneVideoPlayer({
     };
   }, [engine.pause, playbackControlRef]);
 
+  const partyPlayLocked = partyControlled && !canPlayPause;
+  const partySeekLocked = partyControlled && !canSeek;
+  const lastAppliedPartySeqRef = useRef(-1);
+
+  useEffect(() => {
+    onPlayingChange?.(engine.playing);
+  }, [engine.playing, onPlayingChange]);
+
+  useEffect(() => {
+    if (!partyRemoteCommand || partyRemoteCommand.seq === lastAppliedPartySeqRef.current) return;
+    lastAppliedPartySeqRef.current = partyRemoteCommand.seq;
+    if (typeof partyRemoteCommand.time === 'number') {
+      engine.seekTo(partyRemoteCommand.time);
+    }
+    if (partyRemoteCommand.isPlaying === true) {
+      engine.play();
+    } else if (partyRemoteCommand.isPlaying === false) {
+      engine.pause();
+    }
+  }, [partyRemoteCommand, engine.seekTo, engine.play, engine.pause]);
+
   const [controlsVisible, setControlsVisible] = useState(true);
   const [sheet, setSheet] = useState<PhoneSheet>(null);
   const [externalPlayers, setExternalPlayers] = useState<ExternalPlayerTarget[]>([]);
@@ -120,6 +163,7 @@ export function PhoneVideoPlayer({
   const [lockToast, setLockToast] = useState(false);
   const [brightness, setBrightnessState] = useState(1);
   const [pipActive, setPipActive] = useState(false);
+  const unmuteVolumeRef = useRef(1);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsVisibleRef = useRef(controlsVisible);
   const sheetRef = useRef(sheet);
@@ -144,7 +188,8 @@ export function PhoneVideoPlayer({
 
   useEffect(() => {
     controlsVisibleRef.current = controlsVisible;
-  }, [controlsVisible]);
+    onControlsVisibleChange?.(controlsVisible);
+  }, [controlsVisible, onControlsVisibleChange]);
 
   useEffect(() => {
     sheetRef.current = sheet;
@@ -258,7 +303,87 @@ export function PhoneVideoPlayer({
     showControls();
   };
 
+  const isMuted = engine.volume <= 0.001;
+  const toggleMute = () => {
+    if (isMuted) {
+      engine.setVolume(unmuteVolumeRef.current > 0 ? unmuteVolumeRef.current : 1);
+    } else {
+      unmuteVolumeRef.current = engine.volume > 0 ? engine.volume : 1;
+      engine.setVolume(0);
+    }
+    showControls();
+  };
+
+  const canPickEpisodes = Boolean(episodeNav && episodeNav.items.length > 1);
+  const selectedDubbing = dubbingOptions?.find((o) => o.selected)?.label;
+  const selectedQuality = qualityOptions?.find((o) => o.selected)?.label;
+  const selectedConnection = connectionOptions?.find((o) => o.selected)?.label;
+  const selectedDelivery = deliveryOptions?.find((o) => o.selected)?.label;
+
   const settingsRows = [
+    ...(dubbingOptions && dubbingOptions.length > 1
+      ? [
+          {
+            id: 'dubbing',
+            label: `Озвучка · ${selectedDubbing ?? '…'}`,
+            onPress: () => openSheet('dubbing'),
+          },
+        ]
+      : []),
+    ...(qualityOptions && qualityOptions.length > 1
+      ? [
+          {
+            id: 'quality',
+            label: `Качество · ${selectedQuality ?? '…'}`,
+            onPress: () => openSheet('quality'),
+          },
+        ]
+      : []),
+    ...(connectionOptions && connectionOptions.length > 1
+      ? [
+          {
+            id: 'connection',
+            label: `Сеть · ${selectedConnection ?? '…'}`,
+            onPress: () => openSheet('connection'),
+          },
+        ]
+      : []),
+    ...(deliveryOptions && deliveryOptions.length > 1
+      ? [
+          {
+            id: 'delivery',
+            label: `Поток · ${selectedDelivery ?? '…'}`,
+            onPress: () => openSheet('delivery'),
+          },
+        ]
+      : []),
+    ...(canPickEpisodes
+      ? [
+          {
+            id: 'episodes',
+            label: 'Эпизоды',
+            onPress: () => openSheet('episodes'),
+          },
+        ]
+      : []),
+    ...(engine.subtitleTracks.length > 0
+      ? [
+          {
+            id: 'subtitles',
+            label: 'Субтитры',
+            onPress: () => openSheet('subtitles'),
+          },
+        ]
+      : []),
+    ...(Platform.OS === 'android' && externalPlayers.length > 0
+      ? [
+          {
+            id: 'external',
+            label: 'Внешний плеер',
+            onPress: () => openSheet('external'),
+          },
+        ]
+      : []),
     {
       id: 'rate',
       label: `Скорость · ${formatPlaybackRate(engine.prefs.playbackRate)}`,
@@ -352,11 +477,6 @@ export function PhoneVideoPlayer({
     !engine.playbackError &&
     !externalError &&
     !pipActive;
-  const canPickEpisodes = Boolean(episodeNav && episodeNav.items.length > 1);
-  const selectedDubbing = dubbingOptions?.find((o) => o.selected)?.label;
-  const selectedQuality = qualityOptions?.find((o) => o.selected)?.label;
-  const selectedConnection = connectionOptions?.find((o) => o.selected)?.label;
-  const selectedDelivery = deliveryOptions?.find((o) => o.selected)?.label;
 
   const perfLines = useMemo(() => {
     if (!perfEnabled) return [];
@@ -568,15 +688,6 @@ export function PhoneVideoPlayer({
               color={engine.prefs.gesturesLocked ? '#fb923c' : '#fff'}
             />
           </IconBtn>
-          <IconBtn
-            onPress={() => {
-              engine.enterPictureInPicture();
-              showControls();
-            }}
-            label="Картинка в картинке"
-          >
-            <Ionicons name="browsers-outline" size={22} color="#fff" />
-          </IconBtn>
           <IconBtn onPress={() => openSheet('settings')} label="Настройки">
             <Ionicons name="settings-outline" size={22} color="#fff" />
           </IconBtn>
@@ -596,39 +707,58 @@ export function PhoneVideoPlayer({
             ) : null}
             <IconBtn
               onPress={() => {
+                if (partySeekLocked) return;
+                const next = Math.max(0, engine.currentTime - engine.prefs.skipBackwardSeconds);
                 engine.seekBy(-engine.prefs.skipBackwardSeconds);
+                if (partyControlled) onPartySeek?.(next);
                 showControls();
               }}
+              disabled={partySeekLocked}
               label={`Назад ${engine.prefs.skipBackwardSeconds}с`}
-              size={44}
+              size={48}
             >
-              <Text style={styles.seekLabel}>−{engine.prefs.skipBackwardSeconds}</Text>
+              <PhoneSkipIcon seconds={engine.prefs.skipBackwardSeconds} />
             </IconBtn>
             <Pressable
               onPress={() => {
-                engine.togglePlay();
+                if (partyPlayLocked) return;
+                if (partyControlled) {
+                  if (engine.playing) {
+                    // Hook emits remote pause; do not double-toggle locally.
+                    onPartyPause?.();
+                  } else {
+                    onPartyPlay?.();
+                    engine.play();
+                  }
+                } else {
+                  engine.togglePlay();
+                }
                 showControls();
               }}
-              style={styles.playBtn}
+              style={[styles.playBtn, partyPlayLocked && { opacity: 0.4 }]}
               hitSlop={8}
               accessibilityLabel={engine.playing ? 'Пауза' : 'Воспроизведение'}
             >
               <Ionicons
                 name={engine.playing ? 'pause' : 'play'}
-                size={36}
+                size={40}
                 color="#fff"
                 style={!engine.playing ? { marginLeft: 3 } : undefined}
               />
             </Pressable>
             <IconBtn
               onPress={() => {
+                if (partySeekLocked) return;
+                const next = engine.currentTime + engine.prefs.skipForwardSeconds;
                 engine.seekBy(engine.prefs.skipForwardSeconds);
+                if (partyControlled) onPartySeek?.(next);
                 showControls();
               }}
+              disabled={partySeekLocked}
               label={`Вперёд ${engine.prefs.skipForwardSeconds}с`}
-              size={44}
+              size={48}
             >
-              <Text style={styles.seekLabel}>+{engine.prefs.skipForwardSeconds}</Text>
+              <PhoneSkipIcon seconds={engine.prefs.skipForwardSeconds} forward />
             </IconBtn>
             {episodeNav ? (
               <IconBtn
@@ -644,7 +774,7 @@ export function PhoneVideoPlayer({
         </View>
 
         <View
-          style={[styles.bottomBar, padH, { paddingBottom: Math.max(insets.bottom, 14) }]}
+          style={[styles.bottomBar, padH, { paddingBottom: Math.max(insets.bottom, 20) }]}
           pointerEvents="box-none"
         >
           <PhoneScrubBar
@@ -652,68 +782,86 @@ export function PhoneVideoPlayer({
             currentTime={engine.currentTime}
             duration={engine.duration}
             skipSegments={skipSegments}
+            showTimes={false}
             onSeekRatio={(ratio) => {
-              if (engine.duration > 0) engine.seekTo(engine.duration * ratio);
+              if (partySeekLocked) return;
+              if (engine.duration > 0) {
+                const time = engine.duration * ratio;
+                engine.seekTo(time);
+                if (partyControlled) onPartySeek?.(time);
+              }
               showControls();
             }}
           />
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.menuRow}
-          >
-            <ActionChip
-              label="Авто"
-              active={engine.prefs.autoPlayNext}
-              onPress={() => {
-                engine.updatePrefs({ autoPlayNext: !engine.prefs.autoPlayNext });
-                showControls();
-              }}
-              icon="play-forward"
-            />
-            {dubbingOptions && dubbingOptions.length > 1 ? (
-              <ActionChip
-                label={selectedDubbing ?? 'Озвучка'}
-                onPress={() => openSheet('dubbing')}
-                icon="mic"
-              />
-            ) : null}
-            {qualityOptions && qualityOptions.length > 1 ? (
-              <ActionChip
-                label={selectedQuality ?? 'Качество'}
-                onPress={() => openSheet('quality')}
-                icon="videocam"
-              />
-            ) : null}
-            {connectionOptions && connectionOptions.length > 1 ? (
-              <ActionChip
-                label={selectedConnection ?? 'Сеть'}
-                onPress={() => openSheet('connection')}
-                icon="wifi"
-              />
-            ) : null}
-            {deliveryOptions && deliveryOptions.length > 1 ? (
-              <ActionChip
-                label={selectedDelivery ?? 'Поток'}
-                onPress={() => openSheet('delivery')}
-                icon="git-network"
-              />
-            ) : null}
-            {canPickEpisodes ? (
-              <ActionChip label="Эпизоды" onPress={() => openSheet('episodes')} icon="list" />
-            ) : null}
-            {engine.subtitleTracks.length > 0 ? (
-              <ActionChip label="CC" onPress={() => openSheet('subtitles')} icon="text" />
-            ) : null}
-            {Platform.OS === 'android' && externalPlayers.length > 0 ? (
-              <ActionChip
-                label="Внешний"
-                onPress={() => openSheet('external')}
-                icon="open-outline"
-              />
-            ) : null}
-          </ScrollView>
+          {/* Sleek-style: edge times + compact centered icon cluster */}
+          <View style={styles.bottomControls}>
+            <View style={styles.timeRow} pointerEvents="none">
+              <Text style={styles.timeEdge}>{formatPlaybackTime(engine.currentTime)}</Text>
+              <Text style={styles.timeEdge}>{formatPlaybackTime(engine.duration)}</Text>
+            </View>
+            <View style={styles.iconCluster}>
+              <IconBtn
+                onPress={() => {
+                  engine.updatePrefs({ autoPlayNext: !engine.prefs.autoPlayNext });
+                  showControls();
+                }}
+                label={engine.prefs.autoPlayNext ? 'Автослед. вкл' : 'Автослед. выкл'}
+                size={30}
+              >
+                <Ionicons
+                  name={engine.prefs.autoPlayNext ? 'play-forward-circle' : 'play-forward-circle-outline'}
+                  size={22}
+                  color={engine.prefs.autoPlayNext ? '#34d399' : 'rgba(255,255,255,0.45)'}
+                />
+              </IconBtn>
+              <IconBtn
+                onPress={() => {
+                  engine.enterPictureInPicture();
+                  showControls();
+                }}
+                label="Картинка в картинке"
+                size={30}
+              >
+                <Ionicons name="browsers-outline" size={18} color="#fff" />
+              </IconBtn>
+              <Pressable
+                onPress={() => {
+                  engine.updatePrefs({
+                    playbackRate: cyclePlaybackRate(engine.prefs.playbackRate),
+                  });
+                  showControls();
+                }}
+                style={styles.rateChip}
+                accessibilityLabel={`Скорость ${formatPlaybackRate(engine.prefs.playbackRate)}`}
+              >
+                <Text style={styles.rateChipText}>
+                  {formatPlaybackRate(engine.prefs.playbackRate)}
+                </Text>
+              </Pressable>
+              <IconBtn
+                onPress={toggleMute}
+                label={isMuted ? 'Включить звук' : 'Выключить звук'}
+                size={30}
+              >
+                <Ionicons
+                  name={isMuted ? 'volume-mute' : 'volume-high'}
+                  size={18}
+                  color="#fff"
+                />
+              </IconBtn>
+              <IconBtn
+                onPress={() => {
+                  engine.updatePrefs({ videoFit: cycleVideoFit(engine.prefs.videoFit) });
+                  showControls();
+                }}
+                label={`Масштаб · ${videoFitLabel(engine.prefs.videoFit)}`}
+                size={30}
+              >
+                <Ionicons name={videoFitIcon(engine.prefs.videoFit)} size={20} color="#fff" />
+              </IconBtn>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -724,33 +872,24 @@ export function PhoneVideoPlayer({
         onRequestClose={() => setSheet(null)}
       >
         <Pressable style={styles.sheetBackdrop} onPress={() => setSheet(null)}>
-          <Pressable
-            style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
-            onPress={() => undefined}
-          >
+          {sheet === 'episodes' && episodeNav ? (
+            <PhoneEpisodePicker
+              episodeNav={episodeNav}
+              bottomInset={insets.bottom}
+              onSelect={(id) => episodeNav.onSelect?.(id)}
+              onClose={() => setSheet(null)}
+            />
+          ) : (
+            <Pressable
+              style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
+              onPress={() => undefined}
+            >
             <Text style={styles.sheetTitle}>{sheetTitle}</Text>
             <ScrollView style={styles.sheetScroll}>
               {sheet === 'settings'
                 ? settingsRows.map((row) => (
                     <Pressable key={row.id} onPress={row.onPress} style={styles.sheetRow}>
                       <Text style={styles.sheetRowText}>{row.label}</Text>
-                    </Pressable>
-                  ))
-                : null}
-              {sheet === 'episodes' && episodeNav
-                ? episodeNav.items.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => {
-                        episodeNav.onSelect?.(item.id);
-                        setSheet(null);
-                      }}
-                      style={[
-                        styles.sheetRow,
-                        item.id === episodeNav.currentEpisodeId && styles.sheetRowSelected,
-                      ]}
-                    >
-                      <Text style={styles.sheetRowText}>{item.label}</Text>
                     </Pressable>
                   ))
                 : null}
@@ -823,6 +962,7 @@ export function PhoneVideoPlayer({
               ))}
             </ScrollView>
           </Pressable>
+          )}
         </Pressable>
       </Modal>
 
@@ -862,30 +1002,6 @@ function IconBtn({
       ]}
     >
       {children}
-    </Pressable>
-  );
-}
-
-function ActionChip({
-  label,
-  onPress,
-  icon,
-  active,
-}: {
-  label: string;
-  onPress: () => void;
-  icon: keyof typeof Ionicons.glyphMap;
-  active?: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.actionChip, active && styles.actionChipActive]}
-    >
-      <Ionicons name={icon} size={16} color={active ? colors.brand : colors.brandTint} />
-      <Text style={[styles.actionChipText, active && styles.actionChipTextActive]} numberOfLines={1}>
-        {label}
-      </Text>
     </Pressable>
   );
 }
@@ -939,53 +1055,60 @@ const styles = StyleSheet.create({
   transportPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    gap: 18,
   },
   playBtn: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  seekLabel: { color: '#fff', fontSize: 13, fontWeight: '700' },
   bottomBar: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    gap: spacing.sm,
+    gap: 8,
     paddingTop: spacing.sm,
   },
-  menuRow: { gap: spacing.sm, paddingVertical: 4, alignItems: 'center' },
-  actionChip: {
+  bottomControls: {
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  timeRow: {
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: 'rgba(79,70,229,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(195,192,255,0.22)',
-    maxWidth: 160,
-    overflow: 'hidden',
+    justifyContent: 'space-between',
   },
-  actionChipActive: {
-    backgroundColor: 'rgba(79,70,229,0.42)',
-    borderColor: colors.brand,
-  },
-  actionChipText: {
-    color: colors.brandTint,
-    fontSize: 13,
+  timeEdge: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
     fontWeight: '600',
-    flexShrink: 1,
-    minWidth: 0,
+    fontVariant: ['tabular-nums'],
   },
-  actionChipTextActive: { color: colors.brand },
+  iconCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    alignSelf: 'center',
+  },
+  rateChip: {
+    minWidth: 52,
+    height: 30,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  rateChipText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
   skipBtn: {
     alignSelf: 'flex-end',
     paddingHorizontal: spacing.md,

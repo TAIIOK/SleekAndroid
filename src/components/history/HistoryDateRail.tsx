@@ -72,7 +72,7 @@ export function HistoryDateRail({
 const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
-    marginBottom: isTvUi() ? spacing.md : 0,
+    marginBottom: spacing.md,
   },
   title: {
     color: colors.textSecondary,
@@ -85,6 +85,6 @@ const styles = StyleSheet.create({
     // Extra vertical room so TV focus rings are not clipped by ScrollView.
     paddingTop: isTvUi() ? 8 : 0,
     paddingBottom: isTvUi() ? 10 : spacing.xs,
-    gap: isTvUi() ? 10 : 0,
+    gap: isTvUi() ? 10 : 12,
   },
 });

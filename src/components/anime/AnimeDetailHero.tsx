@@ -1,16 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ImageBackground,
+  Alert,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { AnimeDetail } from '@/api/catalog';
+import { NextEpisodeCountdown } from '@/components/anime/NextEpisodeCountdown';
 import { DetailLibraryActions } from '@/components/library/DetailLibraryActions';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
+import { useCreatePartyFromAnime } from '@/hooks/useCreatePartyFromAnime';
+import { getDownloadService } from '@/services/download';
 import {
   animeAltTitle,
   animeGenreNames,
@@ -21,11 +25,13 @@ import {
   localizedAnimeStatus,
   localizedAnimeType,
 } from '@/lib/animeDetail';
+import { parseNextEpisodeDate, shouldShowNextEpisode } from '@/lib/nextEpisode';
 import {
   reportDeadPoster,
   subscribeAnimePosterRefresh,
 } from '@/lib/animePosterRefresh';
-import { resolveAnimePosterUrl } from '@/lib/config';
+import { animeHeroImageUrls } from '@/lib/config';
+import { hotlinkImageSource } from '@/lib/hotlinkImage';
 import {
   reportYaniPosterLoadError,
   reportYaniPosterLoadSuccess,
@@ -83,6 +89,7 @@ export function AnimeDetailHero({
   onToggleFavorite,
 }: AnimeDetailHeroProps) {
   const tv = isTvUi();
+  const { createParty, creating: creatingParty } = useCreatePartyFromAnime();
   const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [overrideBackdrop, setOverrideBackdrop] = useState<string | null>(null);
   const title = detail.title ?? 'Аниме';
@@ -93,13 +100,84 @@ export function AnimeDetailHero({
   const year = detail.year ? String(detail.year) : undefined;
   const genres = animeGenreNames(detail.genres).slice(0, 4);
   const infoRows = buildAnimeHeroInfoRows(detail, episodesTotal);
-  const rawBackdrop = overrideBackdrop ?? animeHeroImageCandidates(detail)[0];
-  const backdrop = resolveAnimePosterUrl(rawBackdrop);
+  const showNextEpisode = shouldShowNextEpisode(parseNextEpisodeDate(detail));
+  const baseCandidates = useMemo(() => animeHeroImageCandidates(detail), [detail]);
+  const resolvedCandidates = useMemo(
+    () =>
+      animeHeroImageUrls(
+        overrideBackdrop ? [overrideBackdrop, ...baseCandidates] : baseCandidates,
+      ),
+    [overrideBackdrop, baseCandidates],
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const currentBackdrop = resolvedCandidates[candidateIndex];
+  const rawBackdrop = overrideBackdrop ?? baseCandidates[0];
+  const candidateKey = resolvedCandidates.join('\0');
   const canPlay = Boolean(resumeEpisode) && !resumeLoading;
+
+  const partyAction = (
+    <TvFocusable
+      disabled={creatingParty || libraryDisabled}
+      onPress={() =>
+        createParty({
+          animeId: detail.id,
+          title: detail.title ?? undefined,
+          episode: resumeEpisode ? episodeNumber(resumeEpisode) : undefined,
+        })
+      }
+      style={styles.extraBtn}
+    >
+      <Text style={styles.extraLabel}>{creatingParty ? '…' : '👥'}</Text>
+    </TvFocusable>
+  );
+
+  const downloadAction = !tv ? (
+    <TvFocusable
+      onPress={() => {
+        Alert.alert(
+          'Скачать',
+          'Откройте эпизод в плеере и выберите качество — офлайн-загрузка аниме доступна из источника воспроизведения. Добавить текущий постер в очередь?',
+          [
+            { text: 'Отмена', style: 'cancel' },
+            {
+              text: 'В загрузки',
+              onPress: () => {
+                void getDownloadService().enqueue({
+                  contentType: 'anime',
+                  title: detail.title ?? 'Аниме',
+                  sourceUrl: '',
+                  posterUrl: animePoster(detail),
+                  episode: resumeEpisode ? episodeNumber(resumeEpisode) : undefined,
+                }).then(() => {
+                  Alert.alert(
+                    'Очередь',
+                    'Нужен прямой URL источника. Откройте эпизод и скачайте из плеера/источника.',
+                  );
+                }).catch((error: unknown) => {
+                  Alert.alert(
+                    'Ошибка',
+                    error instanceof Error ? error.message : 'Не удалось добавить',
+                  );
+                });
+              },
+            },
+          ],
+        );
+      }}
+      style={styles.extraBtn}
+    >
+      <Text style={styles.extraLabel}>⬇</Text>
+    </TvFocusable>
+  ) : null;
 
   useEffect(() => {
     setOverrideBackdrop(null);
+    setCandidateIndex(0);
   }, [detail.id]);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [candidateKey]);
 
   useEffect(() => {
     return subscribeAnimePosterRefresh((event) => {
@@ -119,13 +197,27 @@ export function AnimeDetailHero({
     if (normalized && isPlausibleImageURL(normalized)) return;
     reportDeadPoster({ animeId: detail.id, failedUrl: null, rawPath: rawBackdrop });
   }, [detail.id, rawBackdrop]);
+
+  const onBackdropError = useCallback(() => {
+    if (currentBackdrop) {
+      reportYaniPosterLoadError(currentBackdrop);
+      reportDeadPoster({
+        animeId: detail.id,
+        failedUrl: currentBackdrop,
+        rawPath: rawBackdrop,
+      });
+    }
+    setCandidateIndex((index) =>
+      index + 1 < resolvedCandidates.length ? index + 1 : index,
+    );
+  }, [currentBackdrop, detail.id, rawBackdrop, resolvedCandidates.length]);
   const overview = (detail.description ?? '').trim();
   const truncated = truncateOverview(overview, HERO_OVERVIEW_LIMIT);
   const overviewText =
     overviewExpanded || !truncated.needsExpand ? overview : truncated.text;
 
   const playLabel = hasHistory
-    ? 'Продолжить просмотр'
+    ? 'Продолжить'
     : resumeLoading && !resumeEpisode
       ? 'Загрузка…'
       : 'Смотреть сейчас';
@@ -207,14 +299,27 @@ export function AnimeDetailHero({
           }
           onStatusChange={onStatusChange}
           onToggleFavorite={onToggleFavorite}
+          extraActions={
+            <>
+              {partyAction}
+              {downloadAction}
+            </>
+          }
         />
       </View>
     </View>
   );
 
   const aside =
-    infoRows.length > 0 || overview ? (
+    showNextEpisode || infoRows.length > 0 || overview ? (
       <View style={styles.aside}>
+        {showNextEpisode ? (
+          <NextEpisodeCountdown
+            detail={detail}
+            showDivider={infoRows.length > 0 || Boolean(overview)}
+          />
+        ) : null}
+
         {infoRows.length > 0 ? (
           <View style={styles.infoGrid}>
             {infoRows.map((row) => (
@@ -300,26 +405,21 @@ export function AnimeDetailHero({
 
   return (
     <View style={styles.hero}>
-      {backdrop ? (
-        <ImageBackground
-          source={{ uri: backdrop }}
-          style={styles.backdrop}
-          imageStyle={styles.backdropImage}
-          onLoad={() => reportYaniPosterLoadSuccess()}
-          onError={() => {
-            reportYaniPosterLoadError(backdrop);
-            reportDeadPoster({
-              animeId: detail.id,
-              failedUrl: backdrop,
-              rawPath: rawBackdrop,
-            });
-          }}
-        >
-          {body}
-        </ImageBackground>
-      ) : (
-        <View style={styles.backdrop}>{body}</View>
-      )}
+      <View style={styles.backdrop}>
+        {currentBackdrop ? (
+          <Image
+            source={hotlinkImageSource(currentBackdrop)}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            contentPosition={{ top: '22%', left: '50%' }}
+            cachePolicy="memory-disk"
+            recyclingKey={currentBackdrop}
+            onLoad={() => reportYaniPosterLoadSuccess()}
+            onError={onBackdropError}
+          />
+        ) : null}
+        {body}
+      </View>
     </View>
   );
 }
@@ -338,9 +438,7 @@ const styles = StyleSheet.create({
     minHeight: isTvUi() ? 520 : 280,
     justifyContent: 'flex-end',
     backgroundColor: colors.bg,
-  },
-  backdropImage: {
-    resizeMode: 'cover',
+    overflow: 'hidden',
   },
   bottomFade: {
     position: 'absolute',
@@ -351,9 +449,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: PAGE_PAD,
-    paddingTop: isTvUi() ? spacing.xxl : spacing.xl + 28,
-    paddingBottom: isTvUi() ? spacing.xl : spacing.md,
-    gap: spacing.md,
+    paddingTop: isTvUi() ? spacing.xxl : spacing.sm,
+    paddingBottom: isTvUi() ? spacing.xl : spacing.sm,
+    gap: isTvUi() ? spacing.md : spacing.sm,
     zIndex: 1,
   },
   contentTv: {
@@ -365,8 +463,10 @@ const styles = StyleSheet.create({
   leftCol: {
     flex: 1.2,
     minWidth: 0,
-    gap: spacing.sm,
+    gap: isTvUi() ? spacing.sm : 6,
     justifyContent: 'flex-start',
+    // Clear the floating back button / status bar on phone.
+    paddingTop: isTvUi() ? 0 : 120,
   },
   aside: {
     flex: 0.85,
@@ -437,23 +537,23 @@ const styles = StyleSheet.create({
   },
   playBtn: {
     backgroundColor: colors.brandAccent,
-    borderRadius: 14,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
+    borderRadius: isTvUi() ? 14 : 12,
+    paddingHorizontal: isTvUi() ? spacing.xl : spacing.lg,
+    paddingVertical: isTvUi() ? 14 : 11,
     gap: 2,
-    minWidth: 220,
+    minWidth: isTvUi() ? 220 : 168,
   },
   playDisabled: {
     opacity: 0.55,
   },
   playLabel: {
     color: '#fff',
-    fontSize: isTvUi() ? 16 : 15,
+    fontSize: isTvUi() ? 16 : 14,
     fontWeight: '700',
   },
   playHint: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 11,
+    fontSize: isTvUi() ? 11 : 10,
   },
   infoGrid: {
     gap: 10,
@@ -503,5 +603,19 @@ const styles = StyleSheet.create({
     color: colors.brand,
     fontSize: 14,
     fontWeight: '700',
+  },
+  extraBtn: {
+    width: isTvUi() ? 48 : 38,
+    height: isTvUi() ? 48 : 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  extraLabel: {
+    color: colors.brand,
+    fontSize: isTvUi() ? 18 : 16,
   },
 });

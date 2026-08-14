@@ -449,8 +449,7 @@ export function LampaSourceSheet({
   const seasonLabel =
     selectedSeasonNumber != null ? `Сезон ${selectedSeasonNumber}` : null;
 
-  const busy =
-    watchHub.loadingSources || loadingTranslators || loadingEpisodes || playing;
+  const busy = loadingTranslators || loadingEpisodes || playing;
   const error = watchHub.error ?? stepError;
 
   const title = detail.title ?? detail.name ?? 'Выбор источника';
@@ -465,7 +464,7 @@ export function LampaSourceSheet({
             </Text>
             <Text style={styles.headerSubtitle}>Выбор источника и озвучки</Text>
           </View>
-          <TvFocusable onPress={onClose} disabled={busy} style={styles.headerBtn}>
+          <TvFocusable onPress={onClose} style={styles.headerBtn}>
             <Text style={styles.headerBtnLabel}>✕</Text>
           </TvFocusable>
         </View>
@@ -528,9 +527,9 @@ export function LampaSourceSheet({
                 </View>
               ) : null}
 
-              {(loadingTranslators || loadingEpisodes || playing) && (
+              {busy ? (
                 <ActivityIndicator color={colors.brand} style={styles.loader} />
-              )}
+              ) : null}
 
               {isSerial ? (
                 <View style={styles.episodesBlock}>

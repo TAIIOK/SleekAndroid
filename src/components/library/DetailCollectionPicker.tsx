@@ -262,10 +262,10 @@ export function DetailCollectionPicker({ item, disabled }: DetailCollectionPicke
 
 const styles = StyleSheet.create({
   chip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: isTvUi() ? 14 : 10,
-    minHeight: isTvUi() ? 48 : 38,
-    borderRadius: radii.md,
+    paddingHorizontal: isTvUi() ? spacing.lg : spacing.md,
+    paddingVertical: isTvUi() ? 14 : 8,
+    minHeight: isTvUi() ? 48 : 32,
+    borderRadius: isTvUi() ? radii.md : 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: '#fff',
-    fontSize: isTvUi() ? 16 : 13,
+    fontSize: isTvUi() ? 16 : 12,
     fontWeight: '600',
   },
   iconBtn: {

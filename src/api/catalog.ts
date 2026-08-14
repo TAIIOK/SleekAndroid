@@ -6,12 +6,11 @@ import {
   decodeLampaList,
   decodeLampaRecommendationList,
   decodeRecommendationFeed,
-  filterLampaItemsByKind,
+  findRecommendationSection,
   isLampaRecommendationEndpoint,
   normalizeCatalogPath,
   parseLampaRecommendationSectionId,
   parseRecommendationSectionsQuery,
-  resolveLampaRecommendationUrlPath,
   type LampaListItem,
   type RecommendationFeedSection,
 } from '@aniverse/catalog';
@@ -29,6 +28,7 @@ export {
 
 import { apiUrl, resolveLampaPosterUrl } from '@/lib/config';
 import { getImageCdnPreferenceSync } from '@/lib/imageCdn';
+import { normalizeAnimeRelated, type AnimeRelated } from '@/lib/animeDetail';
 import { normalizeEpisode } from '@/lib/episodeUtils';
 import {
   decodeLampaDetail,
@@ -154,7 +154,9 @@ export interface AnimeDetail {
   titleEn?: string;
   alternativeTitle?: string;
   description?: string;
-  poster?: string | string[];
+  poster?: unknown;
+  /** Landscape hero URL from the API (`PickAnimeBackdropURL`). */
+  backdrop?: string;
   screenshots?: unknown;
   banner?: unknown;
   score?: number;
@@ -163,6 +165,9 @@ export interface AnimeDetail {
   type?: string;
   ageRating?: string;
   episodesTotal?: number;
+  episodesAired?: number;
+  /** ISO datetime of the next unaired episode, when known. */
+  nextEpisodeDate?: string;
   genres?: Array<string | { name?: string; id?: number }>;
   studios?: Array<string | { name?: string; id?: number }>;
   aggregatedRating?: { rating?: number };
@@ -209,6 +214,8 @@ export interface LampaDetail {
   kind?: string;
   genres?: Array<string | { name?: string; id?: number }>;
   seasons?: LampaSeason[] | Record<string, number> | unknown;
+  belongs_to_collection?: { id?: number } | null;
+  belongsToCollection?: { id?: number } | null;
 }
 
 export interface LampaSectionFetch {
@@ -302,21 +309,16 @@ export async function fetchLampaSectionByUrlPath(
     sectionId?: string | null;
   },
 ): Promise<LampaItem[]> {
-  const kind = options?.kind;
-  const resolved = kind
-    ? resolveLampaRecommendationUrlPath(urlPath, kind)
-    : normalizeCatalogPath(urlPath);
+  const resolved = normalizeCatalogPath(urlPath);
   const normalized = resolved.startsWith('/') ? resolved : `/${resolved}`;
   const requestPath = catalogPagedPath(normalized, page, limit);
   const json = await request<unknown>(requestPath);
   if (normalized.includes('/catalog/recommendations/lampa')) {
     const sectionFilter =
       parseRecommendationSectionsQuery(normalized) ?? options?.sectionId ?? null;
-    const items = decodeLampaRecommendationList(json, sectionFilter);
-    return kind ? filterLampaItemsByKind(items, kind) : items;
+    return decodeLampaRecommendationList(json, sectionFilter);
   }
-  const items = decodeLampaList(json);
-  return kind ? filterLampaItemsByKind(items, kind) : items;
+  return decodeLampaList(json);
 }
 
 export async function fetchLampaSectionItems(
@@ -327,27 +329,17 @@ export async function fetchLampaSectionItems(
   options?: { excludeCjk?: boolean },
 ): Promise<LampaItem[]> {
   const isRecommendation = isLampaRecommendationEndpoint(section.endpoint);
-  const useRecommendationFetch = isRecommendation && Boolean(section.fetch?.urlPath);
+  const urlPath = section.fetch?.urlPath;
 
-  if (isRecommendation && !section.fetch?.urlPath) {
-    return [];
-  }
-
-  try {
-    if (useRecommendationFetch && section.fetch?.urlPath) {
-      return fetchLampaSectionByUrlPath(section.fetch.urlPath, page, limit, {
-        kind: kind as 'movie' | 'tv',
-        sectionId: parseLampaRecommendationSectionId(section.endpoint),
-      });
-    }
-    const items = await fetchLampaSection(kind, section.endpoint, page, limit, {
-      excludeCjk: options?.excludeCjk,
+  if (isRecommendation && urlPath) {
+    return fetchLampaSectionByUrlPath(urlPath, page, limit, {
+      sectionId: parseLampaRecommendationSectionId(section.endpoint),
     });
-    return filterLampaItemsByKind(items, kind as 'movie' | 'tv');
-  } catch {
-    if (isRecommendation) return [];
-    throw new Error('Не удалось загрузить секцию каталога');
   }
+
+  return fetchLampaSection(kind, section.endpoint, page, limit, {
+    excludeCjk: options?.excludeCjk,
+  });
 }
 
 export async function fetchAnimeRecommendationFeed(
@@ -355,6 +347,30 @@ export async function fetchAnimeRecommendationFeed(
 ): Promise<RecommendationFeedSection[]> {
   const json = await request<unknown>(`/api/v2/catalog/recommendations/anime?limit=${limit}`);
   return decodeRecommendationFeed(json);
+}
+
+export async function fetchAnimeRecommendationSectionPage(
+  sectionId: string,
+  page = 1,
+  limit = CATALOG_PAGE_SIZE,
+): Promise<{ items: AnimeListItem[]; hasNextPage: boolean }> {
+  const json = await request<unknown>(
+    `/api/v2/catalog/recommendations/anime?sections=${encodeURIComponent(sectionId)}&page=${page}&limit=${limit}`,
+  );
+  const sections = decodeRecommendationFeed(json);
+  const section =
+    findRecommendationSection(sections, sectionId) ??
+    (sections.length === 1 ? sections[0] : undefined);
+  const items = section?.items ?? [];
+  const rootMeta =
+    json && typeof json === 'object' && 'meta' in json
+      ? (json as { meta?: { hasNextPage?: boolean } }).meta
+      : undefined;
+  const hasNextPage =
+    items.length === 0
+      ? false
+      : Boolean(section?.hasNextPage ?? rootMeta?.hasNextPage ?? items.length >= limit);
+  return { items, hasNextPage };
 }
 
 export async function fetchAnimeList(
@@ -389,25 +405,26 @@ export async function fetchAnimeDetail(animeId: number): Promise<AnimeDetail> {
   return requestData<AnimeDetail>(`/api/animes/${animeId}`);
 }
 
-export interface AnimeRelated {
-  id?: number;
-  animeId?: number;
-  relatedAnimeId?: number;
-  relationType?: string;
-  title?: string;
-  poster?: unknown;
-  anime?: AnimeListItem;
-  relatedAnime?: AnimeListItem;
-}
+export type { AnimeRelated };
 
 export async function fetchAnimeRelated(animeId: number): Promise<AnimeRelated[]> {
   try {
     const json = await request<unknown>(`/api/animes/get/related/${animeId}`);
-    if (Array.isArray(json)) return json as AnimeRelated[];
-    const data = json && typeof json === 'object' && 'data' in json
-      ? (json as { data: unknown }).data
-      : json;
-    return Array.isArray(data) ? (data as AnimeRelated[]) : [];
+    const rows = Array.isArray(json)
+      ? json
+      : json && typeof json === 'object' && 'data' in json
+        ? (json as { data: unknown }).data
+        : json;
+    return Array.isArray(rows) ? rows.map(normalizeAnimeRelated) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchAnimeSimilar(animeId: number): Promise<AnimeListItem[]> {
+  try {
+    const json = await request<unknown>(`/api/animes/get/similar/${animeId}`);
+    return decodeAnimeList(json);
   } catch {
     return [];
   }
@@ -417,6 +434,9 @@ export interface AnimeCharacter {
   id?: number;
   name?: string;
   image?: string;
+  thumbnail?: string;
+  /** API field — «Главный» / «Второстепенный» (Sleek `type`). */
+  type?: string;
   role?: string;
 }
 
@@ -556,8 +576,8 @@ export function mapLampaToRailItem(item: LampaItem) {
   return {
     id: item.id,
     title: lampaItemTitle(item),
-    // Resolve here so cards always get a full WatchHub/TMDB URL (w500 for sharp TV rails).
-    poster: posterPath ? resolveLampaPosterUrl(posterPath, 'w500') : undefined,
+    // Rail/grid cards are ~120px; w342 is enough for 2× TV density. Heroes stay w500/w780.
+    poster: posterPath ? resolveLampaPosterUrl(posterPath, 'w342') : undefined,
     score:
       item.vote_average ??
       (typeof (item as { voteAverage?: number }).voteAverage === 'number'
@@ -566,7 +586,11 @@ export function mapLampaToRailItem(item: LampaItem) {
   };
 }
 
-export async function fetchLampaDetail(kind: string, routeId: string): Promise<LampaDetail> {
+export async function fetchLampaDetail(
+  kind: string,
+  routeId: string,
+  options?: { skipTmdb?: boolean },
+): Promise<LampaDetail> {
   const normalizedKind = kind === 'home' ? 'tv' : kind;
   const mediaKind = (normalizedKind === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv';
 
@@ -579,10 +603,13 @@ export async function fetchLampaDetail(kind: string, routeId: string): Promise<L
     const raw = await request<unknown>(`/api/lampa/item/${normalizedKind}/${routeId}`);
     payload = decodeLampaDetail(unwrapData(raw));
   } catch (e) {
+    if (options?.skipTmdb) throw e;
     const tmdb = await fetchTmdbLampaDetail(mediaKind, Number(routeId));
     if (tmdb) return mergeLampaWithTmdb(null, tmdb, normalizedKind).detail;
     throw e;
   }
+
+  if (options?.skipTmdb) return payload.detail;
 
   const tmdbId = resolveLampaTmdbId(payload.detail, routeId);
   if (tmdbId != null) {

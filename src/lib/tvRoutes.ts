@@ -1,4 +1,4 @@
-/** Paths available in the TV MVP (matches site/src/lib/tvRoutes.ts). */
+/** Paths available in the TV UI (expanded for site parity). */
 const TV_ALLOWED_PREFIXES = [
   '/auth',
   '/watch',
@@ -13,6 +13,10 @@ const TV_ALLOWED_PREFIXES = [
   '/accounts',
   '/settings',
   '/login',
+  '/party',
+  '/friends',
+  '/users',
+  '/person',
 ] as const;
 
 export function isTvAllowedPath(pathname: string): boolean {
@@ -25,7 +29,6 @@ export function isTvAllowedPath(pathname: string): boolean {
 export function tvRedirectPath(pathname: string): string {
   if (pathname.startsWith('/manga')) return '/anime';
   if (pathname === '/downloads' || pathname.startsWith('/downloads/')) return '/';
-  if (pathname === '/feed' || pathname.startsWith('/feed/')) return '/';
-  if (pathname === '/party' || pathname.startsWith('/party/')) return '/';
+  if (pathname === '/feed' || pathname.startsWith('/feed/')) return '/friends/feed';
   return '/';
 }

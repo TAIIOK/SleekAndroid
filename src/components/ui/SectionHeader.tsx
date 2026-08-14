@@ -6,7 +6,9 @@ import {
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, radii, spacing, tvFocus, typography } from '@/constants/aniverse';
+import { useTvCatalogVerticalSnapshot } from '@/hooks/useTvCatalogVerticalNeighbors';
 import { isTvUi } from '@/lib/isTvUi';
+import { registerTvCatalogChrome } from '@/lib/tvCatalogVerticalFocus';
 
 export type SectionHeaderVariant = 'continue' | 'quick' | 'group' | 'rail' | 'rail-featured';
 
@@ -24,6 +26,8 @@ interface SectionHeaderProps {
    * No separate chip — focus ring sits on the page title itself.
    */
   tvFocusEntry?: boolean;
+  /** Catalog path for vertical D-pad handoff (`/anime`, `/movies`, `/series`). */
+  tvFocusPath?: string;
 }
 
 function titleStyleForVariant(variant: SectionHeaderVariant) {
@@ -56,7 +60,9 @@ export function SectionHeader({
   showAccent,
   flush = false,
   tvFocusEntry = false,
+  tvFocusPath,
 }: SectionHeaderProps) {
+  const firstRailTag = useTvCatalogVerticalSnapshot(tvFocusPath).rails[0]?.tag;
   const accentVisible =
     showAccent ?? (isTvUi() || variant === 'rail-featured' || Boolean(onSeeAll));
 
@@ -73,6 +79,12 @@ export function SectionHeader({
           railStart
           style={styles.titleFocus}
           focusedStyle={styles.titleFocused}
+          hostRef={
+            tvFocusPath
+              ? (node) => registerTvCatalogChrome(tvFocusPath, node, 'primary')
+              : undefined
+          }
+          nextFocusDown={firstRailTag}
         >
           {titleText}
         </TvFocusable>

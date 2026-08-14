@@ -1,4 +1,4 @@
-import type { LampaDetail, LampaSeason } from '@/api/catalog';
+import type { LampaDetail, LampaItem, LampaSeason } from '@/api/catalog';
 import {
   formatRuDate,
   localizedTmdbGenre,
@@ -84,13 +84,68 @@ export function lampaBackdrop(
   return resolveLampaPosterUrl(lampaBackdropPath(item), size);
 }
 
-export function lampaYear(item: LampaDetail): number | undefined {
-  if (typeof item.year === 'number' && Number.isFinite(item.year)) return item.year;
+/** TMDB collection id when the title belongs to a franchise. */
+export function lampaCollectionId(detail: object | null | undefined): number | undefined {
+  if (!detail || typeof detail !== 'object') return undefined;
+  const record = detail as Record<string, unknown>;
+  const raw = record.belongs_to_collection ?? record.belongsToCollection;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const id = Number((raw as { id?: unknown }).id);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
+}
+
+export function lampaYear(item: object): number | undefined {
+  const record = item as {
+    year?: number;
+    releaseDate?: string;
+    release_date?: string;
+    first_air_date?: string;
+    firstAirDate?: string;
+  };
+  if (typeof record.year === 'number' && Number.isFinite(record.year)) return record.year;
   const raw =
-    item.releaseDate ?? item.release_date ?? item.first_air_date ?? item.firstAirDate;
+    record.releaseDate ?? record.release_date ?? record.first_air_date ?? record.firstAirDate;
   if (!raw) return undefined;
   const year = parseInt(String(raw).slice(0, 4), 10);
   return Number.isFinite(year) ? year : undefined;
+}
+
+export function lampaCardSubtitle(item: object): string | undefined {
+  const year = lampaYear(item);
+  return year && year > 0 ? String(year) : undefined;
+}
+
+function lampaItemSortKey(item: LampaItem): number {
+  const id = typeof item.id === 'number' ? item.id : Number(item.id);
+  return Number.isFinite(id) ? id : 0;
+}
+
+export function sortLampaItemsByYear(items: LampaItem[]): LampaItem[] {
+  return [...items].sort((a, b) => {
+    const yearA = lampaYear(a);
+    const yearB = lampaYear(b);
+    const ay = yearA && yearA > 0 ? yearA : Number.POSITIVE_INFINITY;
+    const by = yearB && yearB > 0 ? yearB : Number.POSITIVE_INFINITY;
+    if (ay !== by) return ay - by;
+    return lampaItemSortKey(a) - lampaItemSortKey(b);
+  });
+}
+
+export function excludeRelatedLampaItems(
+  similar: LampaItem[],
+  related: LampaItem[],
+): LampaItem[] {
+  const relatedIds = new Set(
+    related
+      .map((item) => Number(item.id))
+      .filter((id) => Number.isFinite(id)),
+  );
+  if (!relatedIds.size) return similar;
+  return similar.filter((item) => {
+    const id = Number(item.id);
+    return !Number.isFinite(id) || !relatedIds.has(id);
+  });
 }
 
 export function lampaRating(item: LampaDetail): number | undefined {
@@ -319,6 +374,12 @@ export function mergeLampaWithTmdb(
       pg: pickNumber(tmdb.runtime, base.pg),
       genres: genres.length ? genres : base.genres,
       seasons: tmdb.seasons ? parseLampaSeasons(tmdb.seasons) : parseLampaSeasons(base.seasons),
+      belongs_to_collection:
+        (tmdb.belongs_to_collection as LampaDetail['belongs_to_collection']) ??
+        base.belongs_to_collection,
+      belongsToCollection:
+        (tmdb.belongs_to_collection as LampaDetail['belongsToCollection']) ??
+        base.belongsToCollection,
     },
   };
 }

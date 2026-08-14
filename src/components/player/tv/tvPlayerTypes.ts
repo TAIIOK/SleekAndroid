@@ -46,5 +46,5 @@ export const TV_PLAYER_OPTIONS_ORDER: TvPlayerButtonId[] = [
   'settings',
 ];
 
-export const TV_PANEL_HIDE_MS = 3000;
+export const TV_PANEL_HIDE_MS = 5000;
 export const TV_PLAYER_HINT_HIDE_MS = 2500;

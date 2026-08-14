@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,17 +7,20 @@ import {
 } from 'react-native';
 
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
-import { PosterGrid } from '@/components/catalog/PosterGrid';
+import { PosterGrid, usePosterGridCardWidth } from '@/components/catalog/PosterGrid';
+import { LibraryShowMoreButton } from '@/components/library/LibraryShowMoreButton';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { colors, layout, spacing } from '@/constants/aniverse';
+import { colors, spacing } from '@/constants/aniverse';
+import { LIBRARY_PAGE_SIZE } from '@/lib/libraryPaging';
 import { lampaDetailPath, lampaTitle } from '@/lib/lampaDetail';
 import {
   MY_LISTS_STATUS_LABELS,
   MY_LISTS_STATUS_ORDER,
   countLabel,
-  getLampaKind,
+  getLampaMediaBucket,
   getSavedLampaUserStatus,
   hasListStatus,
+  lampaMatchesMediaFilter,
   normalizeListStatus,
   showAnimeLists,
   showLampaLists,
@@ -46,7 +50,8 @@ export function MyListsContent({
   libraryTotal,
 }: MyListsContentProps) {
   const router = useRouter();
-  const cardWidth = layout.posterWidthRail;
+  const cardWidth = usePosterGridCardWidth();
+  const resetKey = `${media}:${statusFilter}`;
 
   const visibleAnime = showAnimeLists(media)
     ? anime.filter((item) => {
@@ -60,13 +65,16 @@ export function MyListsContent({
     ? lampa.filter((row) => {
         const status = getSavedLampaUserStatus(row);
         if (!hasListStatus(status)) return false;
-        if (media !== 'all' && getLampaKind(row) !== media) return false;
+        if (!lampaMatchesMediaFilter(row, media)) return false;
         if (statusFilter === 'all') return true;
         return normalizeListStatus(status) === statusFilter;
       })
     : [];
 
-  const totalVisible = visibleAnime.length + visibleLampa.length;
+  const movieItems = visibleLampa.filter((row) => getLampaMediaBucket(row) === 'movie');
+  const tvItems = visibleLampa.filter((row) => getLampaMediaBucket(row) === 'tv');
+
+  const totalVisible = visibleAnime.length + movieItems.length + tvItems.length;
 
   if (totalVisible === 0) {
     return (
@@ -77,134 +85,311 @@ export function MyListsContent({
   }
 
   if (!groupByStatus) {
-    let posterIndex = 0;
-    return (
-      <PosterGrid>
-        {visibleAnime.map((item) => {
-          const index = posterIndex++;
-          return (
-            <CatalogPosterCard
-              key={`anime-${item.animeId}`}
-              variant="grid"
-              width={cardWidth}
-              title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
-              poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
-              animeId={item.animeId}
-              subtitle="Аниме"
-              onPress={() => router.push(`/anime/${item.animeId}` as '/')}
-              railStart={index === 0}
-            />
-          );
-        })}
-        {visibleLampa.map((row) => {
-          const index = posterIndex++;
-          const kind = getLampaKind(row);
-          const nested = (row.lampa ?? row) as Record<string, unknown>;
-          return (
-            <CatalogPosterCard
-              key={`lampa-${String(row.lampaObjectId ?? row.id)}`}
-              variant="grid"
-              width={cardWidth}
-              title={typeof row.title === 'string' ? row.title : lampaTitle(nested)}
-              poster={
-                typeof row.poster === 'string'
-                  ? row.poster
-                  : lampaPosterPath(nested) ?? lampaPosterPath(row)
+    if (media === 'all') {
+      return (
+        <View style={styles.sections}>
+          {visibleAnime.length ? (
+            <PaginatedKindSection
+              resetKey={resetKey}
+              title={
+                statusFilter !== 'all'
+                  ? MY_LISTS_STATUS_LABELS[statusFilter as UserAnimeStatus]
+                  : 'Аниме'
               }
-              subtitle={kind === 'tv' ? 'Сериал' : 'Фильм'}
-              onPress={() => router.push(lampaDetailPath(kind, nested) as '/')}
-              railStart={index === 0}
-            />
-          );
-        })}
-      </PosterGrid>
+              itemCount={visibleAnime.length}
+            >
+              {(limit) =>
+                visibleAnime.slice(0, limit).map((item, index) => (
+                  <AnimeCard
+                    key={`anime-${item.animeId}`}
+                    item={item}
+                    width={cardWidth}
+                    railStart={index === 0}
+                    onPress={() => router.push(`/anime/${item.animeId}` as '/')}
+                  />
+                ))
+              }
+            </PaginatedKindSection>
+          ) : null}
+          {movieItems.length ? (
+            <PaginatedKindSection resetKey={resetKey} title="Фильмы" itemCount={movieItems.length}>
+              {(limit) =>
+                movieItems.slice(0, limit).map((row, index) => (
+                  <LampaCard
+                    key={`lampa-${String(row.lampaObjectId ?? row.id)}`}
+                    row={row}
+                    width={cardWidth}
+                    railStart={index === 0}
+                    onPress={() =>
+                      router.push(
+                        lampaDetailPath('movie', (row.lampa ?? row) as Record<string, unknown>) as '/',
+                      )
+                    }
+                  />
+                ))
+              }
+            </PaginatedKindSection>
+          ) : null}
+          {tvItems.length ? (
+            <PaginatedKindSection resetKey={resetKey} title="Сериалы" itemCount={tvItems.length}>
+              {(limit) =>
+                tvItems.slice(0, limit).map((row, index) => (
+                  <LampaCard
+                    key={`lampa-${String(row.lampaObjectId ?? row.id)}`}
+                    row={row}
+                    width={cardWidth}
+                    railStart={index === 0}
+                    onPress={() =>
+                      router.push(
+                        lampaDetailPath('tv', (row.lampa ?? row) as Record<string, unknown>) as '/',
+                      )
+                    }
+                  />
+                ))
+              }
+            </PaginatedKindSection>
+          ) : null}
+        </View>
+      );
+    }
+
+    const flatItems = [
+      ...visibleAnime.map((item) => ({ type: 'anime' as const, item })),
+      ...visibleLampa.map((row) => ({ type: 'lampa' as const, row })),
+    ];
+
+    return (
+      <PaginatedKindSection
+        resetKey={resetKey}
+        title={
+          media === 'anime'
+            ? 'Аниме'
+            : media === 'movie'
+              ? 'Фильмы'
+              : 'Сериалы'
+        }
+        itemCount={flatItems.length}
+      >
+        {(limit) =>
+          flatItems.slice(0, limit).map((entry, index) =>
+            entry.type === 'anime' ? (
+              <AnimeCard
+                key={`anime-${entry.item.animeId}`}
+                item={entry.item}
+                width={cardWidth}
+                railStart={index === 0}
+                onPress={() => router.push(`/anime/${entry.item.animeId}` as '/')}
+              />
+            ) : (
+              <LampaCard
+                key={`lampa-${String(entry.row.lampaObjectId ?? entry.row.id)}`}
+                row={entry.row}
+                width={cardWidth}
+                railStart={index === 0}
+                onPress={() => {
+                  const bucket = getLampaMediaBucket(entry.row);
+                  const nested = (entry.row.lampa ?? entry.row) as Record<string, unknown>;
+                  router.push(lampaDetailPath(bucket, nested) as '/');
+                }}
+              />
+            ),
+          )
+        }
+      </PaginatedKindSection>
     );
   }
 
   const animeGroups = groupAnimeByStatus(visibleAnime);
-  const lampaGroups = groupLampaByStatus(visibleLampa, media);
-  let posterIndex = 0;
+  const movieGroups =
+    media === 'all'
+      ? [{ status: null as UserAnimeStatus | null, items: movieItems }]
+      : groupLampaByStatus(movieItems);
+  const tvGroups =
+    media === 'all'
+      ? [{ status: null as UserAnimeStatus | null, items: tvItems }]
+      : groupLampaByStatus(tvItems);
 
   return (
     <View style={styles.sections}>
       {animeGroups.map((group) =>
         group.items.length ? (
-          <View key={group.status ?? 'anime'} style={styles.section}>
-            <SectionHeader
+          <PaginatedKindSection
+            key={`anime-${group.status ?? 'all'}`}
+            resetKey={resetKey}
+            title={
+              group.status != null
+                ? MY_LISTS_STATUS_LABELS[group.status]
+                : statusFilter !== 'all'
+                  ? MY_LISTS_STATUS_LABELS[statusFilter as UserAnimeStatus]
+                  : 'Аниме'
+            }
+            itemCount={group.items.length}
+          >
+            {(limit) =>
+              group.items.slice(0, limit).map((item, index) => (
+                <AnimeCard
+                  key={`anime-${item.animeId}`}
+                  item={item}
+                  width={cardWidth}
+                  railStart={index === 0}
+                  onPress={() => router.push(`/anime/${item.animeId}` as '/')}
+                />
+              ))
+            }
+          </PaginatedKindSection>
+        ) : null,
+      )}
+
+      {(media === 'all' || media === 'movie') &&
+        movieGroups.map((group) =>
+          group.items.length ? (
+            <PaginatedKindSection
+              key={`movie-${group.status ?? 'all'}`}
+              resetKey={resetKey}
               title={
                 group.status != null
                   ? MY_LISTS_STATUS_LABELS[group.status]
-                  : statusFilter !== 'all'
-                    ? MY_LISTS_STATUS_LABELS[statusFilter as UserAnimeStatus]
-                    : 'Аниме'
+                  : 'Фильмы'
               }
-              subtitle={countLabel(group.items.length)}
-              showAccent={isTvUi()}
-            />
-            <PosterGrid>
-              {group.items.map((item) => {
-                const index = posterIndex++;
-                return (
-                  <CatalogPosterCard
-                    key={`anime-${item.animeId}`}
-                    variant="grid"
-                    width={cardWidth}
-                    title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
-                    poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
-                    animeId={item.animeId}
-                    subtitle="Аниме"
-                    onPress={() => router.push(`/anime/${item.animeId}` as '/')}
-                    railStart={index === 0}
-                  />
-                );
-              })}
-            </PosterGrid>
-          </View>
-        ) : null,
-      )}
-      {lampaGroups.map((group) =>
-        group.items.length ? (
-          <View key={group.status ?? 'lampa'} style={styles.section}>
-            <SectionHeader
+              itemCount={group.items.length}
+            >
+              {(limit) =>
+                group.items.slice(0, limit).map((row, index) => {
+                  const nested = (row.lampa ?? row) as Record<string, unknown>;
+                  return (
+                    <LampaCard
+                      key={`lampa-${String(row.lampaObjectId ?? row.id)}`}
+                      row={row}
+                      width={cardWidth}
+                      railStart={index === 0}
+                      onPress={() => router.push(lampaDetailPath('movie', nested) as '/')}
+                    />
+                  );
+                })
+              }
+            </PaginatedKindSection>
+          ) : null,
+        )}
+
+      {(media === 'all' || media === 'tv') &&
+        tvGroups.map((group) =>
+          group.items.length ? (
+            <PaginatedKindSection
+              key={`tv-${group.status ?? 'all'}`}
+              resetKey={resetKey}
               title={
                 group.status != null
                   ? MY_LISTS_STATUS_LABELS[group.status]
-                  : media === 'movie'
-                    ? 'Фильмы'
-                    : media === 'tv'
-                      ? 'Сериалы'
-                      : 'Фильмы и сериалы'
+                  : 'Сериалы'
               }
-              subtitle={countLabel(group.items.length)}
-              showAccent={isTvUi()}
-            />
-            <PosterGrid>
-              {group.items.map((row) => {
-                const index = posterIndex++;
-                const kind = getLampaKind(row);
-                const nested = (row.lampa ?? row) as Record<string, unknown>;
-                return (
-                  <CatalogPosterCard
-                    key={`lampa-${String(row.lampaObjectId ?? row.id)}`}
-                    variant="grid"
-                    width={cardWidth}
-                    title={typeof row.title === 'string' ? row.title : lampaTitle(nested)}
-                    poster={
-                      typeof row.poster === 'string'
-                        ? row.poster
-                        : lampaPosterPath(nested) ?? lampaPosterPath(row)
-                    }
-                    subtitle={kind === 'tv' ? 'Сериал' : 'Фильм'}
-                    onPress={() => router.push(lampaDetailPath(kind, nested) as '/')}
-                    railStart={index === 0}
-                  />
-                );
-              })}
-            </PosterGrid>
-          </View>
-        ) : null,
-      )}
+              itemCount={group.items.length}
+            >
+              {(limit) =>
+                group.items.slice(0, limit).map((row, index) => {
+                  const nested = (row.lampa ?? row) as Record<string, unknown>;
+                  return (
+                    <LampaCard
+                      key={`lampa-${String(row.lampaObjectId ?? row.id)}`}
+                      row={row}
+                      width={cardWidth}
+                      railStart={index === 0}
+                      onPress={() => router.push(lampaDetailPath('tv', nested) as '/')}
+                    />
+                  );
+                })
+              }
+            </PaginatedKindSection>
+          ) : null,
+        )}
     </View>
+  );
+}
+
+function PaginatedKindSection({
+  resetKey,
+  title,
+  itemCount,
+  children,
+}: {
+  resetKey: string;
+  title: string;
+  itemCount: number;
+  children: (limit: number) => ReactNode;
+}) {
+  const [visibleCount, setVisibleCount] = useState(LIBRARY_PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(LIBRARY_PAGE_SIZE);
+  }, [resetKey, itemCount]);
+
+  const limit = Math.min(visibleCount, itemCount);
+  const remaining = itemCount - limit;
+
+  return (
+    <View style={styles.section}>
+      <SectionHeader title={title} subtitle={countLabel(itemCount)} showAccent={isTvUi()} />
+      <PosterGrid>{children(limit)}</PosterGrid>
+      <LibraryShowMoreButton
+        remaining={remaining}
+        pageSize={LIBRARY_PAGE_SIZE}
+        onPress={() => setVisibleCount((n) => n + LIBRARY_PAGE_SIZE)}
+      />
+    </View>
+  );
+}
+
+function AnimeCard({
+  item,
+  width,
+  railStart,
+  onPress,
+}: {
+  item: SavedAnimeItem;
+  width: number;
+  railStart: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <CatalogPosterCard
+      variant="grid"
+      width={width}
+      title={item.title ?? item.anime?.title?.toString() ?? 'Аниме'}
+      poster={item.poster ?? (item.anime ? animePoster(item.anime) : undefined)}
+      animeId={item.animeId}
+      subtitle="Аниме"
+      onPress={onPress}
+      railStart={railStart}
+    />
+  );
+}
+
+function LampaCard({
+  row,
+  width,
+  railStart,
+  onPress,
+}: {
+  row: Record<string, unknown>;
+  width: number;
+  railStart: boolean;
+  onPress: () => void;
+}) {
+  const bucket = getLampaMediaBucket(row);
+  const nested = (row.lampa ?? row) as Record<string, unknown>;
+  return (
+    <CatalogPosterCard
+      variant="grid"
+      width={width}
+      title={typeof row.title === 'string' ? row.title : lampaTitle(nested)}
+      poster={
+        typeof row.poster === 'string'
+          ? row.poster
+          : lampaPosterPath(nested) ?? lampaPosterPath(row)
+      }
+      subtitle={bucket === 'tv' ? 'Сериал' : 'Фильм'}
+      onPress={onPress}
+      railStart={railStart}
+    />
   );
 }
 
@@ -216,10 +401,7 @@ function groupAnimeByStatus(items: SavedAnimeItem[]) {
   return groups.length ? groups : [{ status: null as UserAnimeStatus | null, items }];
 }
 
-function groupLampaByStatus(items: Array<Record<string, unknown>>, media: MyListsMediaFilter) {
-  if (media === 'all') {
-    return [{ status: null as UserAnimeStatus | null, items }];
-  }
+function groupLampaByStatus(items: Array<Record<string, unknown>>) {
   const groups = MY_LISTS_STATUS_ORDER.map((status) => ({
     status,
     items: items.filter(

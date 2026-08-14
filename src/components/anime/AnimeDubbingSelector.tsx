@@ -16,14 +16,12 @@ import { isTvUi } from '@/lib/isTvUi';
 interface AnimeDubbingSelectorProps {
   options: string[];
   selected: string;
-  watchedOption?: string | null;
   onSelect: (value: string) => void;
 }
 
 export function AnimeDubbingSelector({
   options,
   selected,
-  watchedOption,
   onSelect,
 }: AnimeDubbingSelectorProps) {
   const [open, setOpen] = useState(false);
@@ -31,20 +29,11 @@ export function AnimeDubbingSelector({
   if (options.length <= 1) return null;
 
   const selectedLabel = selected || options[0];
-  const selectedIsWatched = Boolean(watchedOption && selectedLabel === watchedOption);
 
   return (
     <View style={styles.wrap}>
       <TvFocusable onPress={() => setOpen(true)} style={styles.trigger}>
-        <View style={styles.triggerText}>
-          <Text style={styles.triggerHint}>Озвучка</Text>
-          <Text style={styles.triggerValue} numberOfLines={1}>
-            {selectedLabel}
-            {selectedIsWatched ? (
-              <Text style={styles.watchedInline}> Смотрели</Text>
-            ) : null}
-          </Text>
-        </View>
+        <Text style={styles.triggerValue}>{selectedLabel}</Text>
         <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
       </TvFocusable>
 
@@ -55,7 +44,6 @@ export function AnimeDubbingSelector({
             <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
               {options.map((option, index) => {
                 const active = option === selectedLabel;
-                const watched = Boolean(watchedOption && option === watchedOption);
                 return (
                   <TvFocusable
                     key={option}
@@ -66,11 +54,8 @@ export function AnimeDubbingSelector({
                     }}
                     style={[styles.option, active && styles.optionActive]}
                   >
-                    <Text style={[styles.optionLabel, active && styles.optionLabelActive]} numberOfLines={2}>
+                    <Text style={[styles.optionLabel, active && styles.optionLabelActive]}>
                       {option}
-                      {watched ? (
-                        <Text style={styles.watchedInline}> Смотрели</Text>
-                      ) : null}
                     </Text>
                     {active ? (
                       <Ionicons name="checkmark" size={18} color={colors.brand} />
@@ -91,42 +76,28 @@ export function AnimeDubbingSelector({
 
 const styles = StyleSheet.create({
   wrap: {
-    flexShrink: 0,
-    minWidth: isTvUi() ? 200 : 132,
-    maxWidth: isTvUi() ? 280 : 168,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: isTvUi() ? 200 : 128,
+    maxWidth: isTvUi() ? 400 : 280,
     marginLeft: 'auto',
   },
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radii.lg,
+    gap: isTvUi() ? spacing.sm : 6,
+    borderRadius: isTvUi() ? radii.lg : radii.md,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: isTvUi() ? spacing.md : 10,
-    paddingVertical: isTvUi() ? 12 : 8,
-  },
-  triggerText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  triggerHint: {
-    color: colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    paddingHorizontal: isTvUi() ? spacing.md : 8,
+    paddingVertical: isTvUi() ? 12 : 6,
   },
   triggerValue: {
+    flex: 1,
+    minWidth: 0,
     color: colors.text,
-    fontSize: isTvUi() ? 15 : 13,
-    fontWeight: '600',
-  },
-  watchedInline: {
-    color: colors.brand,
-    fontSize: 12,
+    fontSize: isTvUi() ? 15 : 12,
     fontWeight: '600',
   },
   backdrop: {
@@ -176,6 +147,7 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     flex: 1,
+    minWidth: 0,
     color: colors.textSecondary,
     fontSize: isTvUi() ? 16 : 14,
     fontWeight: '600',

@@ -27,12 +27,15 @@ export function usePosterGridLayout(horizontalPadding = spacing.lg) {
 
     const columns = width >= 1280 ? 6 : width >= 1024 ? 5 : width >= 768 ? 4 : 3;
     const contentWidth = Math.max(0, width - horizontalPadding * 2);
-    const cardWidth = Math.floor((contentWidth - gap * (columns - 1)) / columns);
+    const cardWidth = Math.max(
+      1,
+      Math.floor((contentWidth - gap * (columns - 1)) / columns),
+    );
 
     return {
       columns,
       gap,
-      cardWidth: Math.max(cardWidth, layout.posterWidthRail),
+      cardWidth,
       horizontalPadding,
     };
   }, [horizontalPadding, width]);

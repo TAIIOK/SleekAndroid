@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { forwardRef, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  findNodeHandle,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,17 +11,28 @@ import {
 } from 'react-native';
 
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { TvFocusGuide } from '@/components/tv/TvFocusGuide';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { usePosterDisplayUri } from '@/hooks/usePosterDisplayUri';
+import { useTvCatalogVerticalNeighbors } from '@/hooks/useTvCatalogVerticalNeighbors';
 import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
 import type { ContinueWatchingItem } from '@/lib/continueWatching';
 import { formatContinueProgressLabel } from '@/lib/continueWatching';
-import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
+import { continuePosterDecodeSize } from '@/lib/catalogRailLayout';
+import { isTvUi } from '@/lib/isTvUi';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { setCatalogActiveFocus } from '@/lib/tvCatalogScrollRestore';
+import { registerTvCatalogRail } from '@/lib/tvCatalogVerticalFocus';
+import { tvNextFocusLeft } from '@/lib/tvRailFocus';
+import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
+import {
+  requestTvHomeCatalogFocus,
+  requestTvHomeChromeFocus,
+} from '@/lib/tvHomeFocusHandoff';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
-import { isTvUi } from '@/lib/isTvUi';
 
 const CONTINUE_RAIL_KEY = '__continue__';
+const CONTINUE_RAIL_PRIORITY = -1;
 
 const CARD_WIDTH = layout.continueCardWidth;
 
@@ -31,93 +42,95 @@ interface ContinueWatchingRowProps {
 
 export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   const router = useRouter();
-  const { bindItem } = useTvRailFocusRestore(items.length);
-  const [resumingId, setResumingId] = useState<string | null>(null);
+  const neighbors = useTvCatalogVerticalNeighbors('/', CONTINUE_RAIL_PRIORITY);
+  const nextFocusUp = neighbors.up;
+  const nextFocusDown = neighbors.down;
+  const { bindItem, ownsFocusRef } = useTvRailFocusRestore(items.length, {
+    stealHorizontalEscape: isTvUi(),
+  });
   const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
-  const rowCount = isTvUi() ? 1 : items.length <= 4 ? 1 : 2;
-  const columns =
-    rowCount > 1
-      ? Array.from({ length: Math.ceil(items.length / rowCount) }, (_, columnIndex) =>
-          items.slice(columnIndex * rowCount, columnIndex * rowCount + rowCount),
-        )
-      : [];
+  const itemTagsRef = useRef<(number | undefined)[]>([]);
+  const [itemTags, setItemTags] = useState<(number | undefined)[]>([]);
+  const flushTagsScheduled = useRef(false);
+
+  const setItemTag = useCallback((index: number, tag: number | undefined) => {
+    if (itemTagsRef.current[index] === tag) return;
+    itemTagsRef.current[index] = tag;
+    if (flushTagsScheduled.current) return;
+    flushTagsScheduled.current = true;
+    queueMicrotask(() => {
+      flushTagsScheduled.current = false;
+      setItemTags(itemTagsRef.current.slice());
+    });
+  }, []);
+
+  useTvEventHandlerSafe((event) => {
+    if (!isTvUi() || event.eventKeyAction === 0) return;
+    if (!ownsFocusRef.current) return;
+    if (event.eventType === 'up') {
+      requestTvHomeChromeFocus();
+      return;
+    }
+    if (event.eventType === 'down') {
+      requestTvHomeCatalogFocus();
+    }
+  });
 
   if (!items.length) return null;
 
-  const onPressItem = (item: ContinueWatchingItem) => {
-    void openItem(router, item, {
-      isResuming: resumingId === item.id,
-      setResumingId,
-    });
-  };
+  const rail = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
+      {...tvHorizontalCatalogScrollProps}
+    >
+      {items.map((item, index) => {
+        const railFocus = bindItem(index);
+        return (
+          <View key={item.id} collapsable={false}>
+            <ContinueCard
+              ref={(node) => {
+                railFocus.ref?.(node);
+                if (index === 0) registerTvCatalogRail('/', CONTINUE_RAIL_PRIORITY, node);
+              }}
+              item={item}
+              onPress={() => openItem(router, item)}
+              onFocus={railFocus.onFocus}
+              onBlur={railFocus.onBlur}
+              isContentEntry={false}
+              railStart={index === 0}
+              railEnd={index === items.length - 1}
+              nextFocusLeft={itemTags[index - 1]}
+              nextFocusRight={itemTags[index + 1]}
+              nextFocusUp={nextFocusUp}
+              nextFocusDown={nextFocusDown}
+              onNativeTag={(tag) => setItemTag(index, tag)}
+            />
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
 
   return (
     <View style={styles.section} {...tvRailSectionSnapProps}>
       <SectionHeader title="Продолжить просмотр" variant="continue" />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
-        {...tvHorizontalCatalogScrollProps}
-      >
-        {rowCount > 1 ? (
-          <View style={styles.twoRowGrid}>
-            {columns.map((columnItems, columnIndex) => (
-              <View key={`col-${columnIndex}`} style={styles.twoRowColumn}>
-                {columnItems.map((item, rowIndex) => {
-                  const index = columnIndex * rowCount + rowIndex;
-                  const railFocus = bindItem(index);
-                  return (
-                    <ContinueCard
-                      key={item.id}
-                      ref={railFocus.ref}
-                      item={item}
-                      busy={resumingId === item.id}
-                      onPress={() => onPressItem(item)}
-                      onFocus={railFocus.onFocus}
-                      onBlur={railFocus.onBlur}
-                      isContentEntry={columnIndex === 0 && rowIndex === 0}
-                      railStart={columnIndex === 0}
-                    />
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        ) : (
-          items.map((item, index) => {
-            const railFocus = bindItem(index);
-            return (
-              <ContinueCard
-                key={item.id}
-                ref={railFocus.ref}
-                item={item}
-                busy={resumingId === item.id}
-                onPress={() => onPressItem(item)}
-                onFocus={railFocus.onFocus}
-                onBlur={railFocus.onBlur}
-                isContentEntry={index === 0}
-                railStart={index === 0}
-                spaced
-              />
-            );
-          })
-        )}
-      </ScrollView>
+      {isTvUi() ? (
+        <TvFocusGuide trapFocusRight>
+          {rail}
+        </TvFocusGuide>
+      ) : (
+        rail
+      )}
     </View>
   );
 }
 
-async function openItem(
+function openItem(
   router: ReturnType<typeof useRouter>,
   item: ContinueWatchingItem,
-  opts: {
-    isResuming: boolean;
-    setResumingId: (id: string | null) => void;
-  },
 ) {
-  if (opts.isResuming) return;
-
   if (item.kind === 'anime' && item.animeId && item.episodeId) {
     router.push({
       pathname: '/watch/anime/[animeId]/[episodeId]',
@@ -133,31 +146,6 @@ async function openItem(
     return;
   }
 
-  if (item.kind === 'movie' || item.kind === 'tv') {
-    const routeId =
-      item.routeId ||
-      item.href.match(/\/(?:movies|series)\/(\d+)/)?.[1] ||
-      '';
-    if (routeId) {
-      opts.setResumingId(item.id);
-      try {
-        const resumed = await resumeLampaFromLastSelection({
-          kind: item.kind,
-          routeId,
-          season: item.season,
-          episode: item.episode,
-          startProgress: item.startProgress,
-        });
-        if (resumed) {
-          router.push('/watch/lampa');
-          return;
-        }
-      } finally {
-        opts.setResumingId(null);
-      }
-    }
-  }
-
   router.push(item.href as never);
 }
 
@@ -170,28 +158,67 @@ const ContinueCard = forwardRef<
     onBlur?: () => void;
     isContentEntry?: boolean;
     railStart?: boolean;
-    spaced?: boolean;
-    busy?: boolean;
+    railEnd?: boolean;
+    nextFocusLeft?: number;
+    nextFocusRight?: number;
+    nextFocusUp?: number;
+    nextFocusDown?: number;
+    onNativeTag?: (tag: number | undefined) => void;
   }
 >(function ContinueCard(
-  { item, onPress, onFocus, onBlur, isContentEntry, railStart, spaced, busy },
+  {
+    item,
+    onPress,
+    onFocus,
+    onBlur,
+    isContentEntry,
+    railStart,
+    railEnd,
+    nextFocusLeft,
+    nextFocusRight,
+    nextFocusUp,
+    nextFocusDown,
+    onNativeTag,
+  },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
+  const [selfTag, setSelfTag] = useState<number | undefined>();
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<(View & { requestTVFocus?: () => void }) | null>(null);
   const claimedEntryFocusRef = useRef(false);
   const exitLeft = isTvUi() && Boolean(railStart || isContentEntry);
   const exitUp = isTvUi() && Boolean(isContentEntry);
-  const sidebarTag = exitLeft ? shellFocus?.sidebarNativeTag : undefined;
+  const pinnedRight =
+    nextFocusRight ?? (isTvUi() && railEnd ? selfTag : undefined);
+  const pinnedLeft = tvNextFocusLeft({
+    railStart: exitLeft,
+    exitTag: shellFocus?.sidebarNativeTag,
+    siblingTag: nextFocusLeft,
+  });
+  const { displayUrl, imageSource, onLoad, onError } = usePosterDisplayUri({
+    poster: item.poster,
+    animeId: item.animeId,
+  });
+  const decodeSize = continuePosterDecodeSize(CARD_WIDTH);
+
+  const captureTag = (node: View | null) => {
+    if (!isTvUi()) return;
+    const tag =
+      node != null
+        ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined)
+        : undefined;
+    setSelfTag((prev) => (prev === tag ? prev : tag));
+    onNativeTag?.(tag);
+  };
 
   const setRefs = (node: View | null) => {
     nodeRef.current = node as (View & { requestTVFocus?: () => void }) | null;
     if (typeof ref === 'function') ref(node);
     else if (ref) ref.current = node;
+    captureTag(node);
   };
 
-  // Win the home content-entry race against feed rails / type chips.
   useEffect(() => {
     if (!isTvUi() || !isContentEntry || claimedEntryFocusRef.current) return;
     claimedEntryFocusRef.current = true;
@@ -208,6 +235,7 @@ const ContinueCard = forwardRef<
         setFocused(true);
         if (isTvUi() && nodeRef.current) {
           shellFocus?.registerContentAnchor(nodeRef.current);
+          captureTag(nodeRef.current);
           setCatalogActiveFocus('/', CONTINUE_RAIL_KEY, 0);
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
@@ -221,25 +249,29 @@ const ContinueCard = forwardRef<
         onBlur?.();
       }}
       onPress={onPress}
-      disabled={busy}
       style={[
         styles.card,
-        spaced && styles.cardSpaced,
         { width: CARD_WIDTH },
         focused && styles.cardFocused,
       ]}
       {...(isContentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
-      {...(sidebarTag != null ? { nextFocusLeft: sidebarTag } : {})}
+      {...(pinnedLeft != null ? { nextFocusLeft: pinnedLeft } : {})}
+      {...(nextFocusUp != null ? { nextFocusUp } : {})}
+      {...(nextFocusDown != null ? { nextFocusDown } : {})}
+      {...(pinnedRight != null ? { nextFocusRight: pinnedRight } : {})}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
         <View style={styles.posterWrap}>
-          {item.poster ? (
+          {imageSource ? (
             <Image
-              source={{ uri: item.poster }}
+              source={{ ...imageSource, width: decodeSize.width, height: decodeSize.height }}
               style={styles.poster}
               contentFit="cover"
               cachePolicy="memory-disk"
-              recyclingKey={item.poster}
+              recyclingKey={displayUrl}
+              transition={0}
+              onLoad={onLoad}
+              onError={onError}
             />
           ) : (
             <View style={[styles.poster, styles.posterFallback]}>
@@ -252,12 +284,6 @@ const ContinueCard = forwardRef<
           </View>
           {focused ? (
             <View style={[StyleSheet.absoluteFill, styles.focusWash]} pointerEvents="none" />
-          ) : null}
-          {busy ? (
-            <View style={[StyleSheet.absoluteFill, styles.busyOverlay]} pointerEvents="none">
-              <ActivityIndicator color="#fff" />
-              <Text style={styles.busyText}>Загрузка…</Text>
-            </View>
           ) : null}
         </View>
       </View>
@@ -285,18 +311,7 @@ const styles = StyleSheet.create({
     paddingBottom: isTvUi() ? 10 : spacing.sm,
     gap: isTvUi() ? 10 : 12,
   },
-  twoRowGrid: {
-    flexDirection: 'row',
-    gap: isTvUi() ? 10 : 12,
-  },
-  twoRowColumn: {
-    gap: isTvUi() ? 10 : 12,
-  },
   card: {
-    marginRight: 0,
-  },
-  cardSpaced: {
-    // Spacing from ScrollView `gap` only (same as poster rails).
     marginRight: 0,
   },
   cardFocused: {
@@ -313,6 +328,7 @@ const styles = StyleSheet.create({
     backgroundColor: isTvUi() ? tvFocus.wash : 'transparent',
   },
   posterWrap: {
+    width: '100%',
     borderRadius: isTvUi() ? radii.md : radii.lg,
     overflow: 'hidden',
     aspectRatio: 16 / 9,
@@ -322,17 +338,6 @@ const styles = StyleSheet.create({
   },
   focusWash: {
     backgroundColor: tvFocus.wash,
-  },
-  busyOverlay: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    gap: 8,
-  },
-  busyText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
   },
   poster: {
     width: '100%',
@@ -352,15 +357,15 @@ const styles = StyleSheet.create({
   },
   posterFallbackText: {
     color: colors.brand,
-    fontSize: 36,
+    fontSize: isTvUi() ? 36 : 28,
     fontWeight: '700',
   },
   progressTrack: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 10,
-    height: 4,
+    left: isTvUi() ? 12 : 8,
+    right: isTvUi() ? 12 : 8,
+    bottom: isTvUi() ? 10 : 8,
+    height: isTvUi() ? 4 : 3,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(255,255,255,0.2)',
     overflow: 'hidden',
@@ -371,14 +376,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   meta: {
-    marginTop: 8,
-    minHeight: 40 + 2 + 16,
+    marginTop: isTvUi() ? 8 : 6,
+    minHeight: isTvUi() ? 58 : 50,
   },
   title: {
     color: colors.text,
-    height: 40,
-    fontSize: 15,
-    lineHeight: 20,
+    height: isTvUi() ? 40 : 34,
+    fontSize: isTvUi() ? 15 : 13,
+    lineHeight: isTvUi() ? 20 : 17,
     fontWeight: '600',
     backgroundColor: 'transparent',
   },
@@ -389,9 +394,9 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.textSecondary,
     marginTop: 2,
-    height: 16,
-    fontSize: 12,
-    lineHeight: 16,
+    height: isTvUi() ? 16 : 14,
+    fontSize: isTvUi() ? 12 : 11,
+    lineHeight: isTvUi() ? 16 : 14,
     backgroundColor: 'transparent',
   },
   subtitleFocused: {

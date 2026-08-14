@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { findNodeHandle } from 'react-native';
 
+import { createTvExitArm } from '@/lib/tvExitArm';
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -28,7 +29,9 @@ interface TvShellFocusValue {
   /** True while the top content entry owns focus — Up exits to sidebar. */
   setExitUpEnabled: (enabled: boolean) => void;
   requestSidebarFocus: () => void;
-  /** Drop armed Left/Up exits (call on route change). */
+  /** Drop armed Left/Up exits only (same-hub detail push/pop). */
+  resetExitArms: () => void;
+  /** Drop armed exits, close overlay, clear content tag (hub switch). */
   resetExitFlags: () => void;
   /** Overlay side menu is visible (focus is in the sidebar or opening). */
   menuOpen: boolean;
@@ -40,54 +43,15 @@ interface TvShellFocusValue {
 
 const TvShellFocusContext = createContext<TvShellFocusValue | null>(null);
 
-/**
- * Delay before Left/Up may jump to the sidebar after a rail-edge card gains focus.
- * Android moves focus on key-down, but rn-tvos only delivers the HW event on key-up.
- * Without this arm delay, Left from the 2nd card lands on the 1st then immediately
- * exits to the sidebar in the same press.
- */
-const EXIT_ARM_MS = 220;
-
 function useArmedExitFlag() {
-  const countRef = useRef(0);
-  const armedRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearTimer = () => {
-    if (timerRef.current != null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  const reset = useCallback(() => {
-    countRef.current = 0;
-    clearTimer();
-    armedRef.current = false;
-  }, []);
-
+  const armRef = useRef(createTvExitArm());
   const setEnabled = useCallback((enabled: boolean) => {
-    const next = Math.max(0, countRef.current + (enabled ? 1 : -1));
-    countRef.current = next;
-
-    if (next === 0) {
-      clearTimer();
-      armedRef.current = false;
-      return;
-    }
-
-    // Re-arm whenever an edge control gains focus so a fresh 220ms window starts.
-    if (enabled) {
-      armedRef.current = false;
-      clearTimer();
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        armedRef.current = countRef.current > 0;
-      }, EXIT_ARM_MS);
-    }
+    armRef.current.setEnabled(enabled);
   }, []);
-
-  return { armedRef, setEnabled, reset };
+  const reset = useCallback(() => {
+    armRef.current.reset();
+  }, []);
+  return { armRef, setEnabled, reset };
 }
 
 /**
@@ -193,33 +157,40 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       focus();
       requestAnimationFrame(focus);
     });
+    // In-row Left dest still holds focus until menuOpen commits and it
+    // becomes unfocusable; retry after that paint.
+    setTimeout(focus, 50);
   }, [clearCloseMenuTimer, clearOpenMenuTimer]);
 
   const requestSidebarFocus = useCallback(() => {
     focusSidebarAfterOpen();
   }, [focusSidebarAfterOpen]);
 
-  const resetExitFlags = useCallback(() => {
+  const resetExitArms = useCallback(() => {
     exitLeft.reset();
     exitUp.reset();
+  }, [exitLeft.reset, exitUp.reset]);
+
+  const resetExitFlags = useCallback(() => {
+    resetExitArms();
     clearCloseMenuTimer();
     clearOpenMenuTimer();
     sidebarFocusCountRef.current = 0;
     setMenuOpen(false);
     setContentNativeTag(undefined);
-  }, [clearCloseMenuTimer, clearOpenMenuTimer, exitLeft.reset, exitUp.reset]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer, resetExitArms]);
 
   useTvEventHandlerSafe((event) => {
     // rn-tvos Android defaults to key-up HW events. Skip key-down if both fire.
+    // Native Left may already have 2D-searched Down; the arm grace keeps consume()
+    // true through that blur so this key-up still opens the sidebar.
     if (event.eventKeyAction === 0) return;
 
-    if (event.eventType === 'left' && exitLeft.armedRef.current) {
-      exitLeft.armedRef.current = false;
+    if (event.eventType === 'left' && exitLeft.armRef.current.consume()) {
       focusSidebarAfterOpen();
       return;
     }
-    if (event.eventType === 'up' && exitUp.armedRef.current) {
-      exitUp.armedRef.current = false;
+    if (event.eventType === 'up' && exitUp.armRef.current.consume()) {
       focusSidebarAfterOpen();
     }
   });
@@ -233,6 +204,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       setExitLeftEnabled: exitLeft.setEnabled,
       setExitUpEnabled: exitUp.setEnabled,
       requestSidebarFocus,
+      resetExitArms,
       resetExitFlags,
       menuOpen,
       openMenu,
@@ -247,6 +219,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       exitLeft.setEnabled,
       exitUp.setEnabled,
       requestSidebarFocus,
+      resetExitArms,
       resetExitFlags,
       menuOpen,
       openMenu,

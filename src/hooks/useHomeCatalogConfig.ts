@@ -3,7 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { request } from '@/api/client';
 import { useAuth } from '@/providers/AuthProvider';
 import {
-  getHomeConfigUpdatedAt,
+  extractRemoteHomeConfig,
+  type CatalogHomeConfigRemote,
+} from '@/lib/catalogHomeConfigRemote';
+import {
   isHomeConfigConfigured,
   loadHomeConfig,
   normalizeHomeConfig,
@@ -12,23 +15,14 @@ import {
 } from '@/lib/homeSettings';
 import { EMPTY_HOME_CONFIG, type CatalogHomeConfig } from '@/types/homeConfig';
 
-export interface CatalogHomeConfigRemote {
-  config: Record<string, unknown> | null;
-  updatedAt?: string;
-}
+export type { CatalogHomeConfigRemote };
 
 export async function fetchCatalogHomeConfig(): Promise<CatalogHomeConfigRemote> {
   try {
-    const json = await request<{
-      data?: Record<string, unknown> | null;
-      meta?: { updatedAt?: string };
-    }>('/api/user/catalogHomeConfig');
-    return {
-      config: json.data ?? null,
-      updatedAt: json.meta?.updatedAt,
-    };
+    const json = await request<unknown>('/api/user/catalogHomeConfig');
+    return extractRemoteHomeConfig(json);
   } catch {
-    return { config: null };
+    return { config: null, unavailable: true };
   }
 }
 
@@ -79,27 +73,20 @@ export function useHomeCatalogConfig() {
       const remote = await fetchCatalogHomeConfig();
       const local = await loadHomeConfig();
       const localConfigured = isHomeConfigConfigured(local);
-      const localUpdatedAt = await getHomeConfigUpdatedAt();
 
-      if (remote.config && Object.keys(remote.config).length > 0) {
+      if (remote.unavailable) {
+        setConfig(local);
+        return;
+      }
+
+      // Server catalogHomeConfig is the source of truth. A stale TV welcome
+      // draft must not overwrite the site's saved rails on startup.
+      if (remote.config) {
         const remoteNorm = normalizeHomeConfig(remote.config as Partial<CatalogHomeConfig>, {
           fromServer: true,
         });
         const remoteUpdatedAt = parseRemoteUpdatedAt(remote.updatedAt);
-
-        if (localConfigured && !remoteNorm.configured) {
-          await saveCatalogHomeConfig(local as unknown as Record<string, unknown>);
-          setConfig(local);
-          return;
-        }
-
-        if (localConfigured && remoteNorm.configured && localUpdatedAt > remoteUpdatedAt) {
-          await saveCatalogHomeConfig(local as unknown as Record<string, unknown>);
-          setConfig(local);
-          return;
-        }
-
-        await saveHomeConfig(remoteNorm);
+        await saveHomeConfig(remoteNorm, remoteUpdatedAt || Date.now());
         setConfig(remoteNorm);
         return;
       }

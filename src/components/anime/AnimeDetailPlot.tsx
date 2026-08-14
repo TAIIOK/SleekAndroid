@@ -57,23 +57,26 @@ export function AnimeDetailPlot({ detail }: AnimeDetailPlotProps) {
 }
 
 const styles = StyleSheet.create({
-  section: { gap: spacing.sm },
+  section: {
+    width: '100%',
+    gap: spacing.sm,
+  },
   title: {
     color: colors.brand,
-    fontSize: isTvUi() ? 20 : 16,
+    fontSize: isTvUi() ? 22 : 16,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
   body: {
     color: colors.textSecondary,
-    fontSize: isTvUi() ? 14 : 13,
-    lineHeight: isTvUi() ? 22 : 20,
+    fontSize: isTvUi() ? 16 : 13,
+    lineHeight: isTvUi() ? 26 : 20,
   },
   more: {
     alignSelf: 'flex-start',
     marginTop: spacing.xs,
-    paddingVertical: isTvUi() ? 8 : 6,
-    paddingHorizontal: isTvUi() ? 8 : 4,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
     justifyContent: 'center',
   },
   moreLabel: {

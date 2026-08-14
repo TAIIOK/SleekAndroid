@@ -142,6 +142,21 @@ export function getLampaKind(entry: Record<string, unknown>): string {
   return String(nested?.kind ?? entry.kind ?? 'movie');
 }
 
+/** Normalize lampa kind to library media bucket (`movie` | `tv`). */
+export function getLampaMediaBucket(entry: Record<string, unknown>): 'movie' | 'tv' {
+  const kind = getLampaKind(entry);
+  if (kind === 'tv' || kind === 'home' || kind === 'series') return 'tv';
+  return 'movie';
+}
+
+export function lampaMatchesMediaFilter(
+  entry: Record<string, unknown>,
+  media: MyListsMediaFilter,
+): boolean {
+  if (media === 'all' || media === 'anime') return media === 'all';
+  return getLampaMediaBucket(entry) === media;
+}
+
 export function hasListStatus(itemStatus: unknown): boolean {
   return normalizeListStatus(itemStatus) !== 'none';
 }

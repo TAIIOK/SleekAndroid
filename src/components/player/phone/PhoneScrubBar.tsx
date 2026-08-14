@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View, type DimensionValue } from 'react-na
 
 import { colors } from '@/constants/aniverse';
 import { formatPlaybackTime } from '@/lib/formatPlaybackTime';
-import { isOpeningLikeSkip, type PlayerSkipSegment } from '@/lib/playerSkip';
+import { EMPTY_SKIP_SEGMENTS, isOpeningLikeSkip, type PlayerSkipSegment } from '@/lib/playerSkip';
 
 function pct(value: number): DimensionValue {
   return `${Math.min(100, Math.max(0, value))}%`;
@@ -13,14 +13,17 @@ export function PhoneScrubBar({
   progress,
   currentTime,
   duration,
-  skipSegments = [],
+  skipSegments = EMPTY_SKIP_SEGMENTS,
   onSeekRatio,
+  showTimes = true,
 }: {
   progress: number;
   currentTime: number;
   duration: number;
   skipSegments?: PlayerSkipSegment[];
   onSeekRatio: (ratio: number) => void;
+  /** When false, times are rendered by the parent (Sleek-style edge labels). */
+  showTimes?: boolean;
 }) {
   const [width, setWidth] = useState(1);
   const clamped = Math.min(100, Math.max(0, progress));
@@ -53,21 +56,23 @@ export function PhoneScrubBar({
         </View>
         <View style={[styles.thumb, { left: pct(clamped) }]} />
       </Pressable>
-      <Text style={styles.times}>
-        {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
-      </Text>
+      {showTimes ? (
+        <Text style={styles.times}>
+          {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   hit: {
-    height: 24,
+    height: 36,
     justifyContent: 'center',
   },
   track: {
-    height: 4,
-    borderRadius: 2,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.2)',
     overflow: 'hidden',
   },

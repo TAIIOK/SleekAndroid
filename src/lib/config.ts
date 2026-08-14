@@ -57,6 +57,19 @@ export function resolveAnimePosterUrl(path?: string | null): string | undefined 
   return `${API_BASE}${trimmed.startsWith('/') ? trimmed : `/${trimmed}`}`;
 }
 
+/** Resolve ordered hero candidates, skipping duplicates after URL normalization. */
+export function animeHeroImageUrls(paths: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const path of paths) {
+    const url = resolveAnimePosterUrl(path);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    result.push(url);
+  }
+  return result;
+}
+
 function isAnimeRelativePath(path: string): boolean {
   const lower = path.toLowerCase();
   if (
@@ -84,4 +97,15 @@ export function resolvePosterUrl(poster?: unknown): string | undefined {
   if (path.startsWith('//')) return `https:${path}`;
   if (isAnimeRelativePath(path)) return resolveAnimePosterUrl(path);
   return resolveLampaPosterUrl(path);
+}
+
+/** Anilib/Mangalib CDN — hotlink-protected; RN does not send Referer by default. */
+export function needsHotlinkReferer(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url.startsWith('//') ? `https:${url}` : url).hostname.toLowerCase();
+    return host.endsWith('imglib.info') || host.endsWith('cdnlibs.org');
+  } catch {
+    return /imglib\.info|cdnlibs\.org/i.test(url);
+  }
 }

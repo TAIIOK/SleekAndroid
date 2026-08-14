@@ -12,6 +12,9 @@ import { pickVideoUrl } from '@/lib/animeDetail';
 export type { PlaybackQuality };
 export { PLAYBACK_QUALITIES, normalizeDubbingName, pickPlaybackUrl, pickVideoUrlForQuality };
 
+/** Stable empty list — `episode?.video ?? []` is a new array every render. */
+export const EMPTY_ANIME_VIDEOS: AnimeVideo[] = [];
+
 function dubbingEquals(a: string, b: string): boolean {
   return a.localeCompare(b, 'ru', { sensitivity: 'accent' }) === 0;
 }

@@ -14,7 +14,12 @@ import {
   pickLatestContinueAnimeRow,
   pickLatestContinueLampaRow,
 } from '@/lib/progressUtils';
-import { extractPosterPath } from '@/lib/poster';
+import { extractPosterPath, lampaPosterPath, animePoster } from '@/lib/poster';
+import {
+  animeWatchHistoryKey,
+  getWatchHistoryMeta,
+  lampaWatchHistoryKey,
+} from '@/lib/watchHistoryMeta';
 import type { SavedAnimeItem } from '@/types/progress';
 import type { UserAnimeProgress, UserLampaProgress } from '@/types/progress';
 
@@ -66,6 +71,22 @@ function parseDateMs(value?: string): number {
 
 function hasWatchProgress(progress: number, completed?: boolean): boolean {
   return isUnfinishedProgress(progress, completed);
+}
+
+function resolvedPosterFromFields(fields: {
+  poster?: unknown;
+  posterPath?: unknown;
+  poster_path?: unknown;
+}): string | undefined {
+  const path = lampaPosterPath(fields);
+  if (!path) return undefined;
+  return resolveLampaPosterUrl(path) ?? resolvePosterUrl(path);
+}
+
+function resolvedLocalPoster(path?: string): string | undefined {
+  const trimmed = path?.trim();
+  if (!trimmed) return undefined;
+  return resolveLampaPosterUrl(trimmed) ?? resolvePosterUrl(trimmed);
 }
 
 function indexSavedLampa(savedLampa: unknown[]): Map<string, Record<string, unknown>> {
@@ -123,18 +144,15 @@ function lampaMetaFromSaved(row?: Record<string, unknown>): LampaMeta {
     objectId: row.lampaObjectId,
   };
   const routeId = lampaDetailRouteId(routeItem as Parameters<typeof lampaDetailRouteId>[0]);
-  const posterRaw = String(
-    nested?.poster ??
-      nested?.posterPath ??
-      nested?.poster_path ??
-      row.poster ??
-      row.posterPath ??
-      row.poster_path ??
-      '',
-  );
+  const poster =
+    resolvedPosterFromFields({
+      poster: nested?.poster ?? row.poster,
+      posterPath: nested?.posterPath ?? row.posterPath,
+      poster_path: nested?.poster_path ?? row.poster_path,
+    }) ?? (typeof row.poster === 'string' ? resolvedLocalPoster(row.poster) : undefined);
   return {
     title: nested ? lampaTitle(nested) : String(row.title ?? row.name ?? '').trim() || undefined,
-    poster: resolveLampaPosterUrl(posterRaw) ?? resolvePosterUrl(posterRaw),
+    poster,
     kind,
     routeId: routeId || undefined,
     season: Number(row.lastSeason ?? row.lastSeasson ?? row.season) || undefined,
@@ -198,15 +216,11 @@ export function buildLampaMetaFromHistoryFeed(feedRows: unknown[]): Map<string, 
     const title = String(
       snapshot.title ?? snapshot.name ?? row.title ?? row.name ?? '',
     ).trim();
-    const posterRaw = String(
-      snapshot.poster ??
-        snapshot.posterPath ??
-        snapshot.poster_path ??
-        row.poster ??
-        row.posterPath ??
-        '',
-    );
-    const poster = resolveLampaPosterUrl(posterRaw) ?? resolvePosterUrl(posterRaw);
+    const poster = resolvedPosterFromFields({
+      poster: snapshot.poster ?? row.poster,
+      posterPath: snapshot.posterPath ?? row.posterPath,
+      poster_path: snapshot.poster_path ?? row.poster_path,
+    });
     const meta: LampaMeta = {
       title: title || undefined,
       poster: poster || undefined,
@@ -268,13 +282,18 @@ function pickAnimeContinueFromProgress(
   const progress = normalizeProgress(latest.progress);
   const unfinished = isUnfinishedProgress(latest.progress, latest.completed);
   const detail = saved?.anime;
-  const title = resolveAnimeListTitle(detail) ?? saved?.title ?? `Аниме ${animeId}`;
-  const poster = detail ? extractPosterPath(detail.poster) : saved?.poster;
+  const localMeta = getWatchHistoryMeta(animeWatchHistoryKey(animeId));
+  const title =
+    resolveAnimeListTitle(detail) ?? saved?.title ?? localMeta?.title ?? `Аниме ${animeId}`;
+  const posterPath =
+    (detail ? animePoster(detail) : undefined) ??
+    extractPosterPath(saved?.poster) ??
+    localMeta?.poster;
 
   return {
     id: `anime-${animeId}`,
     title,
-    poster: poster ? resolvePosterUrl(poster) : undefined,
+    poster: posterPath ? resolvePosterUrl(posterPath) : undefined,
     subtitle: unfinished ? 'Продолжить' : 'Смотреть дальше',
     progress,
     durationSec: getPlaybackDuration(animePlaybackDurationKey(animeId, latest.episodeId)),
@@ -312,13 +331,18 @@ function pickAnimeContinue(
   if (!bestEpisodeId && bestProgress <= 0) return null;
 
   const detail = sa.anime;
-  const title = resolveAnimeListTitle(detail) ?? sa.title ?? `Аниме ${animeId}`;
-  const poster = detail ? extractPosterPath(detail.poster) : sa.poster;
+  const localMeta = getWatchHistoryMeta(animeWatchHistoryKey(animeId));
+  const title =
+    resolveAnimeListTitle(detail) ?? sa.title ?? localMeta?.title ?? `Аниме ${animeId}`;
+  const posterPath =
+    (detail ? animePoster(detail) : undefined) ??
+    extractPosterPath(sa.poster) ??
+    localMeta?.poster;
 
   return {
     id: `anime-${animeId}`,
     title,
-    poster: poster ? resolvePosterUrl(poster) : undefined,
+    poster: posterPath ? resolvePosterUrl(posterPath) : undefined,
     subtitle: 'Продолжить',
     progress: bestProgress,
     durationSec:
@@ -341,10 +365,18 @@ function pickLampaContinueFromProgress(
   savedMeta: LampaMeta,
   historyMeta: LampaMeta,
 ): ContinueWatchingItem | null {
+  const localMeta =
+    getWatchHistoryMeta(lampaWatchHistoryKey(lampaId)) ??
+    (savedMeta.routeId || historyMeta.routeId
+      ? getWatchHistoryMeta(lampaWatchHistoryKey(savedMeta.routeId ?? historyMeta.routeId ?? ''))
+      : undefined);
+  const localKind =
+    localMeta?.kind === 'tv' || localMeta?.kind === 'movie' ? localMeta.kind : undefined;
   const meta: LampaMeta = {
-    title: savedMeta.title ?? historyMeta.title,
-    poster: savedMeta.poster ?? historyMeta.poster,
-    kind: savedMeta.kind ?? historyMeta.kind,
+    title: savedMeta.title ?? historyMeta.title ?? localMeta?.title,
+    poster:
+      savedMeta.poster ?? historyMeta.poster ?? resolvedLocalPoster(localMeta?.poster),
+    kind: savedMeta.kind ?? historyMeta.kind ?? localKind,
     routeId: savedMeta.routeId ?? historyMeta.routeId,
     season: savedMeta.season ?? historyMeta.season,
     episode: savedMeta.episode ?? historyMeta.episode,

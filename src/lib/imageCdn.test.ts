@@ -24,17 +24,29 @@ import {
   __resetImageCdnForTests,
   ensureImageCdnPreference,
   getImageCdnPreferenceSync,
+  IMAGE_CDN_PROBE_PATH,
+  isStaticCdnUnhealthy,
   isYaniPosterUrl,
+  loadImageCdnPreference,
+  markStaticUnhealthyAndPreferImgproxy,
   pickImageCdnPreference,
   probeHost,
   probeImageCdns,
   reportYaniPosterLoadError,
   reportYaniPosterLoadSuccess,
+  rewritePosterURL,
+  rewritePosterURLToHost,
   type ProbeHostResult,
 } from './imageCdn';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function imageResponse(status: number, url = '') {
+  const res = new Response(null, { status });
+  if (url) Object.defineProperty(res, 'url', { value: url });
+  return res;
 }
 
 describe('pickImageCdnPreference', () => {
@@ -81,11 +93,30 @@ describe('pickImageCdnPreference', () => {
 });
 
 describe('probeHost', () => {
-  it('treats HTTP 403 as reachable', async () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 403 }));
+  it('GETs a real poster path with Range', async () => {
+    const fetchImpl = vi.fn(async () => imageResponse(206));
     const result = await probeHost('imgproxy', fetchImpl as unknown as typeof fetch);
     expect(result.ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain(IMAGE_CDN_PROBE_PATH);
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>).Range).toBe('bytes=0-2047');
+  });
+
+  it('treats HTTP 403 as unreachable for a poster GET', async () => {
+    const fetchImpl = vi.fn(async () => imageResponse(403));
+    const result = await probeHost('imgproxy', fetchImpl as unknown as typeof fetch);
+    expect(result.ok).toBe(false);
     expect(result.host).toBe('imgproxy');
+  });
+
+  it('treats static 302 onto imgproxy as unavailable', async () => {
+    const fetchImpl = vi.fn(async () =>
+      imageResponse(200, `https://imgproxy.yani.tv${IMAGE_CDN_PROBE_PATH}`),
+    );
+    const result = await probeHost('static', fetchImpl as unknown as typeof fetch);
+    expect(result.ok).toBe(false);
   });
 
   it('treats network failure as unreachable', async () => {
@@ -108,10 +139,10 @@ describe('probeImageCdns + persist', () => {
       const url = String(input);
       if (url.includes('imgproxy')) {
         await delay(30);
-        return new Response(null, { status: 403 });
+        return imageResponse(200);
       }
       await delay(5);
-      return new Response(null, { status: 200 });
+      return imageResponse(200);
     });
 
     const preference = await ensureImageCdnPreference({
@@ -122,7 +153,7 @@ describe('probeImageCdns + persist', () => {
     expect(getImageCdnPreferenceSync()).toBe('static');
   });
 
-  it('clears preference when both probes fail', async () => {
+  it('keeps imgproxy when both probes fail so catalog still sends X-Image-CDN', async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError('Failed to fetch');
     });
@@ -130,8 +161,18 @@ describe('probeImageCdns + persist', () => {
       force: true,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    expect(preference).toBeNull();
-    expect(getImageCdnPreferenceSync()).toBeNull();
+    expect(preference).toBe('imgproxy');
+    expect(getImageCdnPreferenceSync()).toBe('imgproxy');
+  });
+
+  it('does not restore sticky static across launches', async () => {
+    await AsyncStorage.setItem(
+      'image_cdn_preference',
+      JSON.stringify({ preference: 'static', probedAt: Date.now() }),
+    );
+    const stored = await loadImageCdnPreference();
+    expect(stored.preference).toBeNull();
+    expect(getImageCdnPreferenceSync()).toBe('imgproxy');
   });
 
   it('reuses fresh persisted preference without probing', async () => {
@@ -150,7 +191,7 @@ describe('probeImageCdns + persist', () => {
   it('probeImageCdns returns imgproxy when only imgproxy answers', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes('imgproxy')) {
-        return new Response(null, { status: 404 });
+        return imageResponse(206);
       }
       throw new Error('down');
     });
@@ -181,5 +222,58 @@ describe('yani poster helpers', () => {
     }
     // no throw / no crash — threshold not crossed
     expect(true).toBe(true);
+  });
+
+  it('rewrites yani hosts to preferred CDN', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('static')) {
+        await delay(5);
+        return imageResponse(200);
+      }
+      await delay(40);
+      return imageResponse(200);
+    });
+    await ensureImageCdnPreference({
+      force: true,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(getImageCdnPreferenceSync()).toBe('static');
+    expect(rewritePosterURL('https://imgproxy.yani.tv/posters/a.jpg')).toBe(
+      'https://static.yani.tv/posters/a.jpg',
+    );
+  });
+
+  it('rewrites yani hosts to imgproxy when preference is unknown', () => {
+    expect(rewritePosterURL('https://static.yani.tv/posters/a.jpg')).toBe(
+      'https://imgproxy.yani.tv/posters/a.jpg',
+    );
+    expect(rewritePosterURL('//img.yani.tv/posters/a.jpg')).toBe(
+      'https://imgproxy.yani.tv/posters/a.jpg',
+    );
+    expect(rewritePosterURL('https://cover.imglib.info/a.jpg')).toBe(
+      'https://cover.imglib.info/a.jpg',
+    );
+  });
+
+  it('can force a yani host for Glide vs OkHttp', () => {
+    expect(
+      rewritePosterURLToHost('https://imgproxy.yani.tv/posters/a.jpg', 'static'),
+    ).toBe('https://static.yani.tv/posters/a.jpg');
+  });
+
+  it('forces imgproxy when static is unhealthy', () => {
+    markStaticUnhealthyAndPreferImgproxy();
+    expect(isStaticCdnUnhealthy()).toBe(true);
+    expect(getImageCdnPreferenceSync()).toBe('imgproxy');
+    expect(rewritePosterURL('https://static.yani.tv/posters/a.jpg')).toBe(
+      'https://imgproxy.yani.tv/posters/a.jpg',
+    );
+  });
+
+  it('marks static unhealthy on static poster load error', () => {
+    reportYaniPosterLoadError('https://static.yani.tv/posters/a.jpg');
+    expect(isStaticCdnUnhealthy()).toBe(true);
+    expect(getImageCdnPreferenceSync()).toBe('imgproxy');
   });
 });
