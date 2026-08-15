@@ -8,6 +8,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { LampaDetail } from '@/api/catalog';
+import type { LampaExternalRating } from '@/api/lampaRatings';
+import { LampaExternalRatingsRow } from '@/components/lampa/LampaExternalRatingsRow';
 import { DetailLibraryActions } from '@/components/library/DetailLibraryActions';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
@@ -44,6 +46,7 @@ interface LampaDetailHeroProps {
   isFavorite?: boolean;
   libraryDisabled?: boolean;
   collectionItem?: CollectionItemInput | null;
+  externalRatings?: LampaExternalRating[];
   onWatch: () => void;
   onOpenSources?: () => void;
   onStatusChange: (status: UserListStatus) => void;
@@ -71,6 +74,7 @@ export function LampaDetailHero({
   isFavorite,
   libraryDisabled,
   collectionItem,
+  externalRatings = [],
   onWatch,
   onOpenSources,
   onStatusChange,
@@ -153,6 +157,10 @@ export function LampaDetailHero({
         <Text style={styles.alt} numberOfLines={2}>
           {alt}
         </Text>
+      ) : null}
+
+      {externalRatings.length > 0 ? (
+        <LampaExternalRatingsRow ratings={externalRatings} />
       ) : null}
 
       <View style={styles.pills}>

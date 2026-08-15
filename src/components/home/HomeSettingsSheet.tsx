@@ -33,19 +33,44 @@ import {
   toggleLampaSection,
 } from '@/lib/homeSettingsEditor';
 import type { CatalogHomeConfig } from '@/lib/homeSettings';
+import {
+  HOME_QUICK_ACTION_IDS,
+  HOME_QUICK_ACTIONS,
+  moveHomeQuickAction,
+  toggleHomeQuickAction,
+  type HomeQuickActionId,
+} from '@/lib/homeQuickActions';
 import { isTvUi } from '@/lib/isTvUi';
 
 const LAMPA_SECTIONS_PREVIEW = 6;
+const QUICK_SETTINGS_COLUMNS = 6;
+
+function chunkIds<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size));
+  }
+  return rows;
+}
 
 interface HomeSettingsSheetProps {
   open: boolean;
   config: CatalogHomeConfig;
+  /** TV-only: visible/ordered Home Quick Action cards. */
+  quickActionIds?: HomeQuickActionId[];
   onClose: () => void;
-  onSave: (config: CatalogHomeConfig) => void;
+  onSave: (config: CatalogHomeConfig, quickActionIds?: HomeQuickActionId[]) => void;
 }
 
-export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSettingsSheetProps) {
+export function HomeSettingsSheet({
+  open,
+  config,
+  quickActionIds,
+  onClose,
+  onSave,
+}: HomeSettingsSheetProps) {
   const [draft, setDraft] = useState(config);
+  const [quickDraft, setQuickDraft] = useState<HomeQuickActionId[]>(quickActionIds ?? []);
   const [expandedKinds, setExpandedKinds] = useState<Record<string, boolean>>({});
   const [selectedGenreId, setSelectedGenreId] = useState('');
   const [selectedAnimeType, setSelectedAnimeType] = useState('');
@@ -55,8 +80,10 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
   const [seasonalSeason, setSeasonalSeason] = useState(1);
 
   useEffect(() => {
-    if (open) setDraft(config);
-  }, [open, config]);
+    if (!open) return;
+    setDraft(config);
+    if (quickActionIds) setQuickDraft(quickActionIds);
+  }, [open, config, quickActionIds]);
 
   const { data: contentTypes = [] } = useQuery({
     queryKey: ['catalog-root'],
@@ -74,7 +101,7 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
   const { data: genreOptions = [] } = useQuery({
     queryKey: ['anime-genres-dict'],
     queryFn: fetchGenres,
-    enabled: open && !!genreFilter?.sourcePath,
+    enabled: open && !isTvUi() && !!genreFilter?.sourcePath,
   });
 
   const { data: lampaCat } = useQuery({
@@ -154,6 +181,79 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
           </View>
 
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+            {quickActionIds ? (
+              <Section title="Быстрые действия">
+                <Text style={styles.quickHint}>
+                  Карточки на главной. Нажмите, чтобы включить. Стрелки меняют порядок.
+                </Text>
+                {chunkIds(
+                  [
+                    ...quickDraft,
+                    ...HOME_QUICK_ACTION_IDS.filter((id) => !quickDraft.includes(id)),
+                  ],
+                  QUICK_SETTINGS_COLUMNS,
+                ).map((row, rowIndex) => (
+                  <View key={row.join('-')} style={styles.quickGridRow}>
+                    {row.map((id) => {
+                      const enabled = quickDraft.includes(id);
+                      const def = HOME_QUICK_ACTIONS[id];
+                      return (
+                        <View key={id} style={styles.quickCell}>
+                          <TvFocusable
+                            onPress={() =>
+                              setQuickDraft((prev) => toggleHomeQuickAction(prev, id, !enabled))
+                            }
+                            style={[styles.quickChip, enabled && styles.quickChipOn]}
+                            focusedStyle={styles.quickChipFocused}
+                          >
+                            <Text style={styles.quickChipTitle} numberOfLines={1}>
+                              {def.title}
+                            </Text>
+                            <Text
+                              style={[styles.quickChipState, enabled && styles.quickChipStateOn]}
+                            >
+                              {enabled ? 'Вкл' : 'Выкл'}
+                            </Text>
+                          </TvFocusable>
+                          {enabled ? (
+                            <View style={styles.quickMove}>
+                              <TvFocusable
+                                onPress={() =>
+                                  setQuickDraft((prev) => moveHomeQuickAction(prev, id, -1))
+                                }
+                                style={styles.quickMoveBtn}
+                                focusedStyle={styles.quickMoveBtnFocused}
+                                accessibilityLabel={`Раньше: ${def.title}`}
+                              >
+                                <Text style={styles.quickMoveLabel}>←</Text>
+                              </TvFocusable>
+                              <TvFocusable
+                                onPress={() =>
+                                  setQuickDraft((prev) => moveHomeQuickAction(prev, id, 1))
+                                }
+                                style={styles.quickMoveBtn}
+                                focusedStyle={styles.quickMoveBtnFocused}
+                                accessibilityLabel={`Позже: ${def.title}`}
+                              >
+                                <Text style={styles.quickMoveLabel}>→</Text>
+                              </TvFocusable>
+                            </View>
+                          ) : (
+                            <View style={styles.quickMoveSpacer} />
+                          )}
+                        </View>
+                      );
+                    })}
+                    {row.length < QUICK_SETTINGS_COLUMNS
+                      ? Array.from({ length: QUICK_SETTINGS_COLUMNS - row.length }, (_, index) => (
+                          <View key={`pad-${rowIndex}-${index}`} style={styles.quickCell} />
+                        ))
+                      : null}
+                  </View>
+                ))}
+              </Section>
+            ) : null}
+
             <Section title="Типы контента">
               {contentTypes.map((type) => (
                 <ToggleRow
@@ -190,24 +290,24 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
 
             {effectiveDraft.enabledContentTypes.includes('anime') ? (
               <Section title="Аниме-витрины">
-                {(animeCat?.showcases ?? []).map((showcase) => (
-                  <ToggleRow
-                    key={showcase.id}
-                    label={showcase.name}
-                    value={effectiveDraft.enabledAnimeShowcases.includes(showcase.id)}
-                    onValueChange={(enabled) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        enabledAnimeShowcases: toggleInList(
-                          effectiveDraft.enabledAnimeShowcases,
-                          showcase.id,
-                          enabled,
-                          showcaseIds,
-                        ),
-                      }))
-                    }
-                  />
-                ))}
+                <ChipToggleGrid
+                  items={(animeCat?.showcases ?? []).map((showcase) => ({
+                    id: showcase.id,
+                    label: showcase.name,
+                    enabled: effectiveDraft.enabledAnimeShowcases.includes(showcase.id),
+                  }))}
+                  onToggle={(id, enabled) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      enabledAnimeShowcases: toggleInList(
+                        effectiveDraft.enabledAnimeShowcases,
+                        id,
+                        enabled,
+                        showcaseIds,
+                      ),
+                    }))
+                  }
+                />
               </Section>
             ) : null}
 
@@ -215,50 +315,74 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
               ? lampaKinds.map((kind) => {
                   const sections = lampaSectionsByKind[kind.id] ?? [];
                   const expanded = expandedKinds[kind.id];
-                  const visible = expanded ? sections : sections.slice(0, LAMPA_SECTIONS_PREVIEW);
+                  const previewCount = isTvUi()
+                    ? QUICK_SETTINGS_COLUMNS * 2
+                    : LAMPA_SECTIONS_PREVIEW;
+                  const visible = expanded ? sections : sections.slice(0, previewCount);
                   const enabledEndpoints = effectiveDraft.enabledLampaSections[kind.id] ?? [];
 
                   return (
                     <Section key={kind.id} title={kind.name}>
-                      {visible.map((section) => (
-                        <ToggleRow
-                          key={section.endpoint}
-                          label={section.title}
-                          value={enabledEndpoints.includes(section.endpoint)}
-                          onValueChange={(enabled) =>
-                            setDraft((prev) =>
-                              toggleLampaSection(
-                                prev,
-                                kind.id,
-                                section.endpoint,
-                                enabled,
-                                sections.map((item) => item.endpoint),
-                              ),
-                            )
-                          }
-                        />
-                      ))}
-                      {sections.length > LAMPA_SECTIONS_PREVIEW ? (
-                        <Pressable
-                          onPress={() =>
-                            setExpandedKinds((prev) => ({
-                              ...prev,
-                              [kind.id]: !prev[kind.id],
-                            }))
-                          }
-                          style={styles.expandBtn}
-                        >
-                          <Text style={styles.expandText}>
-                            {expanded ? 'Свернуть' : `Ещё ${sections.length - LAMPA_SECTIONS_PREVIEW}`}
-                          </Text>
-                        </Pressable>
+                      <ChipToggleGrid
+                        items={visible.map((section) => ({
+                          id: section.endpoint,
+                          label: section.title,
+                          enabled: enabledEndpoints.includes(section.endpoint),
+                        }))}
+                        onToggle={(id, enabled) =>
+                          setDraft((prev) =>
+                            toggleLampaSection(
+                              prev,
+                              kind.id,
+                              id,
+                              enabled,
+                              sections.map((item) => item.endpoint),
+                            ),
+                          )
+                        }
+                      />
+                      {sections.length > previewCount ? (
+                        isTvUi() ? (
+                          <TvFocusable
+                            onPress={() =>
+                              setExpandedKinds((prev) => ({
+                                ...prev,
+                                [kind.id]: !prev[kind.id],
+                              }))
+                            }
+                            style={styles.expandBtn}
+                            focusedStyle={styles.expandBtnFocused}
+                          >
+                            <Text style={styles.expandText}>
+                              {expanded
+                                ? 'Свернуть'
+                                : `Ещё ${sections.length - previewCount}`}
+                            </Text>
+                          </TvFocusable>
+                        ) : (
+                          <Pressable
+                            onPress={() =>
+                              setExpandedKinds((prev) => ({
+                                ...prev,
+                                [kind.id]: !prev[kind.id],
+                              }))
+                            }
+                            style={styles.expandBtn}
+                          >
+                            <Text style={styles.expandText}>
+                              {expanded
+                                ? 'Свернуть'
+                                : `Ещё ${sections.length - previewCount}`}
+                            </Text>
+                          </Pressable>
+                        )
                       ) : null}
                     </Section>
                   );
                 })
               : null}
 
-            {effectiveDraft.enabledContentTypes.includes('anime') ? (
+            {!isTvUi() && effectiveDraft.enabledContentTypes.includes('anime') ? (
               <AnimeCustomSectionsGroup
                 sections={effectiveDraft.enabledAnimeCustomSections}
                 filters={animeCat?.filters ?? []}
@@ -293,14 +417,24 @@ export function HomeSettingsSheet({ open, config, onClose, onSave }: HomeSetting
               <TvFocusable
                 style={styles.saveBtn}
                 focusedStyle={styles.saveBtnFocused}
-                onPress={() => onSave({ ...effectiveDraft, configured: true })}
+                onPress={() =>
+                  onSave(
+                    { ...effectiveDraft, configured: true },
+                    quickActionIds ? quickDraft : undefined,
+                  )
+                }
               >
                 <Text style={styles.saveText}>Сохранить</Text>
               </TvFocusable>
             ) : (
               <Pressable
                 style={styles.saveBtn}
-                onPress={() => onSave({ ...effectiveDraft, configured: true })}
+                onPress={() =>
+                  onSave(
+                    { ...effectiveDraft, configured: true },
+                    quickActionIds ? quickDraft : undefined,
+                  )
+                }
               >
                 <Text style={styles.saveText}>Сохранить</Text>
               </Pressable>
@@ -318,6 +452,59 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <Text style={styles.sectionTitle}>{title}</Text>
       {children}
     </View>
+  );
+}
+
+function ChipToggleGrid({
+  items,
+  onToggle,
+}: {
+  items: Array<{ id: string; label: string; enabled: boolean }>;
+  onToggle: (id: string, enabled: boolean) => void;
+}) {
+  if (!isTvUi()) {
+    return (
+      <>
+        {items.map((item) => (
+          <ToggleRow
+            key={item.id}
+            label={item.label}
+            value={item.enabled}
+            onValueChange={(enabled) => onToggle(item.id, enabled)}
+          />
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {chunkIds(items, QUICK_SETTINGS_COLUMNS).map((row, rowIndex) => (
+        <View key={row.map((item) => item.id).join('-')} style={styles.quickGridRow}>
+          {row.map((item) => (
+            <View key={item.id} style={styles.quickCell}>
+              <TvFocusable
+                onPress={() => onToggle(item.id, !item.enabled)}
+                style={[styles.quickChip, item.enabled && styles.quickChipOn]}
+                focusedStyle={styles.quickChipFocused}
+              >
+                <Text style={styles.quickChipTitle} numberOfLines={1}>
+                  {item.label}
+                </Text>
+                <Text style={[styles.quickChipState, item.enabled && styles.quickChipStateOn]}>
+                  {item.enabled ? 'Вкл' : 'Выкл'}
+                </Text>
+              </TvFocusable>
+            </View>
+          ))}
+          {row.length < QUICK_SETTINGS_COLUMNS
+            ? Array.from({ length: QUICK_SETTINGS_COLUMNS - row.length }, (_, index) => (
+                <View key={`pad-${rowIndex}-${index}`} style={styles.quickCell} />
+              ))
+            : null}
+        </View>
+      ))}
+    </>
   );
 }
 
@@ -662,6 +849,80 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: spacing.xs,
   },
+  quickHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.xs,
+  },
+  quickGridRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+  },
+  quickCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing.xs,
+  },
+  quickChip: {
+    minHeight: 56,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  quickChipOn: {
+    borderColor: 'rgba(195,192,255,0.35)',
+    backgroundColor: 'rgba(195,192,255,0.12)',
+  },
+  quickChipFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.wash,
+  },
+  quickChipTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  quickChipState: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  quickChipStateOn: {
+    color: colors.brand,
+  },
+  quickMove: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  quickMoveSpacer: {
+    height: 36,
+  },
+  quickMoveBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: radii.md,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickMoveBtnFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.wash,
+  },
+  quickMoveLabel: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -700,7 +961,16 @@ const styles = StyleSheet.create({
     color: colors.brand,
   },
   expandBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: tvFocus.borderWidth,
+    borderColor: 'transparent',
+  },
+  expandBtnFocused: {
+    borderColor: tvFocus.borderColor,
+    backgroundColor: tvFocus.wash,
   },
   expandText: {
     color: colors.brand,

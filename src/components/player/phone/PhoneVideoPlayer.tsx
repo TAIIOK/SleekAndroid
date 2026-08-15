@@ -947,9 +947,9 @@ export function PhoneVideoPlayer({
                     );
                   })
                 : null}
-              {sheetOptions?.map((option) => (
+              {sheetOptions?.map((option, index) => (
                 <Pressable
-                  key={option.id}
+                  key={`${option.id}:${index}`}
                   onPress={() => {
                     option.onSelect();
                     setSheet(null);

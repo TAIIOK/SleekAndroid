@@ -20,6 +20,7 @@ import {
 } from '@/api/collections';
 import { CatalogPosterCard } from '@/components/catalog/CatalogPosterCard';
 import { PosterGrid, usePosterGridCardWidth } from '@/components/catalog/PosterGrid';
+import { LibraryCollectionCard } from '@/components/library/LibraryCollectionCard';
 import { LibraryShowMoreButton } from '@/components/library/LibraryShowMoreButton';
 import { LibraryHubChrome } from '@/components/library/LibraryHubChrome';
 import { TvFocusable } from '@/components/tv/TvFocusable';
@@ -161,24 +162,17 @@ export default function CollectionsScreen() {
       ) : (
         <View style={styles.cards}>
           {collections.map((col, index) => {
-            const preview = previewQueries[index]?.data?.items?.slice(0, 3) ?? [];
+            const previewQuery = previewQueries[index];
             return (
-              <TvFocusable
+              <LibraryCollectionCard
                 key={col.id}
-                style={[styles.card, selectedId === col.id && styles.cardSelected]}
-                onPress={() => setSelectedId(col.id)}
+                collection={col}
+                previewItems={previewQuery?.data?.items?.slice(0, 4)}
+                previewLoading={previewQuery?.isLoading && !previewQuery?.data}
+                selected={selectedId === col.id}
                 railStart={index === 0}
-              >
-                <Text style={styles.cardTitle}>{col.name}</Text>
-                {col.description ? (
-                  <Text style={styles.cardDesc} numberOfLines={2}>
-                    {col.description}
-                  </Text>
-                ) : null}
-                <Text style={styles.cardMeta}>
-                  {formatCollectionItemCount(col.itemCount ?? preview.length)}
-                </Text>
-              </TvFocusable>
+                onPress={() => setSelectedId(col.id === selectedId ? null : col.id)}
+              />
             );
           })}
         </View>
@@ -327,32 +321,10 @@ const styles = StyleSheet.create({
   },
   link: { color: colors.brand, fontWeight: '600', fontSize: 14 },
   muted: { color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
-  cards: { gap: spacing.md },
-  card: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  cardSelected: {
-    borderColor: colors.brand,
-    backgroundColor: 'rgba(195,192,255,0.08)',
-  },
-  cardTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  cardDesc: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  cardMeta: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: spacing.xs,
+  cards: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
   },
   detail: {
     borderRadius: radii.lg,

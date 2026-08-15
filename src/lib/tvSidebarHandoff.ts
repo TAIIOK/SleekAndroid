@@ -25,3 +25,19 @@ export function shouldParkSidebarOnRouteChange(prevPath: string, nextPath: strin
 export function shouldKeepClosedMenuSidebarAnchor(path: string): boolean {
   return !isMobileChromeHiddenRoute(path);
 }
+
+/**
+ * Home's hidden Left hop stays focusable until a sidebar row owns focus.
+ * `menuOpen` alone is too early — it flips true before `requestTVFocus`.
+ */
+export function shouldKeepRowExitFocusable(options: {
+  menuOpen: boolean;
+  sidebarFocused: boolean;
+}): boolean {
+  return !options.menuOpen || !options.sidebarFocused;
+}
+
+/** Content gaining focus while the overlay is up must dismiss it. */
+export function shouldCloseMenuOnContentFocus(menuOpen: boolean): boolean {
+  return menuOpen;
+}

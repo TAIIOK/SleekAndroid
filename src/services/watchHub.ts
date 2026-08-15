@@ -323,6 +323,52 @@ export function watchHubSourceLabel(source: WatchHubSourceResult): string {
   return source.source_id?.trim() || source.title?.trim() || 'Источник';
 }
 
+export function watchHubSourceKey(source: WatchHubSourceResult, index: number): string {
+  const id = source.source_id?.trim() || source.title?.trim() || 'source';
+  const url = source.url?.trim() ?? '';
+  return `src:${id}:${url}:${index}`;
+}
+
+export function watchHubTranslatorKey(translator: WatchHubTranslator, index: number): string {
+  const name = translator.name?.trim() ?? '';
+  return `tr:${translator.id}:${name}:${index}`;
+}
+
+export function watchHubSourceSubtitle(
+  source: WatchHubSourceResult,
+  movieTitle?: string,
+): string | undefined {
+  const meta = [source.data?.year, source.data?.country, source.data?.genre]
+    .filter((value) => value != null && String(value).trim())
+    .join(' · ');
+  if (meta) return meta;
+
+  const title = source.title?.trim();
+  const label = watchHubSourceLabel(source);
+  const normalizedMovie = movieTitle?.trim().toLowerCase();
+  if (title && title !== label && title.toLowerCase() !== normalizedMovie) {
+    return title;
+  }
+  return undefined;
+}
+
+/** Number colliding labels so React keys and the UI stay unique (`Kinobase (2)`). */
+export function disambiguateDuplicateLabels<T extends { label: string }>(items: T[]): T[] {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const key = item.label.trim().toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  return items.map((item) => {
+    const key = item.label.trim().toLowerCase();
+    if ((counts.get(key) ?? 0) < 2) return item;
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    return { ...item, label: `${item.label} (${n})` };
+  });
+}
+
 export function buildTaskRequest(item: {
   id: string;
   imdbId?: string;

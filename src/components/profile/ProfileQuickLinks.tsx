@@ -20,7 +20,7 @@ const LINKS = [
   },
   {
     to: '/library/lists',
-    title: 'Мои списки',
+    title: 'Медиатека',
     subtitle: 'Аниме, фильмы и сериалы',
     icon: '📚',
   },

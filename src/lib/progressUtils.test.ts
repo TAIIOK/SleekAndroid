@@ -264,4 +264,38 @@ describe('buildLampaPlaybackState', () => {
     expect(state.lastProgress).toBeCloseTo(0.55);
     expect(state.episodeProgressByKey['1-3']).toBeCloseTo(0.55);
   });
+
+  it('does not treat UUID-only history of another title as this title', () => {
+    const detail = {
+      id: 9999,
+      tmdbId: 9999,
+      title: 'New Movie',
+    } as LampaDetail;
+
+    const state = buildLampaPlaybackState(
+      [],
+      detail,
+      [
+        {
+          lampaId: 'uuid-other-show',
+          seasonOrdinal: 1,
+          episodeOrdinal: 1,
+          progress: 0.4,
+          completed: false,
+          updatedAt: '2026-07-24T12:00:00.000Z',
+        },
+      ],
+      '9999',
+      [
+        {
+          lampaId: 'uuid-other-show',
+          snapshot: { title: 'Other Show' },
+        },
+      ],
+    );
+
+    expect(state.hasHistory).toBe(false);
+    expect(state.lastProgress).toBe(0);
+    expect(state.episodeProgressByKey).toEqual({});
+  });
 });

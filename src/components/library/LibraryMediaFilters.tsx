@@ -25,51 +25,55 @@ export function LibraryMediaFilters({
 }: LibraryMediaFiltersProps) {
   return (
     <View style={styles.wrap}>
-      {MY_LISTS_MEDIA_OPTIONS.map((option, index) => {
-        const active = media === option.id;
-        const count =
-          option.id !== 'all' && counts
-            ? counts[option.id as 'anime' | 'movie' | 'tv']
-            : undefined;
-        const label = count != null ? `${option.label} · ${count}` : option.label;
-        return (
-          <TvFocusable
-            key={option.id}
-            onPress={() => onMediaChange(option.id)}
-            style={[styles.chip, active && styles.chipActive]}
-            focusedStyle={active ? styles.chipFocusedActive : styles.chipFocused}
-            railStart={index === 0}
-          >
-            <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
-          </TvFocusable>
-        );
-      })}
+      <View style={styles.segment}>
+        {MY_LISTS_MEDIA_OPTIONS.map((option, index) => {
+          const active = media === option.id;
+          const count =
+            option.id !== 'all' && counts
+              ? counts[option.id as 'anime' | 'movie' | 'tv']
+              : undefined;
+          const label = count != null ? `${option.label} · ${count}` : option.label;
+          return (
+            <TvFocusable
+              key={option.id}
+              onPress={() => onMediaChange(option.id)}
+              style={[styles.chip, active && styles.chipActive]}
+              focusedStyle={active ? styles.chipFocusedActive : styles.chipFocused}
+              railStart={index === 0}
+            >
+              <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
+            </TvFocusable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
+  },
+  segment: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    padding: 4,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   chip: {
     flexShrink: 0,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.border,
+    borderRadius: radii.sm,
+    backgroundColor: 'transparent',
   },
   chipActive: {
     backgroundColor: colors.brandAccent,
-    borderColor: colors.brandAccent,
   },
   chipFocused: {
     borderColor: '#ffffff',
@@ -85,6 +89,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chipLabelActive: {
-    color: colors.text,
+    color: '#ffffff',
   },
 });

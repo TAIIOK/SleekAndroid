@@ -21,7 +21,7 @@ export function LibraryHubChrome() {
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>{LIBRARY_HUB_TITLE}</Text>
-      <View style={styles.tabsRow}>
+      <View style={styles.segment}>
         {libraryHubTabs.map((tab, index) => {
           const active = currentPath === tab.to || currentPath.startsWith(`${tab.to}/`);
           return (
@@ -29,7 +29,7 @@ export function LibraryHubChrome() {
               key={tab.to}
               onPress={() => router.push(tab.to as '/')}
               style={[styles.tab, active && styles.tabActive]}
-              focusedStyle={styles.tabFocused}
+              focusedStyle={active ? styles.tabFocusedActive : styles.tabFocused}
               hasTVPreferredFocus={active}
               railStart={index === 0}
               contentEntry={active}
@@ -46,6 +46,7 @@ export function LibraryHubChrome() {
 const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: spacing.lg,
+    paddingTop: isTvUi() ? spacing.xl : 0,
     gap: spacing.sm,
   },
   title: {
@@ -53,27 +54,33 @@ const styles = StyleSheet.create({
     fontSize: isTvUi() ? 26 : 28,
     fontWeight: '700',
   },
-  tabsRow: {
+  segment: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: spacing.sm,
+    borderRadius: radii.md,
+    padding: 4,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   tab: {
     flexShrink: 0,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: tvFocus.borderWidth,
-    borderColor: colors.border,
+    borderRadius: radii.sm,
+    backgroundColor: 'transparent',
   },
   tabActive: {
     backgroundColor: colors.brandAccent,
-    borderColor: colors.brandAccent,
   },
   tabFocused: {
     borderColor: '#ffffff',
+    backgroundColor: tvFocus.fill,
+  },
+  tabFocusedActive: {
+    borderColor: '#ffffff',
+    backgroundColor: colors.brandAccent,
   },
   tabLabel: {
     color: colors.textSecondary,
@@ -81,6 +88,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabLabelActive: {
-    color: colors.text,
+    color: '#ffffff',
   },
 });

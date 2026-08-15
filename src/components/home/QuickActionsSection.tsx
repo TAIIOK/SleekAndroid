@@ -1,17 +1,39 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import { useMemo, useRef, useState } from 'react';
+import {
+  findNodeHandle,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
+import { TvFocusable } from '@/components/tv/TvFocusable';
+import { TvFocusGuide } from '@/components/tv/TvFocusGuide';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import {
+  useTvCatalogVerticalNeighbors,
+  useTvCatalogVerticalSnapshot,
+} from '@/hooks/useTvCatalogVerticalNeighbors';
+import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
 import { setActivePartyRoomId } from '@/lib/activePartyRoom';
+import {
+  DEFAULT_HOME_QUICK_ACTION_IDS,
+  HOME_QUICK_ACTIONS_RAIL_PRIORITY,
+  resolveHomeQuickActions,
+  type HomeQuickActionDef,
+  type HomeQuickActionId,
+} from '@/lib/homeQuickActions';
+import { openHomeSettings } from '@/lib/homeSettingsBridge';
+import { isTvUi } from '@/lib/isTvUi';
 import { partyRoomHref } from '@/lib/partyRoomRoute';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
-import { tvNextFocusLeft } from '@/lib/tvRailFocus';
-import { useTvShellFocus } from '@/providers/TvShellFocus';
-import { isTvUi } from '@/lib/isTvUi';
+import { registerTvCatalogRail } from '@/lib/tvCatalogVerticalFocus';
 
 export interface QuickActionCounts {
   bookmarks: number;
@@ -32,9 +54,11 @@ interface QuickActionsSectionProps {
   contentEntry?: boolean;
   /** Active party room — shown as a leading quick-return card on phone. */
   activeParty?: QuickActionActiveParty;
+  /** TV-only visible/ordered cards. Empty hides the rail. Phone ignores this. */
+  actionIds?: HomeQuickActionId[];
 }
 
-const actions = [
+const phoneActions = [
   {
     key: 'bookmarks' as const,
     title: 'Закладки',
@@ -45,7 +69,7 @@ const actions = [
   },
   {
     key: 'lists' as const,
-    title: 'Мои списки',
+    title: 'Медиатека',
     icon: 'list' as const,
     href: '/library/lists',
     subtitle: () => 'Персональные подборки',
@@ -67,7 +91,7 @@ const actions = [
   },
 ] as const;
 
-const columns: Array<Array<(typeof actions)[number]['key']>> = [
+const columns: Array<Array<(typeof phoneActions)[number]['key']>> = [
   ['bookmarks', 'lists'],
   ['collections', 'history'],
 ];
@@ -82,37 +106,82 @@ function itemsLabel(n: number): string {
 
 export function QuickActionsSection({
   counts,
-  contentEntry = false,
   activeParty,
+  actionIds,
 }: QuickActionsSectionProps) {
-  const actionByKey = Object.fromEntries(actions.map((action) => [action.key, action])) as Record<
-    (typeof actions)[number]['key'],
-    (typeof actions)[number]
+  const actionByKey = Object.fromEntries(phoneActions.map((action) => [action.key, action])) as Record<
+    (typeof phoneActions)[number]['key'],
+    (typeof phoneActions)[number]
   >;
   const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
+  const tvActions = useMemo(
+    () => resolveHomeQuickActions(actionIds ?? DEFAULT_HOME_QUICK_ACTION_IDS),
+    [actionIds],
+  );
+  const neighbors = useTvCatalogVerticalNeighbors('/', HOME_QUICK_ACTIONS_RAIL_PRIORITY);
+  const qaRailTag = useTvCatalogVerticalSnapshot('/').rails.find(
+    (rail) => rail.priority === HOME_QUICK_ACTIONS_RAIL_PRIORITY,
+  )?.tag;
+  const { bindItem } = useTvRailFocusRestore(tvActions.length, {
+    stealHorizontalEscape: isTvUi(),
+  });
+  const settingsTagRef = useRef<number | undefined>();
+  const [settingsTag, setSettingsTag] = useState<number | undefined>();
+
+  const captureSettingsHost = (node: View | null) => {
+    if (node == null) return;
+    const tag = findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined;
+    if (tag == null || settingsTagRef.current === tag) return;
+    settingsTagRef.current = tag;
+    setSettingsTag(tag);
+  };
 
   if (isTvUi()) {
+    if (!tvActions.length) return null;
+    const rail = (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.rail, { paddingHorizontal: horizontalPad }]}
+        {...tvHorizontalCatalogScrollProps}
+      >
+        {tvActions.map((action, index) => {
+          const railFocus = bindItem(index);
+          return (
+            <TvQuickActionCard
+              key={action.id}
+              action={action}
+              railStart={index === 0}
+              railEnd={index === tvActions.length - 1}
+              nextFocusUp={settingsTag ?? neighbors.up}
+              nextFocusDown={neighbors.down}
+              onFocus={railFocus.onFocus}
+              onBlur={railFocus.onBlur}
+              hostRef={(node) => {
+                railFocus.ref?.(node);
+                if (index === 0 && node) {
+                  registerTvCatalogRail('/', HOME_QUICK_ACTIONS_RAIL_PRIORITY, node);
+                }
+              }}
+            />
+          );
+        })}
+      </ScrollView>
+    );
+
     return (
       <View style={styles.wrap} {...tvRailSectionSnapProps}>
-        <SectionHeader title="Быстрые действия" variant="quick" />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.rail, { paddingHorizontal: horizontalPad }]}
-          {...tvHorizontalCatalogScrollProps}
-        >
-          {actions.map((action, index) => (
-            <QuickActionCard
-              key={action.key}
-              action={action}
-              count={counts?.[action.key]}
-              alwaysEnabled
-              railStart={index === 0}
-              contentEntry={contentEntry && index === 0}
-              spaced
-            />
-          ))}
-        </ScrollView>
+        <SectionHeader
+          title="Быстрые действия"
+          variant="quick"
+          seeAllLabel="Настроить"
+          onSeeAll={openHomeSettings}
+          seeAllHostRef={captureSettingsHost}
+          seeAllNextFocusUp={neighbors.up}
+          seeAllNextFocusDown={qaRailTag}
+          seeAllNextFocusLeft={qaRailTag}
+        />
+        <TvFocusGuide trapFocusRight>{rail}</TvFocusGuide>
       </View>
     );
   }
@@ -205,35 +274,20 @@ function PartyQuickActionCard({ party }: { party: QuickActionActiveParty }) {
 function QuickActionCard({
   action,
   count,
-  alwaysEnabled = false,
-  railStart = false,
-  contentEntry = false,
-  spaced = false,
 }: {
-  action: (typeof actions)[number];
+  action: (typeof phoneActions)[number];
   count?: number;
-  alwaysEnabled?: boolean;
-  railStart?: boolean;
-  contentEntry?: boolean;
-  spaced?: boolean;
 }) {
   const router = useRouter();
   const [focused, setFocused] = useState(false);
-  const shellFocus = useTvShellFocus();
   const enabled =
-    alwaysEnabled || action.key === 'history' || action.key === 'lists' || (count ?? 0) > 0;
-  const exitLeft = isTvUi() && railStart;
-  const exitUp = isTvUi() && contentEntry;
-  const pinnedLeft = tvNextFocusLeft({
-    railStart: exitLeft,
-    exitTag: shellFocus?.sidebarNativeTag,
-  });
+    action.key === 'history' || action.key === 'lists' || (count ?? 0) > 0;
 
   const inner = (
     <>
       <View style={styles.cardHeader}>
         <View style={[styles.iconWrap, focused && styles.iconWrapFocused]}>
-          <Ionicons name={action.icon} size={isTvUi() ? 18 : 14} color={colors.brand} />
+          <Ionicons name={action.icon} size={14} color={colors.brand} />
         </View>
         <Text style={[styles.cardTitle, focused && styles.cardTitleFocused]}>{action.title}</Text>
       </View>
@@ -247,7 +301,7 @@ function QuickActionCard({
     return (
       <Pressable
         disabled={!enabled}
-        onPress={() => router.push(action.href as '/')}
+        onPress={() => router.push(action.href as Href)}
         className="quick-action-card"
         style={!enabled ? { opacity: 0.55 } : undefined}
       >
@@ -260,25 +314,10 @@ function QuickActionCard({
     <Pressable
       disabled={!enabled}
       focusable={enabled}
-      onPress={() => router.push(action.href as '/')}
-      onFocus={() => {
-        setFocused(true);
-        if (exitLeft) shellFocus?.setExitLeftEnabled(true);
-        if (exitUp) shellFocus?.setExitUpEnabled(true);
-      }}
-      onBlur={() => {
-        setFocused(false);
-        if (exitLeft) shellFocus?.setExitLeftEnabled(false);
-        if (exitUp) shellFocus?.setExitUpEnabled(false);
-      }}
-      style={[
-        styles.cardPressable,
-        spaced && styles.cardSpaced,
-        !enabled && styles.cardDisabled,
-        focused && styles.cardFocused,
-      ]}
-      {...(contentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
-      {...(pinnedLeft != null ? { nextFocusLeft: pinnedLeft } : {})}
+      onPress={() => router.push(action.href as Href)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={[styles.cardPressable, !enabled && styles.cardDisabled, focused && styles.cardFocused]}
     >
       <LinearGradient
         colors={['#1b1b24', '#1f1f28']}
@@ -289,6 +328,67 @@ function QuickActionCard({
         {inner}
       </LinearGradient>
     </Pressable>
+  );
+}
+
+function TvQuickActionCard({
+  action,
+  railStart,
+  railEnd,
+  nextFocusUp,
+  nextFocusDown,
+  onFocus,
+  onBlur,
+  hostRef,
+}: {
+  action: HomeQuickActionDef;
+  railStart?: boolean;
+  railEnd?: boolean;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  hostRef?: (node: View | null) => void;
+}) {
+  const router = useRouter();
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <TvFocusable
+      onPress={() => router.push(action.href)}
+      onFocus={() => {
+        setFocused(true);
+        onFocus?.();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onBlur?.();
+      }}
+      railStart={railStart}
+      railEnd={railEnd}
+      nextFocusUp={nextFocusUp}
+      nextFocusDown={nextFocusDown}
+      hostRef={hostRef}
+      style={[styles.cardPressable, styles.cardSpaced]}
+      focusedStyle={styles.cardFocused}
+    >
+      <LinearGradient
+        colors={['#1b1b24', '#1f1f28']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.card, focused && styles.cardInnerFocused]}
+      >
+        <View style={styles.cardHeader}>
+          <View style={[styles.iconWrap, focused && styles.iconWrapFocused]}>
+            <Ionicons name={action.icon} size={18} color={colors.brand} />
+          </View>
+          <Text style={[styles.cardTitle, focused && styles.cardTitleFocused]}>{action.title}</Text>
+        </View>
+        <Text style={[styles.cardSubtitle, focused && styles.cardSubtitleFocused]}>
+          {action.subtitle}
+        </Text>
+      </LinearGradient>
+    </TvFocusable>
   );
 }
 

@@ -541,12 +541,10 @@ export function useTvPlayerRemote(options: UseTvPlayerRemoteOptions) {
       }
       if (command.kind === 'seekBack') {
         opts.onSeekBack();
-        showPanel(command.focus);
         return;
       }
       if (command.kind === 'seekForward') {
         opts.onSeekForward();
-        showPanel(command.focus);
         return;
       }
       showPanel(command.focus);

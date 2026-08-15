@@ -36,6 +36,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { colors, spacing } from '@/constants/aniverse';
 import { useContinueWatching } from '@/hooks/useContinueWatching';
 import { useHomeCatalogConfig } from '@/hooks/useHomeCatalogConfig';
+import { useHomeQuickActions } from '@/hooks/useHomeQuickActions';
 import { useRefreshProgressOnResume } from '@/hooks/useRefreshProgressOnResume';
 import { useTvCatalogScrollRestore } from '@/hooks/useTvCatalogScrollRestore';
 import {
@@ -72,6 +73,7 @@ export default function HomeScreen() {
   const [typeFilter, setTypeFilter] = useState<TvHomeTypeFilter>('all');
   const [activePartyRoomId, setActivePartyRoomId] = useState<string | null>(null);
   const { config, persist, ready, syncSettled } = useHomeCatalogConfig();
+  const { ids: quickActionIds, persist: persistQuickActions } = useHomeQuickActions();
   const showWelcome =
     ready && syncSettled && !isHomeConfigConfigured(config);
   const catalogScroll = useTvCatalogScrollRestore('/', { enabled: ready });
@@ -357,6 +359,7 @@ export default function HomeScreen() {
             />
 
             <ContinueWatchingRow items={continueItems} />
+            <QuickActionsSection actionIds={quickActionIds} />
 
             {tvCatalogLoading ? (
               <ActivityIndicator color={colors.brand} style={styles.loader} />
@@ -438,9 +441,11 @@ export default function HomeScreen() {
       <HomeSettingsSheet
         open={settingsOpen}
         config={config}
+        quickActionIds={isTv ? quickActionIds : undefined}
         onClose={() => setSettingsOpen(false)}
-        onSave={(next) => {
+        onSave={(next, nextQuickActions) => {
           void persist(next);
+          if (nextQuickActions) void persistQuickActions(nextQuickActions);
           setSettingsOpen(false);
         }}
       />

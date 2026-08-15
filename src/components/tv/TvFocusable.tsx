@@ -13,6 +13,7 @@ import { useTvShellFocus } from '@/providers/TvShellFocus';
 import { useTvImmersiveFocusLock } from '@/lib/tvImmersiveFocus';
 import { isTvUi } from '@/lib/isTvUi';
 import { tvNextFocusLeft } from '@/lib/tvRailFocus';
+import { shouldCloseMenuOnContentFocus } from '@/lib/tvSidebarHandoff';
 
 interface TvFocusableProps {
   children: ReactNode;
@@ -75,11 +76,9 @@ export function TvFocusable({
   const pinnedRight = nextFocusRight ?? (isTvUi() && railEnd ? selfTag : undefined);
 
   const captureSelfTag = (node: View | null) => {
-    if (!isTvUi() || !railEnd) return;
-    const tag =
-      node != null
-        ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined)
-        : undefined;
+    if (!isTvUi() || !railEnd || node == null) return;
+    const tag = findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined;
+    if (tag == null) return;
     setSelfTag((prev) => (prev === tag ? prev : tag));
   };
 
@@ -101,6 +100,9 @@ export function TvFocusable({
         if (isTvUi() && pressableRef.current) {
           shellFocus?.registerContentAnchor(pressableRef.current);
           captureSelfTag(pressableRef.current);
+        }
+        if (isTvUi() && shouldCloseMenuOnContentFocus(shellFocus?.menuOpen ?? false)) {
+          shellFocus?.closeMenu();
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);

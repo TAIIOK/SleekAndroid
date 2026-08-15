@@ -11,6 +11,7 @@ import {
   TV_HOME_TYPE_FILTERS,
   type TvHomeTypeFilter,
 } from '@/lib/tvHomeFeeds';
+import { shouldKeepRowExitFocusable } from '@/lib/tvSidebarHandoff';
 import { useTvShellFocus } from '@/providers/TvShellFocus';
 
 interface TvHomeTypeFiltersProps {
@@ -94,7 +95,10 @@ export function TvHomeTypeFilters({
             setRowExitTag((prev) => (prev === tag ? prev : tag));
           }}
           collapsable={false}
-          focusable={!shellFocus?.menuOpen}
+          focusable={shouldKeepRowExitFocusable({
+            menuOpen: shellFocus?.menuOpen ?? false,
+            sidebarFocused: shellFocus?.sidebarFocused ?? false,
+          })}
           onFocus={() => {
             shellFocus?.requestSidebarFocus();
           }}

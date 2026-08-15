@@ -32,8 +32,12 @@ import { getDownloadService } from '@/services/download';
 import { isHlsSourceUrl } from '@/services/download/types';
 import { isTvUi } from '@/lib/isTvUi';
 import {
+  disambiguateDuplicateLabels,
   listWatchHubQualityOptions,
+  watchHubSourceKey,
   watchHubSourceLabel,
+  watchHubSourceSubtitle,
+  watchHubTranslatorKey,
   type WatchHubEpisodeItem,
   type WatchHubSeasonEpisodes,
   type WatchHubSourceResult,
@@ -786,27 +790,31 @@ function PickerOptions({
   const title =
     field === 'source' ? 'Источник' : field === 'translator' ? 'Озвучка' : 'Сезон';
 
-  const options =
+  const rawOptions =
     field === 'source'
-      ? sources.map((s) => ({
-          key: s.source_id,
+      ? sources.map((s, index) => ({
+          key: watchHubSourceKey(s, index),
           label: watchHubSourceLabel(s),
+          subtitle: watchHubSourceSubtitle(s),
           active: selectedSource === s.source_id,
           onPress: () => onPickSource(s.source_id),
         }))
       : field === 'translator'
-        ? translators.map((t) => ({
-            key: String(t.id),
+        ? translators.map((t, index) => ({
+            key: watchHubTranslatorKey(t, index),
             label: t.name ?? `Озвучка ${t.id}`,
+            subtitle: undefined,
             active: selectedTranslatorId === t.id,
             onPress: () => onPickTranslator(t.id),
           }))
         : seasons.map((s) => ({
             key: String(s.seasonNumber),
             label: `Сезон ${s.seasonNumber}`,
+            subtitle: undefined,
             active: selectedSeasonNumber === s.seasonNumber,
             onPress: () => onPickSeason(s.seasonNumber),
           }));
+  const options = disambiguateDuplicateLabels(rawOptions);
 
   return (
     <View style={styles.pickerPane}>
@@ -852,7 +860,14 @@ function PickerOptions({
               hasTVPreferredFocus={isTvUi() && index === 0}
               style={[styles.optionRow, opt.active && styles.optionRowActive]}
             >
-              <Text style={styles.optionRowLabel}>{opt.label}</Text>
+              <View style={styles.optionRowText}>
+                <Text style={styles.optionRowLabel}>{opt.label}</Text>
+                {opt.subtitle ? (
+                  <Text style={styles.optionRowSubtitle} numberOfLines={1}>
+                    {opt.subtitle}
+                  </Text>
+                ) : null}
+              </View>
               {opt.active ? <Text style={styles.check}>✓</Text> : null}
             </TvFocusable>
           ))}
@@ -1181,11 +1196,19 @@ const styles = StyleSheet.create({
     borderColor: colors.brand,
     backgroundColor: 'rgba(195,192,255,0.12)',
   },
+  optionRowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
   optionRowLabel: {
     color: colors.text,
     fontSize: isTvUi() ? 18 : 16,
     fontWeight: '600',
-    flex: 1,
+  },
+  optionRowSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
   },
   check: {
     color: colors.brand,

@@ -50,6 +50,7 @@ import {
 } from '@/lib/watchHistoryMeta';
 import { useAuth } from '@/providers/AuthProvider';
 import {
+  disambiguateDuplicateLabels,
   fetchTranslators,
   fetchVideoLinks,
   type WatchHubTranslator,
@@ -537,17 +538,19 @@ export default function WatchLampaScreen() {
 
   const dubbingOptions = useMemo((): PlayerMenuOption[] | undefined => {
     if (!canLoadTranslators || lampaTranslators.length <= 1) return undefined;
-    return lampaTranslators.map((translator) => {
-      const label = translator.name?.trim() || `Озвучка ${translator.id}`;
-      return {
-        id: String(translator.id),
-        label,
-        selected: translator.id === translatorId,
-        onSelect: () => {
-          void switchLampaTranslator(translator);
-        },
-      };
-    });
+    return disambiguateDuplicateLabels(
+      lampaTranslators.map((translator, index) => {
+        const label = translator.name?.trim() || `Озвучка ${translator.id}`;
+        return {
+          id: `${translator.id}:${index}`,
+          label,
+          selected: translator.id === translatorId,
+          onSelect: () => {
+            void switchLampaTranslator(translator);
+          },
+        };
+      }),
+    );
   }, [canLoadTranslators, lampaTranslators, translatorId, switchLampaTranslator]);
 
   const qualityOptions = useMemo((): PlayerMenuOption[] | undefined => {

@@ -1,3 +1,4 @@
+import { HOME_QUICK_ACTIONS_RAIL_PRIORITY } from '@/lib/homeQuickActions';
 import {
   getTvCatalogVerticalSnapshot,
   registerTvCatalogChrome,
@@ -25,7 +26,7 @@ export function registerTvHomeTabsFocus(node: unknown) {
   registerTvCatalogChrome(HOME, node, 'primary');
 }
 
-/** First catalog poster below Continue Watching — Down target. */
+/** First row below Continue Watching (Quick Actions or catalog) — Down target. */
 export function registerTvHomeCatalogFocus(node: unknown, priority = 0) {
   registerTvCatalogRail(HOME, priority, node);
 }
@@ -36,7 +37,9 @@ export function subscribeTvHomeHandoff(listener: () => void): () => void {
 
 export function getTvHomeHandoffSnapshot(): TvHomeHandoffSnapshot {
   const snapshot = getTvCatalogVerticalSnapshot(HOME);
-  const catalog = snapshot.rails.find((rail) => rail.priority >= 0);
+  const catalog = snapshot.rails.find(
+    (rail) => rail.priority >= HOME_QUICK_ACTIONS_RAIL_PRIORITY,
+  );
   return {
     ...(snapshot.chromeSecondaryTag != null ? { filtersTag: snapshot.chromeSecondaryTag } : {}),
     ...(snapshot.chromePrimaryTag != null ? { tabsTag: snapshot.chromePrimaryTag } : {}),
@@ -49,5 +52,5 @@ export function requestTvHomeChromeFocus() {
 }
 
 export function requestTvHomeCatalogFocus() {
-  requestTvCatalogRailFocus(HOME, 0);
+  requestTvCatalogRailFocus(HOME, HOME_QUICK_ACTIONS_RAIL_PRIORITY);
 }

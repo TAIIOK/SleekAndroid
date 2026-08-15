@@ -127,7 +127,7 @@ function OverlayShell({
         {/* Spacer keeps padding out of row math (paddingTop breaks index→y). */}
         <View style={{ height: LIST_PADDING_TOP }} />
         {items.map((item, index) => (
-          <View key={item.key} style={styles.rowWrap}>
+          <View key={`${item.key}:${index}`} style={styles.rowWrap}>
             <OptionRow
               label={item.label}
               selected={item.selected}

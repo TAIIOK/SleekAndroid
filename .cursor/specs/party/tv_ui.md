@@ -31,7 +31,7 @@ TV join of совместный просмотр follows room playback instead o
 - Phone room still shows sync badge, join code, leave, invite, and chat.
 - Chat messages from other members briefly appear over video on TV.
 - Down on the party player shows the TV HUD (play dock / panel), not the catalog sidebar.
-- Party HUD starts visible and auto-hides ~5s while playing; Down / Up / OK / ← → bring it back (same as `/watch`).
+- Party HUD starts visible and auto-hides ~5s while playing; Down / Up / OK bring it back; ← → seek without showing chrome (same as `/watch`).
 - OK / ↓ / ← → on the party player work the same as `/watch` after the video is on screen.
 - Native TV focus is the center pause/play button (white). Down reaches the bottom option pills. OK toggles playback or activates the focused pill.
 - From the TV sidebar, OK on «Совместный просмотр» closes the overlay and focuses «Создать комнату» (or «Войти» for guests). Left from that control reopens the sidebar.

@@ -114,7 +114,6 @@ export function collectLampaProgressAliasIds(
       snapshot.tmdbId,
       row.tmdbId,
       snapshot.rawId,
-      route,
     ]).filter((id) => /^\d+$/.test(id));
     const historyRoute = historyRouteCandidates[0];
     const mapsToDetail =
@@ -424,7 +423,7 @@ export function buildLampaPlaybackState(
   const candidateSet = new Set(candidateIds);
   const scopedRows = candidateIds.length
     ? progressRows.filter((row) => candidateSet.has(row.lampaId))
-    : progressRows;
+    : [];
   // Rows may be keyed by objectId or numeric route/tmdb id — merge without a single-id filter.
   const episodeProgressByKey = lampaProgressByKey(scopedRows);
   const latestUnfinished = pickLatestUnfinishedLampaRow(scopedRows);

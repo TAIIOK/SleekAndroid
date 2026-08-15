@@ -346,6 +346,7 @@ export function TvVideoPlayer({
         <TvPlayerFocusSink
           sinkActive={!showCenterDock}
           revealEdges={!remote.panelVisible && !remote.overlay}
+          overlayTrap={!!remote.overlay}
           onRevealTags={setRevealTags}
           onTvKey={remote.handleHwEvent}
         />
@@ -368,10 +369,9 @@ export function TvVideoPlayer({
         onFocusButton={remote.focusHud}
         onActivate={remote.activateButton}
         captureVertical={!remote.panelVisible}
+        captureHorizontal={!remote.panelVisible}
         nextFocusDown={!remote.panelVisible ? revealTags.down : undefined}
         nextFocusUp={!remote.panelVisible ? revealTags.up : undefined}
-        nextFocusLeft={!remote.panelVisible ? revealTags.left : undefined}
-        nextFocusRight={!remote.panelVisible ? revealTags.right : undefined}
       />
 
       {engine.playbackError || externalError ? (

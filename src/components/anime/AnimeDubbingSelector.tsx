@@ -46,7 +46,7 @@ export function AnimeDubbingSelector({
                 const active = option === selectedLabel;
                 return (
                   <TvFocusable
-                    key={option}
+                    key={`${option}:${index}`}
                     hasTVPreferredFocus={open && (active || (index === 0 && !selectedLabel))}
                     onPress={() => {
                       onSelect(option);

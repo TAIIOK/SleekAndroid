@@ -33,7 +33,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] TV panel visual: compact site-like bottom card — meta, white timeline, times, option pills (no ±seek transport)
 - [x] Seek ±N via D-pad ←/→ only (hidden chrome or timeline focus), not bottom-bar buttons
 - [x] Mid-screen circular prev/play/next dock (site TV style); native TV focus lands on pause/play
-- [x] Hidden panel: any D-pad / OK shows the HUD; ←/→ also seek (prefs seconds); OK play/pause (or skip CTA); Back exit
+- [x] Hidden panel: ↑/↓/OK show the HUD; ←/→ seek (prefs seconds) without revealing chrome; OK play/pause (or skip CTA); Back exit
 - [x] Visible panel: D-pad moves native focus Play ↔ timeline ↔ option pills; Back hides panel or closes overlay before exit
 - [x] Overlays: dubbing, quality, connection, delivery, episodes, subtitles (when tracks exist), settings, external player
 - [x] Subtitle tracks from react-native-video text tracks; preferred language persisted in player prefs
@@ -41,7 +41,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 - [x] Panel options chip cycles video framing (`contain` → `cover` → `fill`) without opening settings
 - [x] Paused center badge; loading indicator; skip prompt button
 - [x] Skip CTA is software-focused while visible: OK/`select` applies skip (native focus stays on the compact sink); focused visual + hint «OK — пропустить»
-- [x] Compact 72×72 `TvPlayerFocusSink` mounts only when chrome is hidden (or overlay is open). While the HUD is visible, Play / pills are native-focusable Pressables.
+- [x] Compact 72×72 `TvPlayerFocusSink` mounts only when chrome is hidden (or overlay is open). While the HUD is visible, Play / pills are native-focusable Pressables. The hidden sink must not paint a visible circle (Android TV default focus highlight / rounded dark fill) where the pause button was. Hidden ←/→ use ping-pong seek pads (bounce-to-sink ate the seek and must not show chrome). While an overlay is open, `overlayTrap` uses ping-pong ↑/↓ pads so each D-pad press steps software focus (bounce-to-sink ate every other press). Do not leave ↑/↓ to Android 2D-search.
 - [x] Remote handler ignores OK / playPause key-up and HUD `select` onKeyDown (Pressable `onPress` activates). Duplicate key-down+key-up for other keys still debounce ~90ms. `tvKeyNativeEventToHw` maps `key` / `code` / Android `keyCode`. HUD starts visible and auto-hides after 5s while playing.
 
 ### Phone UI
@@ -85,7 +85,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 ## Acceptance Criteria
 
-1. TV Watch: Enter play/pause and shows HUD; ← → seek and show HUD; ↑ ↓ show panel; Back closes overlay → panel → exit.
+1. TV Watch: Enter play/pause and shows HUD; ← → seek without showing HUD; ↑ ↓ show panel; Back closes overlay → panel → exit.
 2. TV panel focus works across transport and option pills; overlays open and select with OK.
 3. Anime: switch dubbing/quality keeps playback time; episode next/prev and auto-next work.
 4. Lampa: quality/connection/delivery change URL with time preserved; progress resumes via payload or server; BAD_HTTP on direct auto-switches to proxy once; serials support prev/next, episode list, and auto-next.
@@ -102,7 +102,7 @@ Port the full watch experience into `aniverse-tv` on `react-native-video` (ExoPl
 
 Code-verified against acceptance criteria and remote handler (device smoke still recommended on hardware):
 
-- [x] Watch: Enter — play/pause + HUD, ← → — seek + HUD, ↑ ↓ — panel, Back — exit (`useTvPlayerRemote`)
+- [x] Watch: Enter — play/pause + HUD, ← → — seek without HUD, ↑ ↓ — panel, Back — exit (`useTvPlayerRemote`)
 - [x] Watch: panel focus transport → options; Enter activates; Back hides panel
 - [x] Watch: hint disappears ~2.5s (`TV_PLAYER_HINT_HIDE_MS`)
 - [x] Watch: dubbing / quality / episodes / subtitles / settings / external overlays open and close with Back
@@ -115,7 +115,7 @@ Code-verified against acceptance criteria and remote handler (device smoke still
 
 - Source of truth: `site` `TvVideoPlayer`, `useTvPlayerRemote`, desktop `VideoPlayer` (mobile branch), `WatchPage`.
 - Phone visual language follows site mobile chrome (gradients, center pill, icon row); not TV panel density. Not pixel-perfect CSS copy.
-- Android TV (rn-tvos 0.85): `useTVEventHandler` is gone. Player D-pad uses Pressable `onKeyDown`/`onKeyUp`/`onPress` on compact `TvPlayerFocusSink` (`preventDefault` on key-down so focus does not leave). Video is `focusable={false}` + `ViewType.TEXTURE`; HUD chrome uses elevation so it composites over ExoPlayer. 1×1 / opacity-0 / fully transparent sinks reject `requestTVFocus`. Android remotes often send numeric `keyCode` (19–23) with empty `key`.
+- Android TV (rn-tvos 0.85): `useTVEventHandler` is gone. Player D-pad uses Pressable `onKeyDown`/`onKeyUp`/`onPress` on compact `TvPlayerFocusSink` (`preventDefault` on key-down so focus does not leave). Video is `focusable={false}` + `ViewType.TEXTURE`; HUD chrome uses elevation so it composites over ExoPlayer. 1×1 / opacity-0 / fully transparent sinks reject `requestTVFocus` — keep ≥72 and slight opacity/bg, but no `borderRadius` (system focus highlight otherwise looks like the pause button). Android remotes often send numeric `keyCode` (19–23) with empty `key`. Overlay lists stay software-focused; `overlayTrap` ping-pongs ↑/↓ between two pads so each press steps the list (returning focus to the sink spent a press).
 - Subtitles appear only when the media container exposes text tracks (HLS/embedded); many anime sources have no CC tracks.
 - For heavy 4K streams prefer «Внешний плеер» (Lampa model) if in-app ExoPlayer stutters.
 - Out of scope: ambient backdrop, cast, hover scrub preview, Norigin spatial nav, IMA/ads.

@@ -28,6 +28,11 @@ interface SectionHeaderProps {
   tvFocusEntry?: boolean;
   /** Catalog path for vertical D-pad handoff (`/anime`, `/movies`, `/series`). */
   tvFocusPath?: string;
+  /** TV: native host for the see-all / settings chip. */
+  seeAllHostRef?: (node: View | null) => void;
+  seeAllNextFocusUp?: number;
+  seeAllNextFocusDown?: number;
+  seeAllNextFocusLeft?: number;
 }
 
 function titleStyleForVariant(variant: SectionHeaderVariant) {
@@ -61,6 +66,10 @@ export function SectionHeader({
   flush = false,
   tvFocusEntry = false,
   tvFocusPath,
+  seeAllHostRef,
+  seeAllNextFocusUp,
+  seeAllNextFocusDown,
+  seeAllNextFocusLeft,
 }: SectionHeaderProps) {
   const firstRailTag = useTvCatalogVerticalSnapshot(tvFocusPath).rails[0]?.tag;
   const accentVisible =
@@ -110,6 +119,11 @@ export function SectionHeader({
           onPress={onSeeAll}
           style={styles.seeAll}
           focusedStyle={styles.seeAllFocused}
+          railEnd
+          hostRef={seeAllHostRef}
+          nextFocusUp={seeAllNextFocusUp}
+          nextFocusDown={seeAllNextFocusDown}
+          nextFocusLeft={seeAllNextFocusLeft}
         >
           <Text style={styles.seeAllText}>{seeAllLabel}</Text>
         </TvFocusable>

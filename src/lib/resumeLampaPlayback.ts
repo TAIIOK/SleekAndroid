@@ -29,6 +29,8 @@ export interface ResumeLampaPlaybackParams {
   episode?: number;
   startProgress?: number;
   lampaObjectId?: string;
+  /** Preloaded detail skips a second catalog fetch (detail screen). */
+  detail?: LampaDetail;
 }
 
 function releaseYear(detail: LampaDetail): string {
@@ -119,8 +121,8 @@ async function bootstrapWatchHub(
 }
 
 /**
- * Like iOS continue-watching: restore last source/dub and prepare the player payload.
- * Returns true when playback can start immediately.
+ * Like iOS continue-watching: restore last source/dub (or first ready) and
+ * prepare the player payload. Returns true when playback can start immediately.
  */
 export async function resumeLampaFromLastSelection(
   params: ResumeLampaPlaybackParams,
@@ -133,18 +135,19 @@ export async function resumeLampaFromLastSelection(
     (params.lampaObjectId
       ? await loadLampaLastSelection(params.lampaObjectId)
       : null);
-  if (!selection) return false;
 
   try {
-    const detail = await fetchLampaDetail(params.kind, routeId);
+    const detail = params.detail ?? (await fetchLampaDetail(params.kind, routeId));
     const session = await bootstrapWatchHub(detail, params.kind, routeId);
     if (!session) return false;
 
-    const source = matchSource(session.sources, selection.sourceId);
+    const source =
+      (selection ? matchSource(session.sources, selection.sourceId) : undefined) ??
+      session.sources[0];
     if (!source) return false;
 
     const translators = await fetchTranslators(session.taskId, source.source_id);
-    const translator = matchTranslator(translators, selection.dubId);
+    const translator = matchTranslator(translators, selection?.dubId ?? '');
     if (!translator) return false;
 
     let season: number | undefined;
@@ -157,7 +160,7 @@ export async function resumeLampaFromLastSelection(
         sourceId: source.source_id,
         translatorId: translator.id,
       });
-      const targetSeason = params.season ?? selection.seasonNumber;
+      const targetSeason = params.season ?? selection?.seasonNumber;
       const targetEpisode = params.episode ?? 1;
       const seasonRow =
         seasons.find((s) => s.seasonNumber === targetSeason) ?? seasons[0];

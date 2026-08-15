@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,9 +33,9 @@ import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
 import { LampaDetailPlot } from '@/components/lampa/detail/LampaDetailPlot';
 import { LampaDetailSeasons } from '@/components/lampa/detail/LampaDetailSeasons';
 import { LampaDetailSkeleton } from '@/components/lampa/detail/LampaDetailSkeleton';
-import { LampaExternalRatingsRow } from '@/components/lampa/LampaExternalRatingsRow';
 import { LampaSourceSheet } from '@/components/lampa/LampaSourceSheet';
 import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBackButton';
+import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
 import {
@@ -48,28 +49,51 @@ import {
 } from '@/lib/lampaDetail';
 import type { UserListStatus } from '@/lib/libraryStatus';
 import { lampaPosterPath } from '@/lib/poster';
-import { buildLampaPlaybackState } from '@/lib/progressUtils';
+import { buildLampaPlaybackState, isUnfinishedProgress } from '@/lib/progressUtils';
 import {
   lampaWatchHistoryKey,
   rememberWatchHistoryMeta,
 } from '@/lib/watchHistoryMeta';
+import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { useAuth } from '@/providers/AuthProvider';
 import { isTvUi } from '@/lib/isTvUi';
 import { notifyViewportScroll } from '@/lib/viewportScroll';
 
+function parseOptionalNumber(value?: string): number | undefined {
+  if (value == null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, resume, season, episode, startProgress } = useLocalSearchParams<{
+    id: string;
+    resume?: string;
+    season?: string;
+    episode?: string;
+    startProgress?: string;
+  }>();
   const routeId = String(id ?? '');
   const { isAuthenticated } = useAuth();
   const isSerial = kind === 'tv';
   const belowFoldReady = useBelowFoldReady();
+  const resumeSeason = parseOptionalNumber(Array.isArray(season) ? season[0] : season);
+  const resumeEpisode = parseOptionalNumber(Array.isArray(episode) ? episode[0] : episode);
+  const resumeStartProgress = parseOptionalNumber(
+    Array.isArray(startProgress) ? startProgress[0] : startProgress,
+  );
+  const shouldAutoResume =
+    isTvUi() && String(Array.isArray(resume) ? resume[0] : resume ?? '') === '1';
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pickerSeason, setPickerSeason] = useState<number | undefined>();
   const [pickerEpisode, setPickerEpisode] = useState<number | undefined>();
   const [autoPlayPreferred, setAutoPlayPreferred] = useState(false);
+  const [resuming, setResuming] = useState(shouldAutoResume);
+  const resumeAttemptedRef = useRef<string | null>(null);
+  const watchInFlightRef = useRef(false);
 
   const {
     data: detail,
@@ -186,10 +210,10 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     void queryClient.invalidateQueries({ queryKey: ['library-favorites'] });
   };
 
-  const openSources = (preferResume: boolean) => {
-    if (preferResume && savedState?.hasHistory) {
-      setPickerSeason(savedState.lastSeason || 1);
-      setPickerEpisode(savedState.lastEpisode || 1);
+  const openSources = useCallback((preferResume: boolean) => {
+    if (preferResume && (savedState?.hasHistory || resumeSeason != null || resumeEpisode != null)) {
+      setPickerSeason(resumeSeason ?? savedState?.lastSeason ?? 1);
+      setPickerEpisode(resumeEpisode ?? savedState?.lastEpisode ?? 1);
       setAutoPlayPreferred(true);
     } else {
       setPickerSeason(undefined);
@@ -197,6 +221,71 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
       setAutoPlayPreferred(false);
     }
     setSheetOpen(true);
+  }, [resumeEpisode, resumeSeason, savedState]);
+
+  const attemptResumeThenPlayOrSheet = useCallback(
+    async (preferSheetResume: boolean) => {
+      if (watchInFlightRef.current || !detail || !routeId) return;
+      watchInFlightRef.current = true;
+      setResuming(true);
+      try {
+        const started = await resumeLampaFromLastSelection({
+          kind,
+          routeId,
+          season: resumeSeason ?? savedState?.lastSeason,
+          episode: resumeEpisode ?? savedState?.lastEpisode,
+          startProgress: resumeStartProgress ?? savedState?.lastProgress,
+          lampaObjectId: lampaObjectId || undefined,
+          detail,
+        });
+        if (started) {
+          router.push('/watch/lampa');
+          return;
+        }
+        openSources(preferSheetResume);
+      } finally {
+        watchInFlightRef.current = false;
+        setResuming(false);
+      }
+    },
+    [
+      detail,
+      kind,
+      lampaObjectId,
+      openSources,
+      resumeEpisode,
+      resumeSeason,
+      resumeStartProgress,
+      routeId,
+      router,
+      savedState?.lastEpisode,
+      savedState?.lastProgress,
+      savedState?.lastSeason,
+    ],
+  );
+
+  useEffect(() => {
+    if (!shouldAutoResume || !detail || !routeId) return;
+    const signature = `${kind}|${routeId}`;
+    if (resumeAttemptedRef.current === signature) return;
+    resumeAttemptedRef.current = signature;
+    router.setParams({ resume: undefined });
+    void attemptResumeThenPlayOrSheet(true);
+  }, [attemptResumeThenPlayOrSheet, detail, kind, routeId, router, shouldAutoResume]);
+
+  const canSilentResume = isUnfinishedProgress(
+    resumeStartProgress ?? savedState?.lastProgress ?? 0,
+  );
+
+  const onWatch = () => {
+    // iOS parity: silent resume only when there is real unfinished progress.
+    // First watch («Смотреть сейчас») must open the source sheet — not auto-pick
+    // the first WatchHub source / dub / quality behind «Возобновление просмотра».
+    if (isTvUi() && canSilentResume) {
+      void attemptResumeThenPlayOrSheet(true);
+      return;
+    }
+    openSources(!!savedState?.hasHistory);
   };
 
   const onSelectEpisode = (season: number, episode: number) => {
@@ -288,8 +377,28 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     </>
   );
 
+  const resumeShell = (
+    <View style={styles.loader}>
+      {isTvUi() ? (
+        <TvFocusable
+          hasTVPreferredFocus
+          railStart
+          contentEntry
+          accessibilityLabel="Возобновление просмотра"
+          style={styles.resumeFocusTrap}
+        >
+          <View />
+        </TvFocusable>
+      ) : null}
+      <ActivityIndicator color={colors.brand} size="large" />
+      <Text style={styles.errorTitle}>Возобновление просмотра…</Text>
+    </View>
+  );
+
   let main: ReactNode;
-  if (isLoading) {
+  if (resuming && !isError) {
+    main = resumeShell;
+  } else if (isLoading) {
     main = <LampaDetailSkeleton />;
   } else if (isError || !detail) {
     main = (
@@ -324,17 +433,12 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
               title: lampaTitle(detail),
               poster: lampaPosterPath(detail),
             }}
-            onWatch={() => openSources(!!savedState?.hasHistory)}
+            onWatch={onWatch}
             onOpenSources={() => openSources(false)}
             onStatusChange={onStatusChange}
             onToggleFavorite={onToggleFavorite}
+            externalRatings={externalRatings}
           />
-
-          {externalRatings.length > 0 ? (
-            <View style={styles.ratingsPad}>
-              <LampaExternalRatingsRow ratings={externalRatings} />
-            </View>
-          ) : null}
 
           {isSerial && seasons.length > 0 ? (
             <LampaDetailSeasons
@@ -355,7 +459,14 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           </View>
           <View style={styles.stack}>{relatedRails}</View>
         </ScrollView>
+      </>
+    );
+  }
 
+  return (
+    <View style={styles.root} collapsable={false}>
+      {main}
+      {detail && !resuming ? (
         <LampaSourceSheet
           visible={sheetOpen}
           onClose={() => setSheetOpen(false)}
@@ -368,13 +479,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           autoPlayPreferredEpisode={autoPlayPreferred}
           episodeProgressByKey={savedState?.episodeProgressByKey}
         />
-      </>
-    );
-  }
-
-  return (
-    <View style={styles.root} collapsable={false}>
-      {main}
+      ) : null}
       <MobileDetailBackButton />
     </View>
   );
@@ -389,9 +494,6 @@ const styles = StyleSheet.create({
     // Tighter gap under full-bleed hero so bottom fade blends into plot.
     gap: isTvUi() ? spacing.sm : spacing.md,
     paddingBottom: isTvUi() ? spacing.xl : spacing.xxl,
-  },
-  ratingsPad: {
-    paddingHorizontal: 0,
   },
   stack: {
     width: '100%',
@@ -415,5 +517,11 @@ const styles = StyleSheet.create({
   errorBody: {
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  resumeFocusTrap: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
   },
 });

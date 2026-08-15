@@ -16,10 +16,10 @@ interface TvEpisodeDockProps {
   onActivate: (id: TvPlayerButtonId) => void;
   /** Dock-only (panel hidden): ↑/↓ must show the bottom bar, not native-search. */
   captureVertical?: boolean;
+  /** Dock-only (panel hidden): ←/→ seek without leaving play for reveal edges. */
+  captureHorizontal?: boolean;
   nextFocusDown?: number;
   nextFocusUp?: number;
-  nextFocusLeft?: number;
-  nextFocusRight?: number;
 }
 
 /** Mid-screen transport: prev / play / next — site TV-style circular controls. */
@@ -33,10 +33,9 @@ export function TvEpisodeDock({
   onFocusButton,
   onActivate,
   captureVertical = false,
+  captureHorizontal = false,
   nextFocusDown,
   nextFocusUp,
-  nextFocusLeft,
-  nextFocusRight,
 }: TvEpisodeDockProps) {
   if (!visible) return null;
 
@@ -48,6 +47,7 @@ export function TvEpisodeDock({
             style={[styles.btn, panelFocus === 'prev_episode' && styles.btnFocused]}
             onTvKey={onTvKey}
             captureVertical={captureVertical}
+            captureHorizontal={captureHorizontal}
             onFocus={() => onFocusButton('prev_episode')}
             onPress={() => onActivate('prev_episode')}
           >
@@ -65,10 +65,9 @@ export function TvEpisodeDock({
           style={[styles.btn, styles.btnPlay, panelFocus === 'play' && styles.btnFocused]}
           onTvKey={onTvKey}
           captureVertical={captureVertical}
+          captureHorizontal={captureHorizontal}
           nextFocusDown={nextFocusDown}
           nextFocusUp={nextFocusUp}
-          nextFocusLeft={nextFocusLeft}
-          nextFocusRight={nextFocusRight}
           onFocus={() => onFocusButton('play')}
           onPress={() => onActivate('play')}
         >
@@ -87,6 +86,7 @@ export function TvEpisodeDock({
             style={[styles.btn, panelFocus === 'next_episode' && styles.btnFocused]}
             onTvKey={onTvKey}
             captureVertical={captureVertical}
+            captureHorizontal={captureHorizontal}
             onFocus={() => onFocusButton('next_episode')}
             onPress={() => onActivate('next_episode')}
           >

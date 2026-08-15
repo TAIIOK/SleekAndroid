@@ -13,7 +13,7 @@ On TV, Home uses desktop-parity chrome: a content-type segmented control and und
 5. [x] When two or more sources are resolved, Home shows one horizontal `PosterRail` per source.
 6. [x] When zero sources are resolved, Home shows an empty state.
 7. [x] Continue Watching sits below the feed chrome on TV (desktop parity) when items exist.
-8. [x] Quick Actions is not shown on TV Home (phone keeps Quick Actions).
+8. [x] Quick Actions is shown on TV Home after Continue Watching as a configurable rail (see `home_quick_actions.md`). Phone keeps the fixed 2×2 grid.
 9. [x] Type filters use a plain `View` row (not horizontal `ScrollView`). Feed tabs use a horizontal `ScrollView` with `tvHorizontalCatalogScrollProps` so D-pad focus scrolls overflow into view.
 10. [x] Only the first control in type-filter and feed-tab rows sets `railStart` (Left→sidebar); mid-row items move Left within the row. The first type-filter pins `nextFocusLeft` to an in-row dest (same focus guide) so Left cannot 2D-search Down into feed tabs. The search icon and last feed tab set `railEnd` so Right does not 2D-search into Continue Watching. Type-filter `contentEntry` (Up→sidebar) always applies because filters are the top chrome. Continue Watching cards are not the content entry. Rapid / hold Right inside Continue Watching stays on that rail (`trapFocusRight` + sibling `nextFocusRight` + steal-back). Intentional Up uses `nextFocusUp` to feed tabs (or type filters); Down uses `nextFocusDown` to the first catalog poster.
 11. [x] Home settings sheet is reachable on TV via a gear icon beside the type segmented control; a search icon to the right of the gear opens `/search`. Feed tabs/sources follow `CatalogHomeConfig` (showcases, Lampa sections, custom anime sections) synced with Sleek/backend.
@@ -37,7 +37,7 @@ On TV, Home uses desktop-parity chrome: a content-type segmented control and und
 - Continue Watching still appears below the type/feed chrome when the user has in-progress titles.
 - Rapid Right across Continue Watching does not move focus up to type filters / feed tabs or down to other catalog rails.
 - Left on the first type-filter, first feed tab, or first Continue Watching card opens the sidebar; it does not drop into the row below.
-- Quick Actions is absent on TV and still present on phone.
+- Quick Actions is present on TV after Continue Watching and still present on phone.
 - Type chrome matches desktop: segmented control plus settings gear; feed chrome matches desktop underline tabs with every enabled feed visible.
 - After login, Home rails and tab order match the website for the same account (server catalogHomeConfig), not a stale TV cache.
 - TV Home keeps section titles in the slot; far rails unmount posters and reserve last measured height. Item requests for rails below the first two wait until the row is near the viewport (no timer that loads the whole feed).

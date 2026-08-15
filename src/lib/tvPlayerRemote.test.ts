@@ -5,9 +5,9 @@ import { isTvPlayerActivationKeyUp, mapHiddenHudKey } from './tvPlayerRemote';
 const center = { hasSkipPrompt: false, centerFocus: 'play' as const };
 
 describe('mapHiddenHudKey', () => {
-  it('shows the timeline and seeks on left/right', () => {
-    expect(mapHiddenHudKey('left', center)).toEqual({ kind: 'seekBack', focus: 'timeline' });
-    expect(mapHiddenHudKey('right', center)).toEqual({ kind: 'seekForward', focus: 'timeline' });
+  it('seeks on left/right without revealing the HUD', () => {
+    expect(mapHiddenHudKey('left', center)).toEqual({ kind: 'seekBack' });
+    expect(mapHiddenHudKey('right', center)).toEqual({ kind: 'seekForward' });
   });
 
   it('shows the HUD on up/down', () => {

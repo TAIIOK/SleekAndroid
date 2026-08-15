@@ -42,7 +42,7 @@ Port Anime and Lampa (movies/series) detail screens into `aniverse-tv` with hero
 
 ### Lampa (`/movies/[id]`, `/series/[id]`)
 
-- [x] Backdrop hero with title, meta pills, Play/Continue opening source sheet (card density matches AnimeDetailHero)
+- [x] Backdrop hero with title, external rating pills (IMDb / КП / RT) under the title, meta pills, Play/Continue opening source sheet (card density matches AnimeDetailHero)
 - [x] Status picker + favorite toggle + «В коллекцию»; serials can open sources (no download/reactions)
 - [x] Plot / overview section
 - [x] Serials: seasons + episode list; selecting episode opens sheet with S/E

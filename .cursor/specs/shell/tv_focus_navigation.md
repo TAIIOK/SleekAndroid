@@ -19,12 +19,17 @@ Remote/D-pad focus on Android TV must be unmistakable on catalog cards and must 
 11. [x] Right from the side menu (or leaving sidebar focus) returns focus to content and closes the overlay.
 12. [x] Route change parks sidebar only on top-level nav change, not detail push; detail push must not flash the overlay (see `tv_catalog_focus_and_scroll.md`).
 13. [x] Back from detail restores catalog scroll + focused poster (see `tv_catalog_focus_and_scroll.md`).
+14. [x] Double Left (or Left on the first Home type-filter plus HW backup) must not leave the overlay open with focus in content. Home `rowExit` stays focusable until a sidebar row owns focus.
+15. [x] Content gaining focus while the overlay is visible closes the menu immediately.
+16. [x] Back while the overlay is open closes it and returns focus to the last content anchor.
 
 ## Acceptance Criteria
 
 - A user can tell at a glance which card currently has focus.
 - From home content, Left on the leftmost card opens the menu overlay and focuses the active nav item without scrolling to the top first. Left on the first Home type-filter does not drop into the row below.
 - From the sidebar, Right returns focus into the content area and hides the menu.
+- Double Left does not leave a stuck overlay: focus stays in the sidebar, or the overlay closes if focus returns to content.
+- Back dismisses the open overlay and restores content focus.
 - Catalog content uses the full screen width while the menu is closed.
 - Moving Up/Down across rails keeps the focused rail’s title on screen.
 - Holding Right across a long rail keeps a visible focus ring on posters in that rail.
@@ -33,7 +38,7 @@ Remote/D-pad focus on Android TV must be unmistakable on catalog cards and must 
 
 ## Notes
 
-- Horizontal `ScrollView` on Android TV often swallows `nextFocusLeft`. Exit-to-sidebar uses `useTVEventHandler` + `requestTVFocus()` on the sidebar anchor when a rail-start / top-entry card is focused; `TvShellFocus` also sets `menuOpen`.
+- Horizontal `ScrollView` on Android TV often swallows `nextFocusLeft`. Exit-to-sidebar uses `useTVEventHandler` + `requestTVFocus()` on the sidebar anchor when a rail-start / top-entry card is focused; `TvShellFocus` also sets `menuOpen`. A second Left while the overlay is already open only retries `requestTVFocus` (no second open-cycle). Content `TvFocusGuide` turns `autoFocus` off while `menuOpen` so it cannot steal the handoff.
 - Closed menu stays mounted on-screen at `opacity: 0` (no `translateX` — off-screen anchors reject focus on Android TV). Only the active nav anchor stays `focusable` until the overlay opens; `nextFocusRight` pins return to the content anchor.
 - Handle `eventKeyAction === 1` (key up): rn-tvos Android defaults to key-up-only HW events. Native Left on a rail-start may 2D-search Down before key-up; the arm stays live for a short grace so that key-up still opens the menu.
 - Arm Left/Up→sidebar only after ~220ms on a rail-edge card so one Left from the 2nd card does not also jump to the sidebar on key-up.

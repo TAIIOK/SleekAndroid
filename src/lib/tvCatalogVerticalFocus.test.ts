@@ -18,6 +18,22 @@ describe('catalogVerticalNeighbors', () => {
     expect(catalogVerticalNeighbors(snapshot, -1)).toEqual({ up: 10, down: 30 });
   });
 
+  it('places Quick Actions between continue and catalog rails', () => {
+    expect(
+      catalogVerticalNeighbors(
+        {
+          chromePrimaryTag: 10,
+          rails: [
+            { priority: -1, tag: 20 },
+            { priority: -0.5, tag: 25 },
+            { priority: 0, tag: 30 },
+          ],
+        },
+        -0.5,
+      ),
+    ).toEqual({ up: 20, down: 30 });
+  });
+
   it('sends the first catalog rail Up to continue', () => {
     expect(catalogVerticalNeighbors(snapshot, 0)).toEqual({ up: 20, down: 40 });
   });

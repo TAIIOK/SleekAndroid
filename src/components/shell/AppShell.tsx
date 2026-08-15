@@ -470,6 +470,18 @@ function TvAppShellFrame({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- immersive lock only
   }, [hideSidebar, currentPath]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onBack = () => {
+      shellFocus?.closeMenu();
+      shellFocus?.requestContentFocus();
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismiss overlay only
+  }, [menuOpen]);
+
   // Party room / watch / invite sit inside (main). The catalog TvFocusGuide
   // swallows D-pad, and a late-mounted player sink never wins hasTVPreferredFocus.
   // Render children full-bleed like the root `/watch` modal.
@@ -567,7 +579,7 @@ function TvAppShellFrame({
 
       <TvFocusGuide
         style={styles.tvContent}
-        autoFocus={!immersiveLock}
+        autoFocus={!immersiveLock && !menuOpen}
         pointerEvents={immersiveLock ? 'none' : undefined}
       >
         {children}

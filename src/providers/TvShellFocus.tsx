@@ -35,8 +35,12 @@ interface TvShellFocusValue {
   resetExitFlags: () => void;
   /** Overlay side menu is visible (focus is in the sidebar or opening). */
   menuOpen: boolean;
+  /** True while a sidebar nav row / profile chip actually owns focus. */
+  sidebarFocused: boolean;
   openMenu: () => void;
   closeMenu: () => void;
+  /** Return D-pad focus to the last content anchor (Back dismiss). */
+  requestContentFocus: () => void;
   /** Track sidebar focus so the overlay stays open while moving between nav rows. */
   setSidebarFocused: (focused: boolean) => void;
 }
@@ -67,14 +71,22 @@ function useArmedExitFlag() {
  */
 export function TvShellFocusProvider({ children }: { children: ReactNode }) {
   const hostRef = useRef<FocusHost | null>(null);
+  const contentHostRef = useRef<FocusHost | null>(null);
   const [sidebarNativeTag, setSidebarNativeTag] = useState<number | undefined>(undefined);
   const [contentNativeTag, setContentNativeTag] = useState<number | undefined>(undefined);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpenState] = useState(false);
+  const [sidebarFocused, setSidebarFocusedState] = useState(false);
+  const menuOpenRef = useRef(false);
   const sidebarFocusCountRef = useRef(0);
   const closeMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitLeft = useArmedExitFlag();
   const exitUp = useArmedExitFlag();
+
+  const setMenuOpen = useCallback((open: boolean) => {
+    menuOpenRef.current = open;
+    setMenuOpenState(open);
+  }, []);
 
   const clearCloseMenuTimer = useCallback(() => {
     if (closeMenuTimerRef.current != null) {
@@ -94,19 +106,21 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
     clearCloseMenuTimer();
     clearOpenMenuTimer();
     setMenuOpen(true);
-  }, [clearCloseMenuTimer, clearOpenMenuTimer]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer, setMenuOpen]);
 
   const closeMenu = useCallback(() => {
     clearCloseMenuTimer();
     clearOpenMenuTimer();
     sidebarFocusCountRef.current = 0;
+    setSidebarFocusedState(false);
     setMenuOpen(false);
-  }, [clearCloseMenuTimer, clearOpenMenuTimer]);
+  }, [clearCloseMenuTimer, clearOpenMenuTimer, setMenuOpen]);
 
   const setSidebarFocused = useCallback(
     (focused: boolean) => {
       const next = Math.max(0, sidebarFocusCountRef.current + (focused ? 1 : -1));
       sidebarFocusCountRef.current = next;
+      setSidebarFocusedState(next > 0);
       if (next > 0) {
         clearCloseMenuTimer();
         // Delay open so transient focus during detail remount does not flash the overlay.
@@ -130,7 +144,7 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
         }
       }, 80);
     },
-    [clearCloseMenuTimer, clearOpenMenuTimer],
+    [clearCloseMenuTimer, clearOpenMenuTimer, setMenuOpen],
   );
 
   const registerSidebarAnchor = useCallback((node: unknown) => {
@@ -141,30 +155,43 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const registerContentAnchor = useCallback((node: unknown) => {
+    contentHostRef.current = (node as FocusHost) ?? null;
     const tag =
       node != null ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined) : undefined;
     setContentNativeTag((prev) => (prev === tag ? prev : tag));
   }, []);
 
-  /** Open overlay first, then focus after layout — off-screen/hidden anchors reject focus. */
-  const focusSidebarAfterOpen = useCallback(() => {
-    clearCloseMenuTimer();
-    clearOpenMenuTimer();
-    setMenuOpen(true);
+  const requestSidebarAnchorFocus = useCallback(() => {
     const focus = () => hostRef.current?.requestTVFocus?.();
     focus();
     requestAnimationFrame(() => {
       focus();
       requestAnimationFrame(focus);
     });
-    // In-row Left dest still holds focus until menuOpen commits and it
-    // becomes unfocusable; retry after that paint.
+    // In-row Left dest still holds focus until the sidebar row becomes
+    // focusable / the hop dest unfocuses; retry after that paint.
     setTimeout(focus, 50);
-  }, [clearCloseMenuTimer, clearOpenMenuTimer]);
+  }, []);
+
+  /** Open overlay first, then focus after layout — off-screen/hidden anchors reject focus. */
+  const focusSidebarAfterOpen = useCallback(() => {
+    clearCloseMenuTimer();
+    clearOpenMenuTimer();
+    if (menuOpenRef.current) {
+      requestSidebarAnchorFocus();
+      return;
+    }
+    setMenuOpen(true);
+    requestSidebarAnchorFocus();
+  }, [clearCloseMenuTimer, clearOpenMenuTimer, requestSidebarAnchorFocus, setMenuOpen]);
 
   const requestSidebarFocus = useCallback(() => {
     focusSidebarAfterOpen();
   }, [focusSidebarAfterOpen]);
+
+  const requestContentFocus = useCallback(() => {
+    contentHostRef.current?.requestTVFocus?.();
+  }, []);
 
   const resetExitArms = useCallback(() => {
     exitLeft.reset();
@@ -176,9 +203,11 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
     clearCloseMenuTimer();
     clearOpenMenuTimer();
     sidebarFocusCountRef.current = 0;
+    setSidebarFocusedState(false);
     setMenuOpen(false);
     setContentNativeTag(undefined);
-  }, [clearCloseMenuTimer, clearOpenMenuTimer, resetExitArms]);
+    contentHostRef.current = null;
+  }, [clearCloseMenuTimer, clearOpenMenuTimer, resetExitArms, setMenuOpen]);
 
   useTvEventHandlerSafe((event) => {
     // rn-tvos Android defaults to key-up HW events. Skip key-down if both fire.
@@ -207,8 +236,10 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       resetExitArms,
       resetExitFlags,
       menuOpen,
+      sidebarFocused,
       openMenu,
       closeMenu,
+      requestContentFocus,
       setSidebarFocused,
     }),
     [
@@ -222,8 +253,10 @@ export function TvShellFocusProvider({ children }: { children: ReactNode }) {
       resetExitArms,
       resetExitFlags,
       menuOpen,
+      sidebarFocused,
       openMenu,
       closeMenu,
+      requestContentFocus,
       setSidebarFocused,
     ],
   );

@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -16,8 +15,7 @@ import { LibraryHubChrome } from '@/components/library/LibraryHubChrome';
 import { LibraryMediaFilters } from '@/components/library/LibraryMediaFilters';
 import { MyListsContent } from '@/components/library/MyListsContent';
 import { MyListsFilters } from '@/components/library/MyListsFilters';
-import { TvFocusable } from '@/components/tv/TvFocusable';
-import { colors, radii, spacing } from '@/constants/aniverse';
+import { colors, spacing } from '@/constants/aniverse';
 import { useSavedLibrary } from '@/hooks/useSavedLibrary';
 import { buildLibraryAnalytics } from '@/lib/libraryAnalytics';
 import {
@@ -35,7 +33,6 @@ import { isTvUi } from '@/lib/isTvUi';
 import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 export default function MyListsScreen() {
-  const router = useRouter();
   const [media, setMedia] = useState<MyListsMediaFilter>('all');
   const [status, setStatus] = useState<MyListsStatusFilter>('all');
   const { savedAnime, savedLampa, isLoading, isError } = useSavedLibrary();
@@ -119,32 +116,6 @@ export default function MyListsScreen() {
         <LibraryAnalyticsSection analytics={analytics} />
       </View>
 
-      <View style={styles.pad}>
-        <View style={styles.collectionsHeader}>
-          <Text style={styles.collectionsTitle}>Коллекции</Text>
-          <TvFocusable
-            onPress={() => router.push('/library/collections')}
-            style={styles.collectionsLink}
-          >
-            <Text style={styles.collectionsLinkLabel}>
-              {collections.length ? `${collections.length} →` : 'Открыть →'}
-            </Text>
-          </TvFocusable>
-        </View>
-        {collections.slice(0, 3).map((col) => (
-          <TvFocusable
-            key={col.id}
-            onPress={() => router.push('/library/collections')}
-            style={styles.collectionRow}
-          >
-            <Text style={styles.collectionName}>{col.name}</Text>
-            <Text style={styles.collectionMeta}>
-              {col.itemCount ?? 0} элементов
-            </Text>
-          </TvFocusable>
-        ))}
-      </View>
-
       <MyListsFilters status={status} onStatusChange={setStatus} />
 
       {isLoading ? (
@@ -180,23 +151,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
   },
-  collectionsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  collectionsTitle: { color: colors.text, fontWeight: '800', fontSize: 16 },
-  collectionsLink: { paddingVertical: 4, paddingHorizontal: 8 },
-  collectionsLinkLabel: { color: colors.brand, fontWeight: '700' },
-  collectionRow: {
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgCard,
-  },
-  collectionName: { color: colors.text, fontWeight: '700' },
-  collectionMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   loader: {
     paddingVertical: spacing.xxl,
     alignItems: 'center',

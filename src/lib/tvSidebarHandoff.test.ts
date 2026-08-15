@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  shouldCloseMenuOnContentFocus,
   shouldKeepClosedMenuSidebarAnchor,
+  shouldKeepRowExitFocusable,
   shouldParkSidebarOnRouteChange,
   topLevelNavKey,
 } from './tvSidebarHandoff';
@@ -72,5 +74,29 @@ describe('shouldKeepClosedMenuSidebarAnchor', () => {
 
   it('keeps the fallback on the party lobby', () => {
     expect(shouldKeepClosedMenuSidebarAnchor('/party')).toBe(true);
+  });
+});
+
+describe('shouldKeepRowExitFocusable', () => {
+  it('stays focusable while the menu is closed', () => {
+    expect(shouldKeepRowExitFocusable({ menuOpen: false, sidebarFocused: false })).toBe(true);
+  });
+
+  it('stays focusable after menuOpen until a sidebar row owns focus', () => {
+    expect(shouldKeepRowExitFocusable({ menuOpen: true, sidebarFocused: false })).toBe(true);
+  });
+
+  it('drops the hop once the sidebar owns focus', () => {
+    expect(shouldKeepRowExitFocusable({ menuOpen: true, sidebarFocused: true })).toBe(false);
+  });
+});
+
+describe('shouldCloseMenuOnContentFocus', () => {
+  it('closes the overlay when content takes focus', () => {
+    expect(shouldCloseMenuOnContentFocus(true)).toBe(true);
+  });
+
+  it('does not close when the overlay is already hidden', () => {
+    expect(shouldCloseMenuOnContentFocus(false)).toBe(false);
   });
 });

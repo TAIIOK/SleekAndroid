@@ -13,7 +13,7 @@ TV player episode overlay groups episodes by season with a «Сейчас» mark
 3. [x] Selecting an episode switches playback via existing episode nav.
 4. [x] Anime: group by season when episode data provides season numbers; otherwise one section.
 5. [x] Lampa: build sections from `payload.seasons` (not a flat unlabeled list).
-6. [x] D-pad focus moves within the overlay list/sections without stealing the focus sink incorrectly.
+6. [x] D-pad focus moves within the overlay list/sections without stealing the focus sink incorrectly. While the overlay is open, `TvPlayerFocusSink` uses `overlayTrap`: ping-pong ↑/↓ pads step software focus on every landing so Android 2D-search cannot swallow the key (bounce-to-sink required a second press).
 7. [x] Netflix-style right-rail panel with episode cards (thumbnail, title, duration, progress).
 8. [x] Phone episode sheet is a numbered tile grid (site `PlayerEpisodePicker`): season headers, «Сейчас» on the current tile, caption of the current episode.
 
@@ -27,6 +27,7 @@ TV player episode overlay groups episodes by season with a «Сейчас» mark
 ## Acceptance Criteria
 
 - Serial with multiple seasons shows season headers in the episodes overlay.
+- TV: ↑/↓ in the episodes overlay moves the highlight between cards (including across season headers); the sink does not keep D-pad in 2D-search.
 - Phone player episode sheet shows a 5-column number grid, not a flat label list.
 - Switching Lampa озвучка mid-watch continues near the same timestamp.
 - Anime with one dubbing / Lampa with one translator does not show the dubbing menu.
@@ -34,5 +35,5 @@ TV player episode overlay groups episodes by season with a «Сейчас» mark
 ## Notes
 
 - Source: site `PlayerEpisodePicker`, `WatchPage` `switchLampaTranslator`.
-- TV overlays live in `TvPlayerOverlays` / `useTvPlayerRemote`.
+- TV overlays live in `TvPlayerOverlays` / `useTvPlayerRemote`. Overlay lists stay software-focused (`focusable={false}`); `overlayTrap` on `TvPlayerFocusSink` is required because Android TV consumes DPAD_UP/DOWN as focus search and never delivers them to JS.
 - Phone grid picker lives in `PhoneEpisodePicker`; season grouping is shared via `buildEpisodeSections`.
