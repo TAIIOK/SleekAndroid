@@ -11,6 +11,7 @@ import type { AnimeCharacter } from '@/api/catalog';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
+import { capDetailRailItems } from '@/lib/catalogRailPage';
 import { resolveAnimePosterUrl } from '@/lib/config';
 import { hotlinkImageSource, resolveHotlinkDisplayUri } from '@/lib/hotlinkImage';
 import { isTvUi } from '@/lib/isTvUi';
@@ -27,14 +28,16 @@ interface AnimeDetailCharactersProps {
 export function AnimeDetailCharacters({ characters, loading }: AnimeDetailCharactersProps) {
   const [mountImages, setMountImages] = useState(false);
 
+  const visibleCharacters = capDetailRailItems(characters, isTvUi());
+
   useEffect(() => {
-    if (loading || !characters.length) {
+    if (loading || !visibleCharacters.length) {
       setMountImages(false);
       return;
     }
     const timer = setTimeout(() => setMountImages(true), 120);
     return () => clearTimeout(timer);
-  }, [loading, characters.length]);
+  }, [loading, visibleCharacters.length]);
 
   if (!loading && !characters.length) return null;
 
@@ -52,7 +55,7 @@ export function AnimeDetailCharacters({ characters, loading }: AnimeDetailCharac
       )}
       {showTiles ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {characters.map((character, index) => (
+          {visibleCharacters.map((character, index) => (
             <CharacterTile key={character.id ?? index} character={character} />
           ))}
         </ScrollView>

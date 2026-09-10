@@ -151,7 +151,7 @@ eas build --profile production_android --platform android
 eas build --profile production_android_tv --platform android
 ```
 
-Бинарные обновления sideload читают `phoneApkUrl` / `tvApkUrl` из `releases/latest.json` и выбирают URL через `isTvUi()`.
+Бинарные обновления sideload читают `phoneApkUrl` / `tvApkUrl` из `releases/latest.json` и выбирают URL через `isTvUi()`. Приложение скачивает APK в кэш и открывает системный установщик; в Настройках есть «Проверить обновления».
 
 ### Подпись release
 

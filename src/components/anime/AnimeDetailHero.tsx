@@ -42,6 +42,7 @@ import {
   isPlausibleImageURL,
   normalizedAbsoluteURLString,
 } from '@/lib/poster';
+import { detailHeroDecodeSize } from '@/lib/catalogRailLayout';
 import type { CollectionItemInput } from '@/types/collection';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
@@ -111,6 +112,7 @@ export function AnimeDetailHero({
   );
   const [candidateIndex, setCandidateIndex] = useState(0);
   const currentBackdrop = resolvedCandidates[candidateIndex];
+  const heroDecode = detailHeroDecodeSize();
   const rawBackdrop = overrideBackdrop ?? baseCandidates[0];
   const candidateKey = resolvedCandidates.join('\0');
   const canPlay = Boolean(resumeEpisode) && !resumeLoading;
@@ -408,12 +410,17 @@ export function AnimeDetailHero({
       <View style={styles.backdrop}>
         {currentBackdrop ? (
           <Image
-            source={hotlinkImageSource(currentBackdrop)}
+            source={{
+              ...hotlinkImageSource(currentBackdrop),
+              width: heroDecode.width,
+              height: heroDecode.height,
+            }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             contentPosition={{ top: '22%', left: '50%' }}
             cachePolicy="memory-disk"
             recyclingKey={currentBackdrop}
+            transition={0}
             onLoad={() => reportYaniPosterLoadSuccess()}
             onError={onBackdropError}
           />

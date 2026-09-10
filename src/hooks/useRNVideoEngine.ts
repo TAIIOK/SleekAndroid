@@ -36,6 +36,7 @@ import {
   findActiveCues,
   type SubtitleCue,
 } from '@/lib/parseSubtitles';
+import { resumeSeekTimeSec } from '@/lib/progressUtils';
 
 const REBUFFER_SPINNER_DELAY_MS = 400;
 const UI_TICK_MS = 1000;
@@ -219,18 +220,7 @@ export function useRNVideoEngine({
   }, []);
 
   const resumeIntentTarget = useCallback((durSec: number): number | null => {
-    if (typeof startTimeRef.current === 'number' && startTimeRef.current > 1) {
-      return startTimeRef.current;
-    }
-    if (
-      typeof startProgressFractionRef.current === 'number' &&
-      startProgressFractionRef.current > 0.01 &&
-      startProgressFractionRef.current < 0.95 &&
-      durSec > 1
-    ) {
-      return durSec * startProgressFractionRef.current;
-    }
-    return null;
+    return resumeSeekTimeSec(durSec, startTimeRef.current, startProgressFractionRef.current);
   }, []);
 
   const positionReadyForSkip = useCallback((timeSec: number): boolean => {
@@ -276,7 +266,7 @@ export function useRNVideoEngine({
       if (resumeKeyRef.current === key && resumeSettledRef.current) return;
 
       const target = resumeIntentTarget(durSec);
-      if (target != null && target > 1 && target < durSec - 1) {
+      if (target != null && target > 1 && target < durSec) {
         resumeTargetRef.current = target;
         videoRef.current?.seek(target);
         // Keep UI near target, but leave currentTimeRef until onProgress confirms

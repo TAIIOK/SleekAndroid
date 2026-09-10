@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sleek",
     "slug": "sleek",
-    "version": "1.0.17",
+    "version": "1.0.18",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "runtimeVersion": {
@@ -29,7 +29,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "ru.taiiok.aniverse.app"
+      "package": "ru.taiiok.aniverse.app",
+      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
     },
     "extra": {
       "apiUrl": "https://api.taiiok.ru",
@@ -79,6 +80,12 @@
               "intent": [
                 {
                   "action": "android.speech.action.RECOGNIZE_SPEECH"
+                },
+                {
+                  "action": "android.intent.action.VIEW",
+                  "data": {
+                    "mimeType": "application/vnd.android.package-archive"
+                  }
                 }
               ]
             }
@@ -95,7 +102,8 @@
       "expo-updates",
       "./plugins/withLargeHeap.js",
       "./plugins/withLetsEncryptGenYTrust.js",
-      "./plugins/withRnVideoDisableDefaultControls.js"
+      "./plugins/withRnVideoDisableDefaultControls.js",
+      "./plugins/withInstallPackages.js"
     ],
     "experiments": {
       "typedRoutes": false,

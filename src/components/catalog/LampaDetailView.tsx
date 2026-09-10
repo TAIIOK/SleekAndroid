@@ -27,7 +27,7 @@ import { fetchLampaExternalRatings } from '@/api/lampaRatings';
 import { fetchLampaProgress } from '@/api/progress';
 import { fetchActivityHistory } from '@/api/user';
 import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
-import { PosterRail } from '@/components/catalog/PosterRail';
+import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
 import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
 import { LampaDetailPlot } from '@/components/lampa/detail/LampaDetailPlot';
@@ -38,6 +38,7 @@ import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBack
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
+import { capDetailRailItems } from '@/lib/catalogRailPage';
 import {
   excludeRelatedLampaItems,
   lampaCardSubtitle,
@@ -49,7 +50,7 @@ import {
 } from '@/lib/lampaDetail';
 import type { UserListStatus } from '@/lib/libraryStatus';
 import { lampaPosterPath } from '@/lib/poster';
-import { buildLampaPlaybackState, isUnfinishedProgress } from '@/lib/progressUtils';
+import { buildLampaPlaybackState, explicitResumeProgress, isUnfinishedProgress } from '@/lib/progressUtils';
 import {
   lampaWatchHistoryKey,
   rememberWatchHistoryMeta,
@@ -205,10 +206,10 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     enabled: belowFoldReady && tmdbId != null && !!detail,
   });
 
-  const invalidateLibrary = () => {
+  const invalidateLibrary = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['library-lampa'] });
     void queryClient.invalidateQueries({ queryKey: ['library-favorites'] });
-  };
+  }, [queryClient]);
 
   const openSources = useCallback((preferResume: boolean) => {
     if (preferResume && (savedState?.hasHistory || resumeSeason != null || resumeEpisode != null)) {
@@ -273,11 +274,11 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     void attemptResumeThenPlayOrSheet(true);
   }, [attemptResumeThenPlayOrSheet, detail, kind, routeId, router, shouldAutoResume]);
 
-  const canSilentResume = isUnfinishedProgress(
-    resumeStartProgress ?? savedState?.lastProgress ?? 0,
-  );
+  const canSilentResume =
+    isUnfinishedProgress(resumeStartProgress ?? savedState?.lastProgress ?? 0) ||
+    explicitResumeProgress(resumeStartProgress ?? 0) != null;
 
-  const onWatch = () => {
+  const onWatch = useCallback(() => {
     // iOS parity: silent resume only when there is real unfinished progress.
     // First watch («Смотреть сейчас») must open the source sheet — not auto-pick
     // the first WatchHub source / dub / quality behind «Возобновление просмотра».
@@ -286,51 +287,99 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
       return;
     }
     openSources(!!savedState?.hasHistory);
-  };
+  }, [attemptResumeThenPlayOrSheet, canSilentResume, openSources, savedState?.hasHistory]);
 
-  const onSelectEpisode = (season: number, episode: number) => {
+  const onSelectEpisode = useCallback((season: number, episode: number) => {
     setPickerSeason(season);
     setPickerEpisode(episode);
     setAutoPlayPreferred(true);
     setSheetOpen(true);
-  };
+  }, []);
 
   const libraryId = lampaObjectId || routeId;
 
-  const onStatusChange = (status: UserListStatus) => {
+  const onStatusChange = useCallback((status: UserListStatus) => {
     if (!isAuthenticated || !libraryId) return;
     void updateLibraryLampaStatus(libraryId, status).then(invalidateLibrary);
-  };
+  }, [invalidateLibrary, isAuthenticated, libraryId]);
 
-  const onToggleFavorite = () => {
+  const onToggleFavorite = useCallback(() => {
     if (!isAuthenticated || !libraryId) return;
     void toggleLampaFavorite(
       libraryId,
       savedState?.isFavorite ?? false,
       savedState?.status,
     ).then(invalidateLibrary);
-  };
+  }, [invalidateLibrary, isAuthenticated, libraryId, savedState?.isFavorite, savedState?.status]);
+
+  const onOpenSourcesBrowse = useCallback(() => {
+    openSources(false);
+  }, [openSources]);
+
+  const onCloseSheet = useCallback(() => {
+    setSheetOpen(false);
+  }, []);
 
   const seasons = detail ? parseLampaSeasons(detail.seasons) : [];
 
-  const openLampaItem = (itemId: string | number, itemKind: 'movie' | 'tv' = kind) => {
+  const openLampaItem = useCallback((itemId: string | number, itemKind: 'movie' | 'tv' = kind) => {
     const path = lampaDetailPath(itemKind, { id: itemId });
     if (!path.includes('/undefined') && !path.endsWith('/')) {
       router.push(path as '/movies/[id]');
     }
-  };
+  }, [kind, router]);
 
-  const toRailItems = (items: LampaItem[]) =>
-    items.map((item) => ({
+  const toRailItems = useCallback((items: LampaItem[]) => {
+    return capDetailRailItems(items, isTvUi()).map((item) => ({
       ...mapLampaToRailItem(item),
       subtitle: lampaCardSubtitle(item),
     }));
+  }, []);
 
-  const openFromList = (items: LampaItem[], itemId: string | number) => {
-    const source = items.find((row) => String(row.id) === String(itemId));
-    const itemKind = source?.kind === 'tv' ? 'tv' : source?.kind === 'movie' ? 'movie' : kind;
-    openLampaItem(itemId, itemKind);
-  };
+  const franchiseRail = useMemo(() => toRailItems(franchise), [franchise, toRailItems]);
+  const recommendationsRail = useMemo(
+    () => toRailItems(recommendations),
+    [recommendations, toRailItems],
+  );
+  const similarRail = useMemo(() => toRailItems(similarItems), [similarItems, toRailItems]);
+
+  const onPressFranchise = useCallback(
+    (item: RailItem) => {
+      const source = franchise.find((row) => String(row.id) === String(item.id));
+      const itemKind = source?.kind === 'tv' ? 'tv' : source?.kind === 'movie' ? 'movie' : kind;
+      openLampaItem(item.id, itemKind);
+    },
+    [franchise, kind, openLampaItem],
+  );
+  const onPressRecommendations = useCallback(
+    (item: RailItem) => {
+      const source = recommendations.find((row) => String(row.id) === String(item.id));
+      const itemKind = source?.kind === 'tv' ? 'tv' : source?.kind === 'movie' ? 'movie' : kind;
+      openLampaItem(item.id, itemKind);
+    },
+    [kind, openLampaItem, recommendations],
+  );
+  const onPressSimilar = useCallback(
+    (item: RailItem) => {
+      const source = similarItems.find((row) => String(row.id) === String(item.id));
+      const itemKind = source?.kind === 'tv' ? 'tv' : source?.kind === 'movie' ? 'movie' : kind;
+      openLampaItem(item.id, itemKind);
+    },
+    [kind, openLampaItem, similarItems],
+  );
+
+  const collectionItem = useMemo(
+    () =>
+      detail
+        ? {
+            mediaType: 'lampa' as const,
+            mediaId: `${kind}:${routeId}`,
+            title: lampaTitle(detail),
+            poster: lampaPosterPath(detail),
+          }
+        : null,
+    [detail, kind, routeId],
+  );
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     notifyViewportScroll(event.nativeEvent.contentOffset.y);
@@ -342,11 +391,11 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
         <LazyCatalogRail>
           <PosterRail
             title="Связанные"
-            items={toRailItems(franchise)}
+            items={franchiseRail}
             loading={franchiseLoading}
             itemWidth={layout.posterWidthDetail}
             flush
-            onItemPress={(item) => openFromList(franchise, item.id)}
+            onItemPress={onPressFranchise}
           />
         </LazyCatalogRail>
       ) : null}
@@ -354,11 +403,11 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
         <LazyCatalogRail>
           <PosterRail
             title="Рекомендации"
-            items={toRailItems(recommendations)}
+            items={recommendationsRail}
             loading={recommendationsLoading}
             itemWidth={layout.posterWidthDetail}
             flush
-            onItemPress={(item) => openFromList(recommendations, item.id)}
+            onItemPress={onPressRecommendations}
           />
         </LazyCatalogRail>
       ) : null}
@@ -366,11 +415,11 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
         <LazyCatalogRail>
           <PosterRail
             title="Похожее"
-            items={toRailItems(similarItems)}
+            items={similarRail}
             loading={similarLoading}
             itemWidth={layout.posterWidthDetail}
             flush
-            onItemPress={(item) => openFromList(similarItems, item.id)}
+            onItemPress={onPressSimilar}
           />
         </LazyCatalogRail>
       ) : null}
@@ -427,14 +476,9 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
             userStatus={savedState?.status}
             isFavorite={savedState?.isFavorite}
             libraryDisabled={!isAuthenticated}
-            collectionItem={{
-              mediaType: 'lampa',
-              mediaId: `${kind}:${routeId}`,
-              title: lampaTitle(detail),
-              poster: lampaPosterPath(detail),
-            }}
+            collectionItem={collectionItem}
             onWatch={onWatch}
-            onOpenSources={() => openSources(false)}
+            onOpenSources={onOpenSourcesBrowse}
             onStatusChange={onStatusChange}
             onToggleFavorite={onToggleFavorite}
             externalRatings={externalRatings}
@@ -466,10 +510,10 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   return (
     <View style={styles.root} collapsable={false}>
       {main}
-      {detail && !resuming ? (
+      {sheetOpen && detail && !resuming ? (
         <LampaSourceSheet
           visible={sheetOpen}
-          onClose={() => setSheetOpen(false)}
+          onClose={onCloseSheet}
           detail={detail}
           kind={kind}
           routeId={routeId}

@@ -1,6 +1,7 @@
 import { fetchLampaDetail, type LampaDetail } from '@/api/catalog';
 import { resolveLampaTmdbId } from '@/lib/lampaDetail';
 import { loadLampaLastSelection } from '@/lib/lampaLastSelection';
+import { explicitResumeProgress } from '@/lib/progressUtils';
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import {
   buildTaskRequest,
@@ -195,10 +196,7 @@ export async function resumeLampaFromLastSelection(
       episode,
       tmdbId: resolveLampaTmdbId(detail, routeId),
       imdbId: typeof imdbRaw === 'string' && imdbRaw.trim() ? imdbRaw.trim() : undefined,
-      startProgress:
-        startProgress != null && startProgress > 0.01 && startProgress < 0.98
-          ? startProgress
-          : undefined,
+      startProgress: explicitResumeProgress(startProgress ?? 0),
       taskId: session.taskId,
       sourceId: source.source_id,
       translatorId: translator.id,

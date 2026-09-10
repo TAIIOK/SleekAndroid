@@ -7,7 +7,7 @@ Resume and continue-watching must attribute progress to the episode the user act
 1. [x] Detail resume state (anime + Lampa) derives season/episode and progress from the same unfinished progress row (`0.01 < progress < 0.98`), ignoring unfinished rows superseded by a later finished watch (`updatedAt`).
 2. [x] Library `lastEpisode` / `lastWatchingEpisode` is used only as a fallback when no current unfinished progress rows exist.
 3. [x] Resume UI never pairs one episode’s number with `max(progress)` from another episode.
-4. [x] Continue Watching includes only current unfinished rows (`0.01 < progress < 0.98`, not `completed`, not superseded by newer finished activity).
+4. [x] Continue Watching keeps the current title including 90–100% / `completed` rows and always hands the saved position to the player. Ignore unfinished rows superseded by newer finished activity.
 5. [x] Anime episode switches flush pending progress for the current episode before navigating.
 5b. [x] Progress sync interval is 5s (not 20s); pending progress flushes on player Back, app background/inactive, and unmount.
 5c. [x] Exit Back awaits the progress PUT (and patches React Query) before navigating so Home does not race a stale GET.
@@ -21,7 +21,7 @@ Resume and continue-watching must attribute progress to the episode the user act
 ## Acceptance Criteria
 
 - After watching episode 2 to ~40% (and not watching episode 3), detail hero shows episode 2 with ~40%, not episode 3.
-- Continue Watching deep-links to episode 2 with the same progress.
+- Continue Watching deep-links to episode 2 with the same progress and starts playback at that position, including 90–100%.
 - Finishing episode 2 with auto-next does not write completed/high progress for episode 3 until the user actually watches it.
 - Episode list progress bars appear only on episodes with real progress rows.
 - After leaving episode 3 unfinished on TV and completing later episodes on phone/web, TV resume/CW does not return to episode 3.
@@ -29,7 +29,7 @@ Resume and continue-watching must attribute progress to the episode the user act
 
 ## Notes
 
-- Write completion threshold remains `progress >= 0.9`; resume/CW unfinished upper bound is `0.98`.
+- Write completion threshold remains `progress >= 0.9`. Continue Watching cards always resume at the saved fraction, including 90–100%. The player leaves 1s before EOF so 100% does not immediately end.
 - Phone/server may still advance library `lastEpisode` to N+1; the client must not trust that alone for the progress percentage.
 - Cross-device: finished rows with newer `updatedAt` supersede older unfinished rows for the same title.
 - Player writes Lampa progress with numeric route id when available so CW can deep-link without enrichment; detail must merge both id forms.

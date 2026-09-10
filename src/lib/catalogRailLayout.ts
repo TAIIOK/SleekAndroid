@@ -1,3 +1,5 @@
+import { Dimensions } from 'react-native';
+
 import { layout, spacing, typography } from '@/constants/aniverse';
 import { isTvUi } from '@/lib/isTvUi';
 
@@ -18,6 +20,14 @@ export function continuePosterDecodeSize(width = layout.continueCardWidth): {
   return {
     width: Math.round(width),
     height: Math.round((width * 9) / 16),
+  };
+}
+
+/** Decode size for detail hero backdrops (matches hero minHeight). */
+export function detailHeroDecodeSize(): { width: number; height: number } {
+  return {
+    width: Math.round(Dimensions.get('window').width),
+    height: isTvUi() ? 520 : 280,
   };
 }
 

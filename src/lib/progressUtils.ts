@@ -31,6 +31,38 @@ export function isUnfinishedProgress(progress: number, _completed?: boolean): bo
   return value > IN_PROGRESS_MIN && value < IN_PROGRESS_MAX;
 }
 
+/** Saved position to hand to the player from Continue Watching (no 90/98% drop). */
+export function explicitResumeProgress(progress: number): number | undefined {
+  const value = normalizeProgress(progress);
+  return value > IN_PROGRESS_MIN ? value : undefined;
+}
+
+const RESUME_END_PADDING_SEC = 1;
+
+/**
+ * Seek target for an explicit resume. Leaves 1s before EOF so 100% does not
+ * fire `onEnded` on the first tick.
+ */
+export function resumeSeekTimeSec(
+  durationSec: number,
+  startTime?: number,
+  startProgressFraction?: number,
+): number | null {
+  if (!(durationSec > 1)) return null;
+  let target: number | null = null;
+  if (typeof startTime === 'number' && startTime > 1) {
+    target = startTime;
+  } else if (
+    typeof startProgressFraction === 'number' &&
+    startProgressFraction > IN_PROGRESS_MIN
+  ) {
+    target = durationSec * startProgressFraction;
+  }
+  if (target == null) return null;
+  const maxTime = Math.max(0, durationSec - RESUME_END_PADDING_SEC);
+  return Math.min(Math.max(0, target), maxTime);
+}
+
 /** Label for episode progress chip; null when progress is absent / stub. */
 export function formatProgressLabel(progress: number): string | null {
   const p = normalizeProgress(progress);
@@ -144,8 +176,11 @@ function pickLatestByUpdatedAt<T extends { updatedAt?: string; progress: number 
   });
 }
 
-/** True when the row reflects real watch activity (stub opens excluded). */
-function hasMeaningfulProgress(progress: number, completed?: boolean): boolean {
+/**
+ * Continue Watching eligibility: any real watch activity, including 90–100%.
+ * The API marks `completed` at ~90%; that must not drop the title from the rail.
+ */
+export function hasMeaningfulProgress(progress: number, completed?: boolean): boolean {
   if (completed) return true;
   return normalizeProgress(progress) > IN_PROGRESS_MIN;
 }

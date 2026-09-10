@@ -146,16 +146,12 @@ function openItem(
     return;
   }
 
-  if (
-    isTvUi() &&
-    (item.kind === 'movie' || item.kind === 'tv') &&
-    item.routeId
-  ) {
+  if ((item.kind === 'movie' || item.kind === 'tv') && item.routeId) {
     router.push({
       pathname: item.kind === 'tv' ? '/series/[id]' : '/movies/[id]',
       params: {
         id: item.routeId,
-        resume: '1',
+        ...(isTvUi() ? { resume: '1' } : {}),
         ...(item.season != null ? { season: String(item.season) } : {}),
         ...(item.episode != null ? { episode: String(item.episode) } : {}),
         ...(item.startProgress != null

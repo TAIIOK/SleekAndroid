@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchAnimeEpisodes } from '@/api/catalog';
+import { TV_EPISODE_PAGE_SIZE } from '@/lib/detailEpisodeWindow';
+import { isTvUi } from '@/lib/isTvUi';
 import type { AnimeEpisode } from '@aniverse/types';
 
-export function useAccumulatedEpisodes(animeId: number, pageSize = 24) {
+const DEFAULT_PAGE_SIZE = isTvUi() ? TV_EPISODE_PAGE_SIZE : 24;
+
+export function useAccumulatedEpisodes(animeId: number, pageSize = DEFAULT_PAGE_SIZE) {
   const [page, setPage] = useState(1);
   const [episodes, setEpisodes] = useState<AnimeEpisode[]>([]);
 
@@ -31,6 +35,8 @@ export function useAccumulatedEpisodes(animeId: number, pageSize = 24) {
     });
   }, [data]);
 
+  const loadMore = useCallback(() => setPage((value) => value + 1), []);
+
   return {
     episodes,
     totalPages: data?.totalPages ?? 1,
@@ -39,6 +45,6 @@ export function useAccumulatedEpisodes(animeId: number, pageSize = 24) {
     isLoading: isLoading && episodes.length === 0,
     isFetchingMore: isFetching && page > 1,
     hasMore: page < (data?.totalPages ?? 1),
-    loadMore: () => setPage((value) => value + 1),
+    loadMore,
   };
 }

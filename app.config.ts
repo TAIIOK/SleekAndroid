@@ -14,7 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: isTvBuild ? 'Sleek TV' : 'Sleek',
   slug: 'sleek',
-  version: '1.0.17',
+  version: '1.0.18',
   scheme: 'sleek',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -43,7 +43,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     predictiveBackGestureEnabled: false,
     package: isTvBuild ? 'ru.taiiok.aniverse.tv' : 'ru.taiiok.aniverse.app',
-    versionCode: 18,
+    permissions: ['android.permission.REQUEST_INSTALL_PACKAGES'],
+    versionCode: 19,
     softwareKeyboardLayoutMode: 'pan',
     intentFilters: [
       {
@@ -101,7 +102,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           targetSdkVersion: 35,
           manifestQueries: {
             package: ['com.brouken.player', 'org.videolan.vlc', 'is.xyz.mpv'],
-            intent: [{ action: 'android.speech.action.RECOGNIZE_SPEECH' }],
+            intent: [
+              { action: 'android.speech.action.RECOGNIZE_SPEECH' },
+              {
+                action: 'android.intent.action.VIEW',
+                data: { mimeType: 'application/vnd.android.package-archive' },
+              },
+            ],
           },
         },
       },
@@ -117,6 +124,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     './plugins/withLargeHeap.js',
     './plugins/withLetsEncryptGenYTrust.js',
     './plugins/withRnVideoDisableDefaultControls.js',
+    './plugins/withInstallPackages.js',
   ],
   experiments: {
     typedRoutes: false,

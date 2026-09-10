@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Image,
+  FlatList,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type ListRenderItemInfo,
 } from 'react-native';
 
 import type { LampaSeason } from '@/api/catalog';
@@ -23,6 +25,12 @@ import { formatProgressLabel } from '@/lib/progressUtils';
 
 /** Matches web desktop `max-h-[32rem]` / mobile `max-h-[24rem]`. */
 const EPISODE_LIST_MAX_HEIGHT = 360;
+const STILL_WIDTH = isTvUi() ? 140 : 96;
+const STILL_HEIGHT = isTvUi() ? 79 : 54;
+const STILL_DECODE = { width: STILL_WIDTH, height: STILL_HEIGHT };
+const EPISODE_CARD_PAD = isTvUi() ? spacing.sm : 6;
+const EPISODE_CARD_HEIGHT = STILL_HEIGHT + EPISODE_CARD_PAD * 2;
+const EPISODE_STRIDE = EPISODE_CARD_HEIGHT + spacing.sm;
 
 interface LampaDetailSeasonsProps {
   seasons: LampaSeason[];
@@ -31,13 +39,96 @@ interface LampaDetailSeasonsProps {
   onSelectEpisode: (season: number, episode: number) => void;
 }
 
-export function LampaDetailSeasons({
+interface EpisodeCardProps {
+  episode: LampaEpisodeDetail;
+  progress: number;
+  season: number;
+  onSelectEpisode: (season: number, episode: number) => void;
+}
+
+const EpisodeCard = memo(function EpisodeCard({
+  episode,
+  progress,
+  season,
+  onSelectEpisode,
+}: EpisodeCardProps) {
+  const still = resolveLampaPosterUrl(episode.stillPath, 'w342');
+  const airDate = formatRuDate(episode.airDate);
+  const watched = progress >= 0.98;
+  const progressWidth = watched
+    ? 100
+    : Math.round(Math.min(1, Math.max(0, progress)) * 100);
+  const progressLabel = formatProgressLabel(progress);
+
+  const onPress = useCallback(() => {
+    onSelectEpisode(season, episode.episodeNumber);
+  }, [episode.episodeNumber, onSelectEpisode, season]);
+
+  return (
+    <TvFocusable onPress={onPress} style={styles.episodeCard}>
+      <View style={styles.episodeRow}>
+        <View style={styles.stillWrap}>
+          {still ? (
+            <Image
+              source={{ uri: still, width: STILL_DECODE.width, height: STILL_DECODE.height }}
+              style={styles.still}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={still}
+              transition={0}
+            />
+          ) : (
+            <View style={styles.stillFallback}>
+              <Text style={styles.stillFallbackText}>{episode.episodeNumber}</Text>
+            </View>
+          )}
+          {(progress > 0.02 || watched) && (
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressWidth}%` }]} />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.episodeBody}>
+          <View style={styles.episodeMeta}>
+            <Text style={styles.epNum}>Серия {episode.episodeNumber}</Text>
+            {airDate ? <Text style={styles.airDate}>{airDate}</Text> : null}
+          </View>
+          <View style={styles.titleRow}>
+            <Text style={styles.epTitle} numberOfLines={1}>
+              {episode.name}
+            </Text>
+            {progressLabel ? (
+              <View style={styles.progressBadge}>
+                <Text style={styles.progressBadgeText}>{progressLabel}</Text>
+              </View>
+            ) : null}
+          </View>
+          {episode.overview ? (
+            <Text style={styles.epOverview} numberOfLines={2}>
+              {episode.overview}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </TvFocusable>
+  );
+});
+
+const EpisodeSeparator = memo(function EpisodeSeparator() {
+  return <View style={styles.episodeSeparator} />;
+});
+
+export const LampaDetailSeasons = memo(function LampaDetailSeasons({
   seasons,
   tmdbId,
   episodeProgressByKey = {},
   onSelectEpisode,
 }: LampaDetailSeasonsProps) {
-  const playableSeasons = seasons.filter((season) => (season.seasonNumber ?? 0) > 0);
+  const playableSeasons = useMemo(
+    () => seasons.filter((season) => (season.seasonNumber ?? 0) > 0),
+    [seasons],
+  );
   const [selectedSeason, setSelectedSeason] = useState(
     playableSeasons[0]?.seasonNumber ?? 1,
   );
@@ -58,17 +149,72 @@ export function LampaDetailSeasons({
     staleTime: 5 * 60_000,
   });
 
+  const episodes: LampaEpisodeDetail[] = useMemo(() => {
+    if (data?.episodes) return data.episodes;
+    if (!selectedMeta?.episodeCount) return [];
+    return Array.from({ length: selectedMeta.episodeCount }, (_, i) => ({
+      id: i + 1,
+      episodeNumber: i + 1,
+      name: `Эпизод ${i + 1}`,
+    }));
+  }, [data?.episodes, selectedMeta?.episodeCount]);
+
+  const renderEpisode = useCallback(
+    ({ item }: ListRenderItemInfo<LampaEpisodeDetail>) => (
+      <EpisodeCard
+        episode={item}
+        season={selectedSeason}
+        progress={
+          episodeProgressByKey[lampaProgressKey(selectedSeason, item.episodeNumber)] ?? 0
+        }
+        onSelectEpisode={onSelectEpisode}
+      />
+    ),
+    [episodeProgressByKey, onSelectEpisode, selectedSeason],
+  );
+
   if (!playableSeasons.length) return null;
 
-  const episodes: LampaEpisodeDetail[] =
-    data?.episodes ??
-    (selectedMeta?.episodeCount
-      ? Array.from({ length: selectedMeta.episodeCount }, (_, i) => ({
-          id: i + 1,
-          episodeNumber: i + 1,
-          name: `Эпизод ${i + 1}`,
-        }))
-      : []);
+  const episodeList = isTvUi() ? (
+    <FlatList
+      data={episodes}
+      keyExtractor={(item) => `${selectedSeason}-${item.episodeNumber}-${item.id}`}
+      renderItem={renderEpisode}
+      style={styles.listScroll}
+      contentContainerStyle={styles.listContentTv}
+      ItemSeparatorComponent={EpisodeSeparator}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+      initialNumToRender={6}
+      maxToRenderPerBatch={4}
+      windowSize={5}
+      removeClippedSubviews
+      getItemLayout={(_data, index) => ({
+        length: EPISODE_STRIDE,
+        offset: EPISODE_STRIDE * index,
+        index,
+      })}
+    />
+  ) : (
+    <ScrollView
+      style={styles.listScroll}
+      contentContainerStyle={styles.listContent}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+    >
+      {episodes.map((episode) => (
+        <EpisodeCard
+          key={`${selectedSeason}-${episode.episodeNumber}-${episode.id}`}
+          episode={episode}
+          season={selectedSeason}
+          progress={
+            episodeProgressByKey[lampaProgressKey(selectedSeason, episode.episodeNumber)] ?? 0
+          }
+          onSelectEpisode={onSelectEpisode}
+        />
+      ))}
+    </ScrollView>
+  );
 
   return (
     <View style={styles.section}>
@@ -112,96 +258,14 @@ export function LampaDetailSeasons({
       ) : null}
 
       <View style={styles.listShell}>
-        <ScrollView
-          style={styles.listScroll}
-          contentContainerStyle={styles.listContent}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-        >
-          {episodes.map((episode) => {
-            const progress =
-              episodeProgressByKey[lampaProgressKey(selectedSeason, episode.episodeNumber)] ?? 0;
-            return (
-              <EpisodeCard
-                key={`${selectedSeason}-${episode.episodeNumber}-${episode.id}`}
-                episode={episode}
-                progress={progress}
-                onPress={() => onSelectEpisode(selectedSeason, episode.episodeNumber)}
-              />
-            );
-          })}
-        </ScrollView>
+        {episodeList}
         {episodes.length > 2 ? (
           <Text style={styles.scrollHint}>Прокрутите, чтобы увидеть остальные серии</Text>
         ) : null}
       </View>
     </View>
   );
-}
-
-function EpisodeCard({
-  episode,
-  progress,
-  onPress,
-}: {
-  episode: LampaEpisodeDetail;
-  progress: number;
-  onPress: () => void;
-}) {
-  const still = resolveLampaPosterUrl(episode.stillPath, 'w342');
-  const airDate = formatRuDate(episode.airDate);
-  const watched = progress >= 0.98;
-  const progressWidth = watched
-    ? 100
-    : Math.round(Math.min(1, Math.max(0, progress)) * 100);
-  const progressLabel = formatProgressLabel(progress);
-
-  return (
-    <TvFocusable onPress={onPress} style={styles.episodeCard}>
-      <View style={styles.episodeRow}>
-        <View style={styles.stillWrap}>
-          {still ? (
-            <Image source={{ uri: still }} style={styles.still} resizeMode="cover" />
-          ) : (
-            <View style={styles.stillFallback}>
-              <Text style={styles.stillFallbackText}>{episode.episodeNumber}</Text>
-            </View>
-          )}
-          {(progress > 0.02 || watched) && (
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressWidth}%` }]} />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.episodeBody}>
-          <View style={styles.episodeMeta}>
-            <Text style={styles.epNum}>Серия {episode.episodeNumber}</Text>
-            {airDate ? <Text style={styles.airDate}>{airDate}</Text> : null}
-          </View>
-          <View style={styles.titleRow}>
-            <Text style={styles.epTitle} numberOfLines={1}>
-              {episode.name}
-            </Text>
-            {progressLabel ? (
-              <View style={styles.progressBadge}>
-                <Text style={styles.progressBadgeText}>{progressLabel}</Text>
-              </View>
-            ) : null}
-          </View>
-          {episode.overview ? (
-            <Text style={styles.epOverview} numberOfLines={2}>
-              {episode.overview}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-    </TvFocusable>
-  );
-}
-
-const STILL_WIDTH = isTvUi() ? 140 : 96;
-const STILL_HEIGHT = isTvUi() ? 79 : 54;
+});
 
 const styles = StyleSheet.create({
   section: {
@@ -259,6 +323,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xs,
   },
+  listContentTv: {
+    paddingBottom: spacing.xs,
+  },
+  episodeSeparator: {
+    height: spacing.sm,
+  },
   scrollHint: {
     color: colors.textMuted,
     fontSize: 12,
@@ -266,17 +336,19 @@ const styles = StyleSheet.create({
   },
   episodeCard: {
     width: '100%',
+    height: isTvUi() ? EPISODE_CARD_HEIGHT : undefined,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
     borderColor: colors.border,
-    padding: isTvUi() ? spacing.sm : 6,
+    padding: EPISODE_CARD_PAD,
     overflow: 'hidden',
   },
   episodeRow: {
     flexDirection: 'row',
     gap: isTvUi() ? spacing.sm + 2 : spacing.sm,
     alignItems: 'center',
+    flex: isTvUi() ? 1 : undefined,
   },
   stillWrap: {
     width: STILL_WIDTH,

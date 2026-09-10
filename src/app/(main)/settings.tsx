@@ -9,6 +9,7 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { API_BASE, BOOSTY_URL, SITE_PUBLIC_URL } from '@/lib/config';
 import { isTvUi } from '@/lib/isTvUi';
+import { checkBinaryUpdate, presentApkUpdatePrompt } from '@/lib/nativeApkUpdate';
 import {
   loadPlayerPreferences,
   savePlayerPreferences,
@@ -78,6 +79,28 @@ export default function SettingsScreen() {
     }
   };
 
+  const checkAppUpdate = async () => {
+    setBusy(true);
+    try {
+      const result = await checkBinaryUpdate();
+      if (result.status === 'available') {
+        presentApkUpdatePrompt(result.manifest);
+        return;
+      }
+      if (result.status === 'up_to_date') {
+        Alert.alert('Обновления', 'Установлена актуальная версия');
+        return;
+      }
+      if (result.status === 'unavailable') {
+        Alert.alert('Обновления', 'Новая версия есть, но ссылка на APK недоступна');
+        return;
+      }
+      Alert.alert('Обновления', result.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.scroll} {...chromeScrollProps}>
       <Text style={styles.title}>Настройки</Text>
@@ -129,6 +152,15 @@ export default function SettingsScreen() {
       </ProfileSection>
 
       <ProfileSection title="О приложении">
+        <TvFocusable
+          style={styles.row}
+          focusedStyle={styles.rowFocused}
+          disabled={busy}
+          onPress={() => void checkAppUpdate()}
+        >
+          <Text style={styles.rowLabel}>Проверить обновления</Text>
+          <Text style={styles.rowMeta}>{busy ? 'Проверка…' : `v${version}`}</Text>
+        </TvFocusable>
         <View style={styles.infoCard}>
           <InfoLine label="Версия" value={version} />
           <InfoLine label="OTA channel" value={String(channel)} />

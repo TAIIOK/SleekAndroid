@@ -62,8 +62,7 @@ describe('buildContinueWatchingItems', () => {
     expect(items.some((item) => item.kind === 'anime' && item.episodeId === 10)).toBe(false);
     const animeItem = items.find((item) => item.kind === 'anime' && item.animeId === 5);
     expect(animeItem?.episodeId).toBe(11);
-    // Near-end episode still opens the player (auto-next / fresh start), not detail.
-    expect(animeItem?.startProgress).toBeUndefined();
+    expect(animeItem?.startProgress).toBe(0.99);
     expect(animeItem?.href).toBe('/watch/anime/5/11');
     expect(animeItem?.progress).toBe(0.99);
   });
@@ -83,7 +82,7 @@ describe('buildContinueWatchingItems', () => {
     const animeItem = items.find((item) => item.kind === 'anime' && item.animeId === 9);
     expect(animeItem).toBeTruthy();
     expect(animeItem?.href).toBe('/watch/anime/9/42');
-    expect(animeItem?.startProgress).toBeUndefined();
+    expect(animeItem?.startProgress).toBe(0.99);
     expect(animeItem?.progress).toBe(0.99);
   });
 
@@ -103,6 +102,70 @@ describe('buildContinueWatchingItems', () => {
     expect(animeItem?.progress).toBe(0.92);
     expect(animeItem?.startProgress).toBe(0.92);
     expect(animeItem?.href).toBe('/watch/anime/3/7');
+  });
+
+  it('keeps titles on the rail at 90–100% even when API marks completed', () => {
+    const animeProgress: UserAnimeProgress[] = [
+      {
+        episodeId: 4,
+        animeId: 8,
+        progress: 0.9,
+        completed: true,
+        updatedAt: '2026-07-24T10:00:00.000Z',
+      },
+    ];
+    const lampaProgress: UserLampaProgress[] = [
+      {
+        lampaId: '2002',
+        seasonOrdinal: 0,
+        episodeOrdinal: 0,
+        progress: 1,
+        completed: true,
+        updatedAt: '2026-07-24T11:00:00.000Z',
+      },
+    ];
+
+    const items = buildContinueWatchingItems(
+      [
+        {
+          id: 8,
+          animeId: 8,
+          status: 'completed',
+          lastWatchingEpisode: 4,
+          isFavorite: false,
+          title: 'Finished Anime',
+        },
+      ],
+      [
+        {
+          status: 'completed',
+          lampaObjectId: '2002',
+          lampa: {
+            objectId: '2002',
+            id: 2002,
+            tmdbId: 2002,
+            kind: 'movie',
+            title: 'Finished Movie',
+            poster: '/p.jpg',
+          },
+        },
+      ],
+      animeProgress,
+      lampaProgress,
+      [],
+    );
+
+    const animeItem = items.find((item) => item.kind === 'anime' && item.animeId === 8);
+    expect(animeItem).toBeTruthy();
+    expect(animeItem?.progress).toBe(0.9);
+    expect(animeItem?.startProgress).toBe(0.9);
+    expect(animeItem?.href).toBe('/watch/anime/8/4');
+
+    const movieItem = items.find((item) => item.title === 'Finished Movie');
+    expect(movieItem).toBeTruthy();
+    expect(movieItem?.progress).toBe(1);
+    expect(movieItem?.startProgress).toBe(1);
+    expect(movieItem?.kind).toBe('movie');
   });
 
   it('does not keep Lampa S1E3 when a later episode was completed on another device', () => {
@@ -152,6 +215,7 @@ describe('buildContinueWatchingItems', () => {
     expect(card).toBeTruthy();
     expect(card?.episode).not.toBe(3);
     expect(card?.episode).toBe(8);
+    expect(card?.startProgress).toBe(1);
   });
 
   it('resolves Lampa posters from image objects instead of String(object)', () => {

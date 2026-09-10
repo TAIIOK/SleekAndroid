@@ -13,6 +13,7 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
+import { capDetailRailItems } from '@/lib/catalogRailPage';
 import { resolveLampaPosterUrl } from '@/lib/config';
 import { setDetailReturnPath } from '@/lib/detailNavigation';
 import { isTvUi } from '@/lib/isTvUi';
@@ -25,16 +26,17 @@ interface LampaDetailCastProps {
 export function LampaDetailCast({ cast, loading }: LampaDetailCastProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const visibleCast = capDetailRailItems(cast, isTvUi());
   const [mountImages, setMountImages] = useState(false);
 
   useEffect(() => {
-    if (loading || !cast.length) {
+    if (loading || !visibleCast.length) {
       setMountImages(false);
       return;
     }
     const timer = setTimeout(() => setMountImages(true), 120);
     return () => clearTimeout(timer);
-  }, [loading, cast.length]);
+  }, [loading, visibleCast.length]);
 
   if (!loading && !cast.length) return null;
 
@@ -46,7 +48,7 @@ export function LampaDetailCast({ cast, loading }: LampaDetailCastProps) {
       <SectionHeader title="Актёры" flush />
       {showTiles ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {cast.map((member) => (
+          {visibleCast.map((member) => (
             <CastTile
               key={member.id}
               member={member}

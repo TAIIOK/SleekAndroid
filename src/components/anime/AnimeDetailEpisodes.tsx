@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -20,6 +21,11 @@ import {
 } from '@/lib/animeDetail';
 import { resolveAnimePosterUrl } from '@/lib/config';
 import {
+  growTvEpisodeWindow,
+  TV_EPISODE_THUMB_DECODE,
+  TV_EPISODE_WINDOW_INITIAL,
+} from '@/lib/detailEpisodeWindow';
+import {
   reportYaniPosterLoadError,
   reportYaniPosterLoadSuccess,
 } from '@/lib/imageCdn';
@@ -30,6 +36,9 @@ const CARD_WIDTH = isTvUi() ? 200 : 112;
 const CARD_GAP = 6;
 const CARD_STRIDE = CARD_WIDTH + CARD_GAP;
 const FILL: DimensionValue = '100%';
+const THUMB_DECODE = isTvUi()
+  ? TV_EPISODE_THUMB_DECODE
+  : { width: CARD_WIDTH, height: Math.round((CARD_WIDTH * 9) / 16) };
 
 interface AnimeDetailEpisodesProps {
   episodes: AnimeEpisode[];
@@ -45,7 +54,90 @@ interface AnimeDetailEpisodesProps {
   filteredEmptyWhileLoading?: boolean;
 }
 
-export function AnimeDetailEpisodes({
+interface EpisodeCardProps {
+  episode: AnimeEpisode;
+  index: number;
+  progress: number;
+  onPlay: (episode: AnimeEpisode) => void;
+  onFocused?: (index: number) => void;
+}
+
+const EpisodeCard = memo(function EpisodeCard({
+  episode,
+  index,
+  progress,
+  onPlay,
+  onFocused,
+}: EpisodeCardProps) {
+  const playable = hasPlayableVideo(episode);
+  const thumb = resolveAnimePosterUrl(episodeThumbnail(episode));
+  const num = episodeNumber(episode);
+  const customTitle =
+    episode.title && !isRedundantEpisodeTitle(episode.title, num)
+      ? episode.title
+      : undefined;
+  const watched = progress >= 0.98;
+  const progressWidth = (
+    watched ? '100%' : `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`
+  ) as DimensionValue;
+
+  const handlePress = useCallback(() => {
+    onPlay(episode);
+  }, [episode, onPlay]);
+
+  const handleFocus = useCallback(() => {
+    onFocused?.(index);
+  }, [index, onFocused]);
+
+  return (
+    <TvFocusable
+      disabled={!playable}
+      onPress={handlePress}
+      onFocus={onFocused ? handleFocus : undefined}
+      railStart={index === 0}
+      style={[
+        isTvUi() ? styles.cardTv : styles.card,
+        !playable && styles.cardDisabled,
+      ]}
+    >
+      <View style={isTvUi() ? styles.thumbWrapTv : styles.thumbWrap}>
+        {thumb ? (
+          <Image
+            source={{ uri: thumb, width: THUMB_DECODE.width, height: THUMB_DECODE.height }}
+            style={styles.thumb}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={thumb}
+            transition={0}
+            onLoad={() => reportYaniPosterLoadSuccess()}
+            onError={() => reportYaniPosterLoadError(thumb)}
+          />
+        ) : (
+          <View style={styles.thumbFallback} />
+        )}
+        <View style={styles.playOverlay} pointerEvents="none">
+          <View style={styles.playBadge}>
+            <Text style={styles.playBadgeText}>{playable ? '▶' : '🔒'}</Text>
+          </View>
+        </View>
+        {(progress > 0.02 || watched) && (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: progressWidth }]} />
+          </View>
+        )}
+      </View>
+      <View style={styles.cardBody}>
+        <Text style={styles.epTitle} numberOfLines={2}>
+          {customTitle
+            ? `${episodeLabel(episode)} · ${customTitle}`
+            : episodeLabel(episode)}
+        </Text>
+      </View>
+    </TvFocusable>
+  );
+});
+
+export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
   episodes,
   isLoading,
   isFetchingMore,
@@ -58,6 +150,36 @@ export function AnimeDetailEpisodes({
   onSelectDubbing,
   filteredEmptyWhileLoading,
 }: AnimeDetailEpisodesProps) {
+  const [mountedCount, setMountedCount] = useState(TV_EPISODE_WINDOW_INITIAL);
+  const prevCountRef = useRef(episodes.length);
+  const listKey = episodes[0]?.id ?? 0;
+
+  useEffect(() => {
+    setMountedCount(TV_EPISODE_WINDOW_INITIAL);
+    prevCountRef.current = 0;
+  }, [listKey]);
+
+  useEffect(() => {
+    const prev = prevCountRef.current;
+    prevCountRef.current = episodes.length;
+    if (episodes.length > prev && prev > 0) {
+      setMountedCount((current) =>
+        current >= prev
+          ? growTvEpisodeWindow(current, Math.max(0, prev - 1), episodes.length)
+          : current,
+      );
+    } else if (episodes.length < prev) {
+      setMountedCount(TV_EPISODE_WINDOW_INITIAL);
+    }
+  }, [episodes.length]);
+
+  const onCardFocus = useCallback(
+    (index: number) => {
+      setMountedCount((current) => growTvEpisodeWindow(current, index, episodes.length));
+    },
+    [episodes.length],
+  );
+
   const header = (
     <View style={styles.header}>
       <Text style={styles.title} numberOfLines={1}>
@@ -94,68 +216,10 @@ export function AnimeDetailEpisodes({
     return null;
   }
 
-  const renderCard = (episode: AnimeEpisode, index: number) => {
-    const progress = progressByEpisodeId[episode.id] ?? 0;
-    const playable = hasPlayableVideo(episode);
-    const thumb = resolveAnimePosterUrl(episodeThumbnail(episode));
-    const num = episodeNumber(episode);
-    const customTitle =
-      episode.title && !isRedundantEpisodeTitle(episode.title, num)
-        ? episode.title
-        : undefined;
-    const watched = progress >= 0.98;
-    const progressWidth = (
-      watched ? '100%' : `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`
-    ) as DimensionValue;
+  const visibleEpisodes = isTvUi() ? episodes.slice(0, mountedCount) : episodes;
+  const showLoadMore = Boolean(hasMore && (!isTvUi() || mountedCount >= episodes.length));
 
-    return (
-      <TvFocusable
-        key={episode.id}
-        disabled={!playable}
-        onPress={() => onPlay(episode)}
-        railStart={index === 0}
-        style={[
-          isTvUi() ? styles.cardTv : styles.card,
-          !playable && styles.cardDisabled,
-        ]}
-      >
-        <View style={isTvUi() ? styles.thumbWrapTv : styles.thumbWrap}>
-          {thumb ? (
-            <Image
-              source={{ uri: thumb }}
-              style={styles.thumb}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              recyclingKey={thumb}
-              onLoad={() => reportYaniPosterLoadSuccess()}
-              onError={() => reportYaniPosterLoadError(thumb)}
-            />
-          ) : (
-            <View style={styles.thumbFallback} />
-          )}
-          <View style={styles.playOverlay} pointerEvents="none">
-            <View style={styles.playBadge}>
-              <Text style={styles.playBadgeText}>{playable ? '▶' : '🔒'}</Text>
-            </View>
-          </View>
-          {(progress > 0.02 || watched) && (
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: progressWidth }]} />
-            </View>
-          )}
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={styles.epTitle} numberOfLines={2}>
-            {customTitle
-              ? `${episodeLabel(episode)} · ${customTitle}`
-              : episodeLabel(episode)}
-          </Text>
-        </View>
-      </TvFocusable>
-    );
-  };
-
-  const loadMore = hasMore ? (
+  const loadMore = showLoadMore ? (
     <TvFocusable
       disabled={isFetchingMore}
       onPress={onLoadMore}
@@ -168,7 +232,14 @@ export function AnimeDetailEpisodes({
   ) : null;
 
   const renderPhoneItem = ({ item, index }: ListRenderItemInfo<AnimeEpisode>) => (
-    <View style={styles.phoneCardWrap}>{renderCard(item, index)}</View>
+    <View style={styles.phoneCardWrap}>
+      <EpisodeCard
+        episode={item}
+        index={index}
+        progress={progressByEpisodeId[item.id] ?? 0}
+        onPlay={onPlay}
+      />
+    </View>
   );
 
   return (
@@ -179,7 +250,16 @@ export function AnimeDetailEpisodes({
         // sibling rails ("Похожее") on Android TV when the hero had no poster.
         <View style={styles.listShell}>
           <View style={styles.listContent}>
-            {episodes.map((episode, index) => renderCard(episode, index))}
+            {visibleEpisodes.map((episode, index) => (
+              <EpisodeCard
+                key={episode.id}
+                episode={episode}
+                index={index}
+                progress={progressByEpisodeId[episode.id] ?? 0}
+                onPlay={onPlay}
+                onFocused={onCardFocus}
+              />
+            ))}
             {loadMore}
           </View>
         </View>
@@ -206,7 +286,7 @@ export function AnimeDetailEpisodes({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   section: { gap: isTvUi() ? spacing.sm : 6 },

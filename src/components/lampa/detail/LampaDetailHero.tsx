@@ -1,11 +1,11 @@
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-  ImageBackground,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import type { LampaDetail } from '@/api/catalog';
 import type { LampaExternalRating } from '@/api/lampaRatings';
@@ -14,8 +14,8 @@ import { DetailLibraryActions } from '@/components/library/DetailLibraryActions'
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { useCreatePartyFromLampa } from '@/hooks/useCreatePartyFromLampa';
+import { detailHeroDecodeSize } from '@/lib/catalogRailLayout';
 import type { UserListStatus } from '@/lib/libraryStatus';
-import { resolveLampaTmdbId } from '@/lib/lampaDetail';
 import {
   buildLampaHeroInfoRows,
   lampaAltTitle,
@@ -27,6 +27,7 @@ import {
   lampaTitle,
   lampaYear,
   localizedLampaStatus,
+  resolveLampaTmdbId,
 } from '@/lib/lampaDetail';
 import { lampaPosterPath } from '@/lib/poster';
 import type { CollectionItemInput } from '@/types/collection';
@@ -312,19 +313,27 @@ export function LampaDetailHero({
     </>
   );
 
+  const backdropDecode = detailHeroDecodeSize();
+
   return (
     <View style={styles.hero}>
-      {backdrop ? (
-        <ImageBackground
-          source={{ uri: backdrop }}
-          style={styles.backdrop}
-          imageStyle={styles.backdropImage}
-        >
-          {body}
-        </ImageBackground>
-      ) : (
-        <View style={styles.backdrop}>{body}</View>
-      )}
+      <View style={styles.backdrop}>
+        {backdrop ? (
+          <Image
+            source={{
+              uri: backdrop,
+              width: backdropDecode.width,
+              height: backdropDecode.height,
+            }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={backdrop}
+            transition={0}
+          />
+        ) : null}
+        {body}
+      </View>
     </View>
   );
 }
@@ -344,9 +353,6 @@ const styles = StyleSheet.create({
     minHeight: isTvUi() ? 520 : 280,
     justifyContent: 'flex-end',
     backgroundColor: colors.bg,
-  },
-  backdropImage: {
-    resizeMode: 'cover',
   },
   bottomFade: {
     position: 'absolute',

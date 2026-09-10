@@ -181,17 +181,17 @@ export default function AnimeDetailScreen() {
     filteredEpisodes.length === 0 &&
     (hasMore || isFetchingMore || episodesLoading);
 
-  const onSelectDubbing = (value: string) => {
+  const onSelectDubbing = useCallback((value: string) => {
     setSelectedDubbing(value);
     void saveAnimeLastDubbing(animeId, value).then(() => setWatchedDubbing(value));
-  };
+  }, [animeId]);
 
-  const invalidateLibrary = () => {
+  const invalidateLibrary = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['library-anime'] });
     void queryClient.invalidateQueries({ queryKey: ['library-favorites'] });
-  };
+  }, [queryClient]);
 
-  const playEpisode = (episode: AnimeEpisode, startProgress?: number) => {
+  const playEpisode = useCallback((episode: AnimeEpisode, startProgress?: number) => {
     const videos = episode.video ?? [];
     const url = pickPlaybackUrl(videos, activeDubbing, DEFAULT_QUALITY);
     if (!url) return;
@@ -205,38 +205,51 @@ export default function AnimeDetailScreen() {
         ...(startProgress != null ? { startProgress: String(startProgress) } : {}),
       },
     });
-  };
+  }, [activeDubbing, animeId, detail?.title, router]);
 
-  const playResume = () => {
+  const playResume = useCallback(() => {
     if (!resumeEpisode) return;
     const progress = savedState.progressByEpisodeId[resumeEpisode.id];
     playEpisode(
       resumeEpisode,
       progress && progress > 0.01 && progress < 0.98 ? progress : undefined,
     );
-  };
+  }, [playEpisode, resumeEpisode, savedState.progressByEpisodeId]);
 
-  const onStatusChange = (status: UserListStatus) => {
+  const onStatusChange = useCallback((status: UserListStatus) => {
     if (!isAuthenticated) return;
     void updateLibraryAnimeStatus(animeId, status).then(invalidateLibrary);
-  };
+  }, [animeId, invalidateLibrary, isAuthenticated]);
 
-  const onToggleFavorite = () => {
+  const onToggleFavorite = useCallback(() => {
     if (!isAuthenticated) return;
     void toggleAnimeFavorite(
       animeId,
       savedState.isFavorite,
       savedState.userStatus,
     ).then(invalidateLibrary);
-  };
+  }, [animeId, invalidateLibrary, isAuthenticated, savedState.isFavorite, savedState.userStatus]);
 
-  const onPlayEpisode = (episode: AnimeEpisode) => {
+  const onPlayEpisode = useCallback((episode: AnimeEpisode) => {
     const progress = savedState.progressByEpisodeId[episode.id];
     playEpisode(
       episode,
       progress && progress > 0.01 && progress < 0.98 ? progress : undefined,
     );
-  };
+  }, [playEpisode, savedState.progressByEpisodeId]);
+
+  const collectionItem = useMemo(
+    () =>
+      detail
+        ? {
+            mediaType: 'anime' as const,
+            mediaId: String(animeId),
+            title: detail.title ?? undefined,
+            poster: animePoster(detail),
+          }
+        : null,
+    [animeId, detail],
+  );
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     notifyViewportScroll(event.nativeEvent.contentOffset.y);
@@ -321,12 +334,7 @@ export default function AnimeDetailScreen() {
           userStatus={savedState.userStatus}
           isFavorite={savedState.isFavorite}
           libraryDisabled={!isAuthenticated}
-          collectionItem={{
-            mediaType: 'anime',
-            mediaId: String(animeId),
-            title: detail.title ?? undefined,
-            poster: animePoster(detail),
-          }}
+          collectionItem={collectionItem}
           onPlay={playResume}
           onStatusChange={onStatusChange}
           onToggleFavorite={onToggleFavorite}

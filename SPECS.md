@@ -20,6 +20,7 @@
 | [Schedule Screen](.cursor/specs/catalog/schedule_screen.md) | catalog | Implemented |
 | [TV Catalog Performance](.cursor/specs/catalog/tv_catalog_perf.md) | catalog | Implemented |
 | [Detail Screen Performance](.cursor/specs/catalog/detail_screen_perf.md) | catalog | Implemented |
+| [Detail Screen TV Performance](.cursor/specs/catalog/detail_screen_tv_perf.md) | catalog | Implemented |
 | [TV Home Top Navigation](.cursor/specs/catalog/tv_home_top_nav.md) | catalog | Implemented |
 | [Video Player](.cursor/specs/player/video_player.md) | player | Implemented |
 | [Episode Picker + Lampa Dubbing](.cursor/specs/player/episode_picker_and_lampa_dubbing.md) | player | Implemented |
@@ -35,6 +36,6 @@
 | [Party TV UI](.cursor/specs/party/tv_ui.md) | party | Implemented |
 | [Friends Mobile UI](.cursor/specs/friends/mobile_ui.md) | friends | Implemented |
 | [Friends TV UI](.cursor/specs/friends/tv_ui.md) | friends | Implemented |
-| [OTA Updates (EAS Update)](.cursor/specs/infra/ota_updates.md) | infra | Partial (ship OTA-enabled APK; binary check via latest.json) |
+| [OTA Updates (EAS Update)](.cursor/specs/infra/ota_updates.md) | infra | Partial (ship OTA-enabled APK; in-app APK download + install) |
 | [Client Image CDN](.cursor/specs/infra/client_image_cdn.md) | infra | Implemented |
 | [Client Refresh Posters](.cursor/specs/infra/client_refresh_posters.md) | infra | Implemented |

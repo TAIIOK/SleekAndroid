@@ -26,7 +26,7 @@ import {
   loadLampaLastSelection,
   saveLampaLastSelection,
 } from '@/lib/lampaLastSelection';
-import { formatProgressLabel } from '@/lib/progressUtils';
+import { explicitResumeProgress, formatProgressLabel } from '@/lib/progressUtils';
 import { setLampaWatchPayload } from '@/lib/watchStore';
 import { getDownloadService } from '@/services/download';
 import { isHlsSourceUrl } from '@/services/download/types';
@@ -324,10 +324,7 @@ export function LampaSourceSheet({
         episode,
         tmdbId: tmdbId ?? undefined,
         imdbId: typeof imdbRaw === 'string' && imdbRaw.trim() ? imdbRaw.trim() : undefined,
-        startProgress:
-          startProgress != null && startProgress > 0.01 && startProgress < 0.98
-            ? startProgress
-            : undefined,
+        startProgress: explicitResumeProgress(startProgress ?? 0),
         taskId,
         sourceId: selectedSource,
         translatorId: selectedTranslator.id,

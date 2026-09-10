@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
-import { PosterRail } from '@/components/catalog/PosterRail';
+import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
 import { layout, spacing } from '@/constants/aniverse';
 import {
   animeListCardSubtitle,
   type AnimeRelatedItem,
 } from '@/lib/animeDetail';
+import { capDetailRailItems } from '@/lib/catalogRailPage';
 import { isTvUi } from '@/lib/isTvUi';
 import { mapAnimeToRailItem } from '@/lib/poster';
 
@@ -20,7 +22,7 @@ interface AnimeDetailRelatedProps {
 }
 
 function toRailItems(items: AnimeRelatedItem[]) {
-  return items.map((item) => ({
+  return capDetailRailItems(items, isTvUi()).map((item) => ({
     ...mapAnimeToRailItem(item),
     subtitle: animeListCardSubtitle(item),
   }));
@@ -34,6 +36,15 @@ export function AnimeDetailSidebar({
   similarLoading,
 }: AnimeDetailRelatedProps) {
   const router = useRouter();
+  const relatedRail = useMemo(() => toRailItems(relatedItems), [relatedItems]);
+  const recommendationRail = useMemo(
+    () => toRailItems(recommendationItems),
+    [recommendationItems],
+  );
+  const similarRail = useMemo(() => toRailItems(similarItems), [similarItems]);
+  const onItemPress = useCallback((item: RailItem) => {
+    router.push(`/anime/${item.id}`);
+  }, [router]);
 
   if (
     !relatedItems.length &&
@@ -51,11 +62,11 @@ export function AnimeDetailSidebar({
         <LazyCatalogRail>
           <PosterRail
             title="Связанные"
-            items={toRailItems(relatedItems)}
+            items={relatedRail}
             loading={relatedLoading}
             itemWidth={layout.posterWidthDetail}
             flush
-            onItemPress={(item) => router.push(`/anime/${item.id}`)}
+            onItemPress={onItemPress}
           />
         </LazyCatalogRail>
       ) : null}
@@ -64,11 +75,11 @@ export function AnimeDetailSidebar({
         <LazyCatalogRail>
           <PosterRail
             title="Рекомендации"
-            items={toRailItems(recommendationItems)}
+            items={recommendationRail}
             loading={relatedLoading}
             itemWidth={layout.posterWidthDetail}
             flush
-            onItemPress={(item) => router.push(`/anime/${item.id}`)}
+            onItemPress={onItemPress}
           />
         </LazyCatalogRail>
       ) : null}
@@ -77,11 +88,11 @@ export function AnimeDetailSidebar({
         <LazyCatalogRail>
           <PosterRail
             title="Похожее"
-            items={toRailItems(similarItems)}
+            items={similarRail}
             loading={similarLoading}
             itemWidth={layout.posterWidthDetail}
             flush
-            onItemPress={(item) => router.push(`/anime/${item.id}`)}
+            onItemPress={onItemPress}
           />
         </LazyCatalogRail>
       ) : null}

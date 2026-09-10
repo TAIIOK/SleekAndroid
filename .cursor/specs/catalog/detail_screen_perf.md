@@ -27,4 +27,4 @@ Anime and Lampa (movies/series) detail screens must paint the hero and Play cont
 
 - Reuses `LazyCatalogRail` / `useNearViewport` from `lazy_catalog_rails.md`.
 - Catalog pack `tv_catalog_perf.md` left detail heroes out of scope; this spec covers them.
-- TV episode virtualization is out of this pack (focus risk).
+- TV episode virtualization is covered by `detail_screen_tv_perf.md`.

@@ -15,10 +15,13 @@ vi.mock('@/lib/isTvUi', () => ({
 import {
   buildAnimePlaybackState,
   buildLampaPlaybackState,
+  explicitResumeProgress,
   formatProgressLabel,
+  hasMeaningfulProgress,
   isUnfinishedProgress,
   pickLatestUnfinishedAnimeRow,
   pickLatestUnfinishedLampaRow,
+  resumeSeekTimeSec,
 } from './progressUtils';
 import type { UserAnimeProgress, UserLampaProgress } from '../types/progress';
 import type { LampaDetail } from '@/api/catalog';
@@ -33,6 +36,38 @@ describe('isUnfinishedProgress', () => {
     expect(isUnfinishedProgress(0.4)).toBe(true);
     expect(isUnfinishedProgress(0.002)).toBe(true);
     expect(isUnfinishedProgress(0.92, true)).toBe(true);
+  });
+});
+
+describe('hasMeaningfulProgress', () => {
+  it('keeps 90–100% and completed rows for Continue Watching', () => {
+    expect(hasMeaningfulProgress(0.9, true)).toBe(true);
+    expect(hasMeaningfulProgress(1, true)).toBe(true);
+    expect(hasMeaningfulProgress(0.95)).toBe(true);
+    expect(hasMeaningfulProgress(0.0004)).toBe(false);
+  });
+});
+
+describe('explicitResumeProgress', () => {
+  it('passes 90–100% through for Continue Watching', () => {
+    expect(explicitResumeProgress(0.0004)).toBeUndefined();
+    expect(explicitResumeProgress(0.4)).toBe(0.4);
+    expect(explicitResumeProgress(0.92)).toBe(0.92);
+    expect(explicitResumeProgress(0.99)).toBe(0.99);
+    expect(explicitResumeProgress(1)).toBe(1);
+  });
+});
+
+describe('resumeSeekTimeSec', () => {
+  it('seeks to the saved fraction including 90%+', () => {
+    expect(resumeSeekTimeSec(1000, undefined, 0.4)).toBe(400);
+    expect(resumeSeekTimeSec(1000, undefined, 0.92)).toBe(920);
+    expect(resumeSeekTimeSec(1000, 250)).toBe(250);
+  });
+
+  it('keeps 100% one second before the end', () => {
+    expect(resumeSeekTimeSec(1000, undefined, 1)).toBe(999);
+    expect(resumeSeekTimeSec(1000, 1000)).toBe(999);
   });
 });
 
