@@ -21,6 +21,7 @@
 | [TV Catalog Performance](.cursor/specs/catalog/tv_catalog_perf.md) | catalog | Implemented |
 | [Detail Screen Performance](.cursor/specs/catalog/detail_screen_perf.md) | catalog | Implemented |
 | [Detail Screen TV Performance](.cursor/specs/catalog/detail_screen_tv_perf.md) | catalog | Implemented |
+| [Detail Section Collapse](.cursor/specs/catalog/detail_section_collapse.md) | catalog | Implemented |
 | [TV Home Top Navigation](.cursor/specs/catalog/tv_home_top_nav.md) | catalog | Implemented |
 | [Video Player](.cursor/specs/player/video_player.md) | player | Implemented |
 | [Episode Picker + Lampa Dubbing](.cursor/specs/player/episode_picker_and_lampa_dubbing.md) | player | Implemented |

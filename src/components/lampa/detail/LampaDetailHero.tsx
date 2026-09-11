@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -63,7 +63,7 @@ function truncateOverview(text: string, limit: number) {
   };
 }
 
-export function LampaDetailHero({
+export const LampaDetailHero = memo(function LampaDetailHero({
   detail,
   kind,
   isSerial,
@@ -75,7 +75,7 @@ export function LampaDetailHero({
   isFavorite,
   libraryDisabled,
   collectionItem,
-  externalRatings = [],
+  externalRatings,
   onWatch,
   onOpenSources,
   onStatusChange,
@@ -110,6 +110,17 @@ export function LampaDetailHero({
 
   const mediaKind = kind === 'home' || kind === 'tv' ? 'tv' : 'movie';
   const tmdbId = resolveLampaTmdbId(detail, String(detail.id ?? ''));
+  const onCreateParty = useCallback(() => {
+    if (!tmdbId) return;
+    createParty({
+      tmdbId,
+      kind: mediaKind,
+      title,
+      poster: lampaPosterPath(detail),
+      season: isSerial ? lastSeason : undefined,
+      episode: isSerial ? lastEpisode : undefined,
+    });
+  }, [createParty, detail, isSerial, lastEpisode, lastSeason, mediaKind, title, tmdbId]);
 
   const library = (
     <DetailLibraryActions
@@ -130,16 +141,7 @@ export function LampaDetailHero({
         tmdbId ? (
           <TvFocusable
             disabled={creatingParty || libraryDisabled}
-            onPress={() =>
-              createParty({
-                tmdbId,
-                kind: mediaKind,
-                title,
-                poster: lampaPosterPath(detail),
-                season: isSerial ? lastSeason : undefined,
-                episode: isSerial ? lastEpisode : undefined,
-              })
-            }
+            onPress={onCreateParty}
             style={styles.extraBtn}
           >
             <Text style={styles.extraLabel}>{creatingParty ? '…' : '👥'}</Text>
@@ -160,7 +162,7 @@ export function LampaDetailHero({
         </Text>
       ) : null}
 
-      {externalRatings.length > 0 ? (
+      {externalRatings && externalRatings.length > 0 ? (
         <LampaExternalRatingsRow ratings={externalRatings} />
       ) : null}
 
@@ -336,7 +338,7 @@ export function LampaDetailHero({
       </View>
     </View>
   );
-}
+});
 
 const PAGE_PAD = isTvUi() ? spacing.lg : spacing.md;
 

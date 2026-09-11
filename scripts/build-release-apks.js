@@ -20,6 +20,8 @@ const ROOT = path.resolve(__dirname, '..');
 const APP_CONFIG = path.join(ROOT, 'app.config.ts');
 const PACKAGE_JSON = path.join(ROOT, 'package.json');
 const DIST = path.join(ROOT, 'dist');
+/** Sideload copies live here too — `eas update` wipes `dist/` on export. */
+const RELEASE_APKS = path.join(ROOT, 'release-apks');
 const GRADLE_APK = path.join(ROOT, 'android/app/build/outputs/apk/release/app-release.apk');
 const VERSION_RE = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/;
 
@@ -146,10 +148,14 @@ function copyApk(fileName) {
     process.exit(1);
   }
   fs.mkdirSync(DIST, { recursive: true });
+  fs.mkdirSync(RELEASE_APKS, { recursive: true });
   const dest = path.join(DIST, fileName);
+  const backup = path.join(RELEASE_APKS, fileName);
   fs.copyFileSync(GRADLE_APK, dest);
+  fs.copyFileSync(GRADLE_APK, backup);
   const sizeMb = (fs.statSync(dest).size / (1024 * 1024)).toFixed(1);
   console.log(`✓ ${dest} (${sizeMb} MB)`);
+  console.log(`  backup ${backup}`);
   return dest;
 }
 

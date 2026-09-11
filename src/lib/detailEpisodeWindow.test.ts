@@ -1,24 +1,46 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  growTvEpisodeWindow,
+  slideTvEpisodeWindow,
+  tvEpisodeWindowSpacerHeights,
+  TV_EPISODE_ROW_STRIDE,
   TV_EPISODE_WINDOW_INITIAL,
   TV_EPISODE_WINDOW_OVERSCAN,
 } from '@/lib/detailEpisodeWindow';
 
-describe('growTvEpisodeWindow', () => {
-  it('starts at the initial window and does not shrink', () => {
-    expect(growTvEpisodeWindow(8, 0, 24)).toBe(TV_EPISODE_WINDOW_INITIAL);
-    expect(growTvEpisodeWindow(12, 0, 24)).toBe(12);
+describe('slideTvEpisodeWindow', () => {
+  it('starts at the initial window around the first row', () => {
+    expect(slideTvEpisodeWindow(0, 24)).toEqual({
+      start: 0,
+      end: TV_EPISODE_WINDOW_INITIAL,
+    });
   });
 
-  it('keeps overscan ahead of the focused row', () => {
-    expect(growTvEpisodeWindow(8, 5, 24)).toBe(5 + TV_EPISODE_WINDOW_OVERSCAN + 1);
-    expect(growTvEpisodeWindow(8, 20, 24)).toBe(24);
+  it('keeps overscan behind and ahead of the focused row', () => {
+    expect(slideTvEpisodeWindow(5, 24)).toEqual({
+      start: 5 - TV_EPISODE_WINDOW_OVERSCAN,
+      end: 5 + TV_EPISODE_WINDOW_OVERSCAN + 1,
+    });
   });
 
   it('caps at the fetched item count', () => {
-    expect(growTvEpisodeWindow(8, 40, 12)).toBe(12);
-    expect(growTvEpisodeWindow(8, 0, 0)).toBe(0);
+    expect(slideTvEpisodeWindow(40, 12)).toEqual({ start: 7, end: 12 });
+    expect(slideTvEpisodeWindow(0, 0)).toEqual({ start: 0, end: 0 });
+  });
+
+  it('slides away from the start so far-above rows can unmount', () => {
+    expect(slideTvEpisodeWindow(10, 24).start).toBeGreaterThan(0);
+    expect(slideTvEpisodeWindow(10, 24).end).toBeLessThan(24);
+  });
+});
+
+describe('tvEpisodeWindowSpacerHeights', () => {
+  it('keeps total spacer+window height equal to the full list', () => {
+    const window = slideTvEpisodeWindow(10, 24);
+    const spacers = tvEpisodeWindowSpacerHeights(window.start, window.end, 24);
+    expect(spacers.top).toBe(window.start * TV_EPISODE_ROW_STRIDE);
+    expect(spacers.bottom).toBe((24 - window.end) * TV_EPISODE_ROW_STRIDE);
+    expect(spacers.top + spacers.bottom + (window.end - window.start) * TV_EPISODE_ROW_STRIDE)
+      .toBe(24 * TV_EPISODE_ROW_STRIDE);
   });
 });

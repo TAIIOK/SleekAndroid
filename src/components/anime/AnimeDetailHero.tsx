@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -74,7 +74,7 @@ function truncateOverview(text: string, limit: number) {
   };
 }
 
-export function AnimeDetailHero({
+export const AnimeDetailHero = memo(function AnimeDetailHero({
   detail,
   resumeEpisode,
   resumeLoading = false,
@@ -429,7 +429,7 @@ export function AnimeDetailHero({
       </View>
     </View>
   );
-}
+});
 
 const PAGE_PAD = isTvUi() ? spacing.lg : spacing.md;
 

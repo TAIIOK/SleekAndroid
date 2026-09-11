@@ -1,13 +1,11 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ScrollView,
   StyleSheet,
   Text,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 
 import {
@@ -25,15 +23,14 @@ import { fetchAnimeProgress } from '@/api/progress';
 import { AnimeDetailCharacters } from '@/components/anime/AnimeDetailCharacters';
 import { AnimeDetailEpisodes } from '@/components/anime/AnimeDetailEpisodes';
 import { AnimeDetailHero } from '@/components/anime/AnimeDetailHero';
-import { AnimeDetailPlot } from '@/components/anime/AnimeDetailPlot';
 import { AnimeDetailSidebar } from '@/components/anime/AnimeDetailSidebar';
 import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
-import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
+import { DetailCollapsibleSection } from '@/components/catalog/DetailCollapsibleSection';
 import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBackButton';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { useAccumulatedEpisodes } from '@/hooks/useAccumulatedEpisodes';
-import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
+import { useExclusiveDetailSection } from '@/hooks/useExclusiveDetailSection';
 import { useResumeEpisode } from '@/hooks/useResumeEpisode';
 import {
   excludeRelatedFromSimilar,
@@ -53,7 +50,6 @@ import { useAuth } from '@/providers/AuthProvider';
 import { pickPlaybackUrl } from '@aniverse/playback';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
-import { notifyViewportScroll } from '@/lib/viewportScroll';
 
 const DEFAULT_QUALITY = '720p' as const;
 
@@ -63,7 +59,7 @@ export default function AnimeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const animeId = Number(id);
   const { isAuthenticated } = useAuth();
-  const belowFoldReady = useBelowFoldReady();
+  const { openId, toggle: toggleSection } = useExclusiveDetailSection();
 
   const {
     episodes: allEpisodes,
@@ -106,22 +102,24 @@ export default function AnimeDetailScreen() {
     savedState.lastEpisodeId,
   );
 
-  const { data: related = [], isLoading: relatedLoading } = useQuery({
+  const { data: related = [], isFetching: relatedFetching, isFetched: relatedFetched } = useQuery({
     queryKey: ['anime-related', animeId],
     queryFn: () => fetchAnimeRelated(animeId),
-    enabled: belowFoldReady && Number.isFinite(animeId),
+    enabled:
+      Number.isFinite(animeId) &&
+      (openId === 'related' || openId === 'recommendations'),
   });
 
-  const { data: similar = [], isLoading: similarLoading } = useQuery({
+  const { data: similar = [], isFetching: similarFetching, isFetched: similarFetched } = useQuery({
     queryKey: ['anime-similar', animeId],
     queryFn: () => fetchAnimeSimilar(animeId),
-    enabled: belowFoldReady && Number.isFinite(animeId),
+    enabled: Number.isFinite(animeId) && openId === 'similar',
   });
 
-  const { data: characters = [], isLoading: charactersLoading } = useQuery({
+  const { data: characters = [], isFetching: charactersFetching, isFetched: charactersFetched } = useQuery({
     queryKey: ['anime-characters', animeId],
     queryFn: () => fetchAnimeCharacters(animeId),
-    enabled: belowFoldReady && Number.isFinite(animeId),
+    enabled: Number.isFinite(animeId) && openId === 'characters',
   });
 
   const relatedItems = useMemo(
@@ -230,13 +228,16 @@ export default function AnimeDetailScreen() {
     ).then(invalidateLibrary);
   }, [animeId, invalidateLibrary, isAuthenticated, savedState.isFavorite, savedState.userStatus]);
 
+  const progressByEpisodeIdRef = useRef(savedState.progressByEpisodeId);
+  progressByEpisodeIdRef.current = savedState.progressByEpisodeId;
+
   const onPlayEpisode = useCallback((episode: AnimeEpisode) => {
-    const progress = savedState.progressByEpisodeId[episode.id];
+    const progress = progressByEpisodeIdRef.current[episode.id];
     playEpisode(
       episode,
       progress && progress > 0.01 && progress < 0.98 ? progress : undefined,
     );
-  }, [playEpisode, savedState.progressByEpisodeId]);
+  }, [playEpisode]);
 
   const collectionItem = useMemo(
     () =>
@@ -251,17 +252,17 @@ export default function AnimeDetailScreen() {
     [animeId, detail],
   );
 
-  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    notifyViewportScroll(event.nativeEvent.contentOffset.y);
-  }, []);
-
   const sidebar = (
     <AnimeDetailSidebar
       relatedItems={relatedItems}
       recommendationItems={recommendationItems}
       similarItems={similarItems}
-      relatedLoading={relatedLoading}
-      similarLoading={similarLoading}
+      relatedLoading={relatedFetching}
+      similarLoading={similarFetching}
+      relatedFetched={relatedFetched}
+      similarFetched={similarFetched}
+      openId={openId}
+      onToggle={toggleSection}
     />
   );
 
@@ -281,16 +282,19 @@ export default function AnimeDetailScreen() {
     />
   );
 
-  // Episodes right under hero; then plot, characters, related rails.
+  // Episodes right under hero; extra sections stay collapsed until opened.
   const body = (
     <View style={styles.stack}>
       {episodesBlock}
-      {detail ? <AnimeDetailPlot detail={detail} /> : null}
-      {charactersLoading || characters.length > 0 ? (
-        <LazyCatalogRail placeholderMinHeight={180}>
-          <AnimeDetailCharacters characters={characters} loading={charactersLoading} />
-        </LazyCatalogRail>
-      ) : null}
+      <DetailCollapsibleSection
+        title="Персонажи"
+        expanded={openId === 'characters'}
+        onToggle={() => toggleSection('characters')}
+        loading={openId === 'characters' && characters.length === 0 && (charactersFetching || !charactersFetched)}
+        empty={openId === 'characters' && charactersFetched && characters.length === 0}
+      >
+        <AnimeDetailCharacters hideTitle characters={characters} loading={charactersFetching} />
+      </DetailCollapsibleSection>
       {sidebar}
     </View>
   );
@@ -321,8 +325,6 @@ export default function AnimeDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         nestedScrollEnabled
-        onScroll={onScroll}
-        scrollEventThrottle={64}
       >
         <AnimeDetailHero
           detail={detail}

@@ -2,14 +2,15 @@ import { useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
-import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
-import { layout, spacing } from '@/constants/aniverse';
+import { DetailCollapsibleRail } from '@/components/catalog/DetailCollapsibleSection';
+import { type RailItem } from '@/components/catalog/PosterRail';
+import { spacing } from '@/constants/aniverse';
 import {
   animeListCardSubtitle,
   type AnimeRelatedItem,
 } from '@/lib/animeDetail';
 import { capDetailRailItems } from '@/lib/catalogRailPage';
+import type { DetailExtraSection } from '@/lib/detailSections';
 import { isTvUi } from '@/lib/isTvUi';
 import { mapAnimeToRailItem } from '@/lib/poster';
 
@@ -19,10 +20,14 @@ interface AnimeDetailRelatedProps {
   similarItems: AnimeRelatedItem[];
   relatedLoading?: boolean;
   similarLoading?: boolean;
+  relatedFetched?: boolean;
+  similarFetched?: boolean;
+  openId: DetailExtraSection | null;
+  onToggle: (id: DetailExtraSection) => void;
 }
 
 function toRailItems(items: AnimeRelatedItem[]) {
-  return capDetailRailItems(items, isTvUi()).map((item) => ({
+  return capDetailRailItems(items).map((item) => ({
     ...mapAnimeToRailItem(item),
     subtitle: animeListCardSubtitle(item),
   }));
@@ -34,6 +39,10 @@ export function AnimeDetailSidebar({
   similarItems,
   relatedLoading,
   similarLoading,
+  relatedFetched = false,
+  similarFetched = false,
+  openId,
+  onToggle,
 }: AnimeDetailRelatedProps) {
   const router = useRouter();
   const relatedRail = useMemo(() => toRailItems(relatedItems), [relatedItems]);
@@ -46,56 +55,35 @@ export function AnimeDetailSidebar({
     router.push(`/anime/${item.id}`);
   }, [router]);
 
-  if (
-    !relatedItems.length &&
-    !relatedLoading &&
-    !recommendationItems.length &&
-    !similarItems.length &&
-    !similarLoading
-  ) {
-    return null;
-  }
-
   return (
     <View style={styles.rails}>
-      {relatedItems.length > 0 || relatedLoading ? (
-        <LazyCatalogRail>
-          <PosterRail
-            title="Связанные"
-            items={relatedRail}
-            loading={relatedLoading}
-            itemWidth={layout.posterWidthDetail}
-            flush
-            onItemPress={onItemPress}
-          />
-        </LazyCatalogRail>
-      ) : null}
-
-      {recommendationItems.length > 0 || relatedLoading ? (
-        <LazyCatalogRail>
-          <PosterRail
-            title="Рекомендации"
-            items={recommendationRail}
-            loading={relatedLoading}
-            itemWidth={layout.posterWidthDetail}
-            flush
-            onItemPress={onItemPress}
-          />
-        </LazyCatalogRail>
-      ) : null}
-
-      {similarItems.length > 0 || similarLoading ? (
-        <LazyCatalogRail>
-          <PosterRail
-            title="Похожее"
-            items={similarRail}
-            loading={similarLoading}
-            itemWidth={layout.posterWidthDetail}
-            flush
-            onItemPress={onItemPress}
-          />
-        </LazyCatalogRail>
-      ) : null}
+      <DetailCollapsibleRail
+        title="Связанные"
+        expanded={openId === 'related'}
+        onToggle={() => onToggle('related')}
+        items={relatedRail}
+        loading={relatedLoading}
+        fetched={relatedFetched}
+        onItemPress={onItemPress}
+      />
+      <DetailCollapsibleRail
+        title="Рекомендации"
+        expanded={openId === 'recommendations'}
+        onToggle={() => onToggle('recommendations')}
+        items={recommendationRail}
+        loading={relatedLoading}
+        fetched={relatedFetched}
+        onItemPress={onItemPress}
+      />
+      <DetailCollapsibleRail
+        title="Похожее"
+        expanded={openId === 'similar'}
+        onToggle={() => onToggle('similar')}
+        items={similarRail}
+        loading={similarLoading}
+        fetched={similarFetched}
+        onItemPress={onItemPress}
+      />
     </View>
   );
 }

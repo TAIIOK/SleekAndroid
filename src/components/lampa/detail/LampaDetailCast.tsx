@@ -1,17 +1,11 @@
+import { Image } from 'expo-image';
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { memo, useCallback } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { LampaCastMember } from '@/api/lampaExtras';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { capDetailRailItems } from '@/lib/catalogRailPage';
 import { resolveLampaPosterUrl } from '@/lib/config';
@@ -21,62 +15,44 @@ import { isTvUi } from '@/lib/isTvUi';
 interface LampaDetailCastProps {
   cast: LampaCastMember[];
   loading?: boolean;
+  hideTitle?: boolean;
 }
 
-export function LampaDetailCast({ cast, loading }: LampaDetailCastProps) {
+export function LampaDetailCast({
+  cast,
+  loading,
+  hideTitle = false,
+}: LampaDetailCastProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const visibleCast = capDetailRailItems(cast, isTvUi());
-  const [mountImages, setMountImages] = useState(false);
-
-  useEffect(() => {
-    if (loading || !visibleCast.length) {
-      setMountImages(false);
-      return;
-    }
-    const timer = setTimeout(() => setMountImages(true), 120);
-    return () => clearTimeout(timer);
-  }, [loading, visibleCast.length]);
+  const visibleCast = capDetailRailItems(cast);
 
   if (!loading && !cast.length) return null;
 
-  const showSkeleton = loading && !cast.length;
-  const showTiles = !showSkeleton && mountImages;
-
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      <SectionHeader title="Актёры" flush />
-      {showTiles ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {visibleCast.map((member) => (
-            <CastTile
-              key={member.id}
-              member={member}
-              onPress={() => {
-                if (!member.id) return;
-                if (!isTvUi()) setDetailReturnPath(pathname);
-                router.push(`/person/${member.id}`);
-              }}
-            />
-          ))}
-        </ScrollView>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-          pointerEvents="none"
-        >
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} width={TILE} height={140} rounded={radii.md} />
-          ))}
-        </ScrollView>
-      )}
+      {hideTitle ? null : <SectionHeader title="Актёры" flush />}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+        {visibleCast.map((member) => (
+          <CastTile
+            key={member.id}
+            member={member}
+            onPress={() => {
+              if (!member.id) return;
+              if (!isTvUi()) setDetailReturnPath(pathname);
+              router.push(`/person/${member.id}`);
+            }}
+          />
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
-function CastTile({
+const TILE = isTvUi() ? 88 : 72;
+const TILE_H = Math.round((TILE * 4) / 3);
+
+const CastTile = memo(function CastTile({
   member,
   onPress,
 }: {
@@ -86,12 +62,22 @@ function CastTile({
   const image = member.profilePath
     ? resolveLampaPosterUrl(member.profilePath, 'w185')
     : undefined;
+  const handlePress = useCallback(() => {
+    onPress();
+  }, [onPress]);
 
   return (
-    <TvFocusable onPress={onPress} style={styles.tile}>
+    <TvFocusable onPress={handlePress} style={styles.tile}>
       <View style={styles.avatar}>
         {image ? (
-          <Image source={{ uri: image }} style={styles.image} />
+          <Image
+            source={{ uri: image, width: TILE, height: TILE_H }}
+            style={styles.image}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={image}
+            transition={0}
+          />
         ) : (
           <View style={styles.fallback}>
             <Text style={styles.fallbackLetter}>
@@ -110,9 +96,7 @@ function CastTile({
       ) : null}
     </TvFocusable>
   );
-}
-
-const TILE = isTvUi() ? 88 : 72;
+});
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },

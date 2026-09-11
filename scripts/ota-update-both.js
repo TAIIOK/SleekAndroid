@@ -19,7 +19,39 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const APP_CONFIG = path.join(ROOT, 'app.config.ts');
 const PACKAGE_JSON = path.join(ROOT, 'package.json');
+const DIST = path.join(ROOT, 'dist');
+const RELEASE_APKS = path.join(ROOT, 'release-apks');
+const APK_NAMES = ['sleek.apk', 'sleek-tv.apk'];
 const VERSION_RE = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/;
+
+/** `eas update` exports into dist/ and would delete sideload APKs. */
+function stashReleaseApks() {
+  const stashed = [];
+  fs.mkdirSync(RELEASE_APKS, { recursive: true });
+  for (const name of APK_NAMES) {
+    const from = path.join(DIST, name);
+    if (!fs.existsSync(from)) continue;
+    const to = path.join(RELEASE_APKS, name);
+    fs.copyFileSync(from, to);
+    stashed.push(name);
+  }
+  if (stashed.length) {
+    console.log(`Stashed APKs before OTA export: ${stashed.join(', ')} → ${RELEASE_APKS}`);
+  }
+  return stashed;
+}
+
+function restoreReleaseApks() {
+  if (!fs.existsSync(RELEASE_APKS)) return;
+  fs.mkdirSync(DIST, { recursive: true });
+  for (const name of APK_NAMES) {
+    const from = path.join(RELEASE_APKS, name);
+    if (!fs.existsSync(from)) continue;
+    const to = path.join(DIST, name);
+    fs.copyFileSync(from, to);
+    console.log(`Restored ${to}`);
+  }
+}
 
 function usage(exitCode = 1) {
   console.error(`Usage:
@@ -105,6 +137,7 @@ if (version) {
 
 const publishVersion = version || previousVersion || 'unknown';
 const easMessage = `[${publishVersion}] ${message}`;
+stashReleaseApks();
 
 const targets = preview
   ? [
@@ -148,9 +181,11 @@ for (const target of targets) {
     },
   );
   if (result.status !== 0) {
+    restoreReleaseApks();
     console.error(`\nFailed publishing ${target.label} (${target.channel}).`);
     process.exit(result.status ?? 1);
   }
 }
 
+restoreReleaseApks();
 console.log(`\nDone: phone + TV ← "${easMessage}"`);

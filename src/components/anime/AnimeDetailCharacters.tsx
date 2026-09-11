@@ -1,15 +1,9 @@
+import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { AnimeCharacter } from '@/api/catalog';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { capDetailRailItems } from '@/lib/catalogRailPage';
 import { resolveAnimePosterUrl } from '@/lib/config';
@@ -19,58 +13,30 @@ import { isTvUi } from '@/lib/isTvUi';
 interface AnimeDetailCharactersProps {
   characters: AnimeCharacter[];
   loading?: boolean;
+  hideTitle?: boolean;
 }
 
-/**
- * Defer mounting character images until after the first paint so a burst of
- * native Image views cannot starve the detail back button on the JS/UI thread.
- */
-export function AnimeDetailCharacters({ characters, loading }: AnimeDetailCharactersProps) {
-  const [mountImages, setMountImages] = useState(false);
-
-  const visibleCharacters = capDetailRailItems(characters, isTvUi());
-
-  useEffect(() => {
-    if (loading || !visibleCharacters.length) {
-      setMountImages(false);
-      return;
-    }
-    const timer = setTimeout(() => setMountImages(true), 120);
-    return () => clearTimeout(timer);
-  }, [loading, visibleCharacters.length]);
+export function AnimeDetailCharacters({
+  characters,
+  loading,
+  hideTitle = false,
+}: AnimeDetailCharactersProps) {
+  const visibleCharacters = capDetailRailItems(characters);
 
   if (!loading && !characters.length) return null;
 
-  const skeletonW = TILE;
-  const skeletonH = TILE_H + 36;
-  const showSkeleton = loading && !characters.length;
-  const showTiles = !showSkeleton && mountImages;
-
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      {isTvUi() ? (
+      {hideTitle ? null : isTvUi() ? (
         <SectionHeader title="Персонажи" flush />
       ) : (
         <Text style={styles.phoneTitle}>Персонажи</Text>
       )}
-      {showTiles ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {visibleCharacters.map((character, index) => (
-            <CharacterTile key={character.id ?? index} character={character} />
-          ))}
-        </ScrollView>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-          pointerEvents="none"
-        >
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} width={skeletonW} height={skeletonH} rounded={radii.md} />
-          ))}
-        </ScrollView>
-      )}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+        {visibleCharacters.map((character, index) => (
+          <CharacterTile key={character.id ?? index} character={character} />
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -123,9 +89,12 @@ function CharacterTile({ character }: { character: AnimeCharacter }) {
       <View style={styles.avatar}>
         {source && !failed ? (
           <Image
-            source={source}
+            source={{ ...source, width: TILE, height: TILE_H }}
             style={styles.image}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={source.uri}
+            transition={0}
             onError={onImageError}
           />
         ) : (

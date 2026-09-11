@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import type { LampaExternalRating } from '@/api/lampaRatings';
@@ -19,7 +20,7 @@ function accent(source: LampaExternalRating['source']): string {
   }
 }
 
-export function LampaExternalRatingsRow({
+export const LampaExternalRatingsRow = memo(function LampaExternalRatingsRow({
   ratings,
 }: {
   ratings: LampaExternalRating[];
@@ -50,7 +51,7 @@ export function LampaExternalRatingsRow({
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

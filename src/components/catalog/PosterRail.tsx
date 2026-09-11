@@ -44,6 +44,8 @@ interface PosterRailProps {
   itemWidth?: number;
   /** Nested in a padded parent — no extra horizontal gutter. */
   flush?: boolean;
+  /** Skip the rail title — parent already shows one (detail accordion). */
+  hideTitle?: boolean;
   /** First card is the screen content-entry (preferred focus after sidebar nav). */
   contentEntry?: boolean;
   /** Catalog path for scroll/focus restore (e.g. `/movies`). */
@@ -67,6 +69,7 @@ export function PosterRail({
   onLoadMore,
   itemWidth,
   flush = false,
+  hideTitle = false,
   contentEntry = false,
   restorePath,
   restoreRailKey,
@@ -141,6 +144,7 @@ export function PosterRail({
       onLoadMore={onLoadMore}
       onSeeAll={onSeeAll}
       flush={flush}
+      hideTitle={hideTitle}
       itemWidth={itemWidth ?? layout.posterWidthRail}
       renderItem={(item, index) => (
         <RailPosterCard

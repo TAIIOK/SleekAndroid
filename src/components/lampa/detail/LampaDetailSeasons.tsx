@@ -1,8 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   FlatList,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +26,7 @@ import { lampaProgressKey } from '@/lib/lampaDetail';
 import { isTvUi } from '@/lib/isTvUi';
 import { formatProgressLabel } from '@/lib/progressUtils';
 
+const MAX_SEASON_CHIPS = 8;
 /** Matches web desktop `max-h-[32rem]` / mobile `max-h-[24rem]`. */
 const EPISODE_LIST_MAX_HEIGHT = 360;
 const STILL_WIDTH = isTvUi() ? 140 : 96;
@@ -132,6 +136,7 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
   const [selectedSeason, setSelectedSeason] = useState(
     playableSeasons[0]?.seasonNumber ?? 1,
   );
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     const first = playableSeasons[0]?.seasonNumber;
@@ -173,15 +178,17 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
     [episodeProgressByKey, onSelectEpisode, selectedSeason],
   );
 
+  const useSeasonPicker = playableSeasons.length > MAX_SEASON_CHIPS;
+
   if (!playableSeasons.length) return null;
 
-  const episodeList = isTvUi() ? (
+  const episodeList = (
     <FlatList
       data={episodes}
       keyExtractor={(item) => `${selectedSeason}-${item.episodeNumber}-${item.id}`}
       renderItem={renderEpisode}
       style={styles.listScroll}
-      contentContainerStyle={styles.listContentTv}
+      contentContainerStyle={isTvUi() ? styles.listContentTv : styles.listContent}
       ItemSeparatorComponent={EpisodeSeparator}
       nestedScrollEnabled
       showsVerticalScrollIndicator
@@ -189,60 +196,102 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
       maxToRenderPerBatch={4}
       windowSize={5}
       removeClippedSubviews
-      getItemLayout={(_data, index) => ({
-        length: EPISODE_STRIDE,
-        offset: EPISODE_STRIDE * index,
-        index,
-      })}
+      getItemLayout={
+        isTvUi()
+          ? (_data, index) => ({
+              length: EPISODE_STRIDE,
+              offset: EPISODE_STRIDE * index,
+              index,
+            })
+          : undefined
+      }
     />
-  ) : (
-    <ScrollView
-      style={styles.listScroll}
-      contentContainerStyle={styles.listContent}
-      nestedScrollEnabled
-      showsVerticalScrollIndicator
-    >
-      {episodes.map((episode) => (
-        <EpisodeCard
-          key={`${selectedSeason}-${episode.episodeNumber}-${episode.id}`}
-          episode={episode}
-          season={selectedSeason}
-          progress={
-            episodeProgressByKey[lampaProgressKey(selectedSeason, episode.episodeNumber)] ?? 0
-          }
-          onSelectEpisode={onSelectEpisode}
-        />
-      ))}
-    </ScrollView>
+  );
+
+  const selectedSeasonLabel =
+    selectedMeta?.name ?? `Сезон ${selectedSeason}`;
+
+  const seasonPicker = (
+    <View style={styles.seasonRailWrap}>
+      <TvFocusable onPress={() => setPickerOpen(true)} style={styles.seasonTrigger}>
+        <Text style={styles.seasonTriggerLabel} numberOfLines={1}>
+          {selectedSeasonLabel}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+      </TvFocusable>
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable style={styles.pickerBackdrop} onPress={() => setPickerOpen(false)}>
+          <Pressable style={styles.pickerSheet} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.pickerTitle}>Сезон</Text>
+            <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent}>
+              {playableSeasons.map((season, index) => {
+                const num = season.seasonNumber ?? 0;
+                const active = selectedSeason === num;
+                return (
+                  <TvFocusable
+                    key={num}
+                    hasTVPreferredFocus={pickerOpen && (active || (index === 0 && !active))}
+                    onPress={() => {
+                      setSelectedSeason(num);
+                      setPickerOpen(false);
+                    }}
+                    style={[styles.pickerOption, active && styles.pickerOptionActive]}
+                  >
+                    <Text style={[styles.pickerOptionLabel, active && styles.pickerOptionLabelActive]}>
+                      {season.name ?? `Сезон ${num}`}
+                    </Text>
+                    {active ? (
+                      <Ionicons name="checkmark" size={18} color={colors.brand} />
+                    ) : null}
+                  </TvFocusable>
+                );
+              })}
+            </ScrollView>
+            <TvFocusable onPress={() => setPickerOpen(false)} style={styles.pickerClose}>
+              <Text style={styles.pickerCloseLabel}>Закрыть</Text>
+            </TvFocusable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+
+  const seasonChips = (
+    <View style={styles.seasonRailWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.seasonRow}
+      >
+        {playableSeasons.map((season) => {
+          const num = season.seasonNumber ?? 0;
+          const active = selectedSeason === num;
+          return (
+            <TvFocusable
+              key={num}
+              onPress={() => setSelectedSeason(num)}
+              style={[styles.seasonChip, active && styles.seasonChipActive]}
+            >
+              <Text style={[styles.seasonChipLabel, active && styles.seasonChipLabelActive]}>
+                {season.name ?? `Сезон ${num}`}
+              </Text>
+            </TvFocusable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 
   return (
     <View style={styles.section}>
       <Text style={styles.title}>Сезоны и серии</Text>
 
-      <View style={styles.seasonRailWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.seasonRow}
-        >
-          {playableSeasons.map((season) => {
-            const num = season.seasonNumber ?? 0;
-            const active = selectedSeason === num;
-            return (
-              <TvFocusable
-                key={num}
-                onPress={() => setSelectedSeason(num)}
-                style={[styles.seasonChip, active && styles.seasonChipActive]}
-              >
-                <Text style={[styles.seasonChipLabel, active && styles.seasonChipLabelActive]}>
-                  {season.name ?? `Сезон ${num}`}
-                </Text>
-              </TvFocusable>
-            );
-          })}
-        </ScrollView>
-      </View>
+      {useSeasonPicker ? seasonPicker : seasonChips}
 
       {selectedMeta?.overview ? (
         <Text style={styles.overview} numberOfLines={2}>
@@ -304,6 +353,90 @@ const styles = StyleSheet.create({
   },
   seasonChipLabelActive: {
     color: colors.text,
+  },
+  seasonTrigger: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 999,
+    paddingHorizontal: isTvUi() ? 14 : 12,
+    paddingVertical: isTvUi() ? 8 : 6,
+    backgroundColor: colors.brandAccent,
+    borderWidth: 1,
+    borderColor: 'rgba(195,192,255,0.45)',
+  },
+  seasonTriggerLabel: {
+    color: colors.text,
+    fontSize: isTvUi() ? 13 : 12,
+    fontWeight: '600',
+  },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  pickerSheet: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '70%',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.bgElevated,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  pickerTitle: {
+    color: colors.brand,
+    fontSize: isTvUi() ? 20 : 16,
+    fontWeight: '700',
+  },
+  pickerList: {
+    maxHeight: 320,
+  },
+  pickerListContent: {
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: isTvUi() ? 14 : 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  pickerOptionActive: {
+    backgroundColor: 'rgba(167,139,250,0.15)',
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
+  pickerOptionLabel: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.textSecondary,
+    fontSize: isTvUi() ? 16 : 14,
+    fontWeight: '600',
+  },
+  pickerOptionLabelActive: {
+    color: colors.brand,
+  },
+  pickerClose: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  pickerCloseLabel: {
+    color: colors.text,
+    fontWeight: '700',
   },
   overview: {
     color: colors.textSecondary,

@@ -6,7 +6,7 @@ Android TV / Fire TV detail screens (anime, movie, series) must keep D-pad focus
 
 ## Requirements
 
-1. [x] TV anime episode list is a grow-only window in the outer page column: initial mount 8 rows, overscan 4, no nested episode `ScrollView` / `FlatList`.
+1. [x] TV anime episode list is a sliding window in the outer page column: initial mount 6 rows, overscan 4, spacers for unmounted rows, no nested episode `ScrollView` / `FlatList`.
 2. [x] TV anime episode page size is 12 (not 24). «Ещё эпизоды» shows only after the window reaches the already-fetched end.
 3. [x] TV anime episode thumbs decode at 120×72 via `expo-image`; episode cards are `React.memo`.
 4. [x] TV series season episode list virtualizes with nested `FlatList` (`initialNumToRender={6}`, `windowSize={5}`); stills use `expo-image` with memory-disk cache.
@@ -19,7 +19,7 @@ Android TV / Fire TV detail screens (anime, movie, series) must keep D-pad focus
 
 ## Acceptance Criteria
 
-- Opening an anime / movie / series detail on TV paints hero + Play without mounting 24 episode rows or a full season map.
+- Opening an anime / movie / series detail on TV paints hero + Play without mounting 24 episode rows or a full season map. Extra related/cast trees stay collapsed.
 - D-pad reaches Play, the first episode, load-more, and does not skip from episodes into «Похожее».
 - Left from Play / first episode still reaches the app sidebar.
 - Anime TV detail does not nest an episode `ScrollView`.
@@ -28,6 +28,6 @@ Android TV / Fire TV detail screens (anime, movie, series) must keep D-pad focus
 
 ## Notes
 
-- Extends `detail_screen_perf.md` (below-fold queries + `LazyCatalogRail`). That pack left TV episode virtualization out because of focus risk.
+- Extends `detail_screen_perf.md` and `detail_section_collapse.md`. Extra rails are user-expanded, not viewport-lazy.
 - Catalog rail cap reuses `CATALOG_RAIL_PAGE_SIZE` (12).
 - Lampa `lampa-progress` / `history-feed` stay eager (Continue Watching cache + resume).

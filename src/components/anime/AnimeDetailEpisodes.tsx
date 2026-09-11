@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -21,9 +21,11 @@ import {
 } from '@/lib/animeDetail';
 import { resolveAnimePosterUrl } from '@/lib/config';
 import {
-  growTvEpisodeWindow,
+  slideTvEpisodeWindow,
+  tvEpisodeWindowSpacerHeights,
+  TV_EPISODE_CARD_HEIGHT,
+  TV_EPISODE_ROW_GAP,
   TV_EPISODE_THUMB_DECODE,
-  TV_EPISODE_WINDOW_INITIAL,
 } from '@/lib/detailEpisodeWindow';
 import {
   reportYaniPosterLoadError,
@@ -60,6 +62,7 @@ interface EpisodeCardProps {
   progress: number;
   onPlay: (episode: AnimeEpisode) => void;
   onFocused?: (index: number) => void;
+  railStart?: boolean;
 }
 
 const EpisodeCard = memo(function EpisodeCard({
@@ -68,6 +71,7 @@ const EpisodeCard = memo(function EpisodeCard({
   progress,
   onPlay,
   onFocused,
+  railStart = false,
 }: EpisodeCardProps) {
   const playable = hasPlayableVideo(episode);
   const thumb = resolveAnimePosterUrl(episodeThumbnail(episode));
@@ -94,7 +98,7 @@ const EpisodeCard = memo(function EpisodeCard({
       disabled={!playable}
       onPress={handlePress}
       onFocus={onFocused ? handleFocus : undefined}
-      railStart={index === 0}
+      railStart={railStart}
       style={[
         isTvUi() ? styles.cardTv : styles.card,
         !playable && styles.cardDisabled,
@@ -127,7 +131,7 @@ const EpisodeCard = memo(function EpisodeCard({
         )}
       </View>
       <View style={styles.cardBody}>
-        <Text style={styles.epTitle} numberOfLines={2}>
+        <Text style={styles.epTitle} numberOfLines={isTvUi() ? 1 : 2}>
           {customTitle
             ? `${episodeLabel(episode)} · ${customTitle}`
             : episodeLabel(episode)}
@@ -150,35 +154,23 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
   onSelectDubbing,
   filteredEmptyWhileLoading,
 }: AnimeDetailEpisodesProps) {
-  const [mountedCount, setMountedCount] = useState(TV_EPISODE_WINDOW_INITIAL);
-  const prevCountRef = useRef(episodes.length);
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const listKey = episodes[0]?.id ?? 0;
 
   useEffect(() => {
-    setMountedCount(TV_EPISODE_WINDOW_INITIAL);
-    prevCountRef.current = 0;
+    setFocusedIndex(0);
   }, [listKey]);
 
   useEffect(() => {
-    const prev = prevCountRef.current;
-    prevCountRef.current = episodes.length;
-    if (episodes.length > prev && prev > 0) {
-      setMountedCount((current) =>
-        current >= prev
-          ? growTvEpisodeWindow(current, Math.max(0, prev - 1), episodes.length)
-          : current,
-      );
-    } else if (episodes.length < prev) {
-      setMountedCount(TV_EPISODE_WINDOW_INITIAL);
-    }
+    setFocusedIndex((index) => {
+      if (episodes.length <= 0) return 0;
+      return Math.min(index, episodes.length - 1);
+    });
   }, [episodes.length]);
 
-  const onCardFocus = useCallback(
-    (index: number) => {
-      setMountedCount((current) => growTvEpisodeWindow(current, index, episodes.length));
-    },
-    [episodes.length],
-  );
+  const onCardFocus = useCallback((index: number) => {
+    setFocusedIndex(index);
+  }, []);
 
   const header = (
     <View style={styles.header}>
@@ -216,8 +208,16 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
     return null;
   }
 
-  const visibleEpisodes = isTvUi() ? episodes.slice(0, mountedCount) : episodes;
-  const showLoadMore = Boolean(hasMore && (!isTvUi() || mountedCount >= episodes.length));
+  const episodeWindow = slideTvEpisodeWindow(focusedIndex, episodes.length);
+  const spacers = tvEpisodeWindowSpacerHeights(
+    episodeWindow.start,
+    episodeWindow.end,
+    episodes.length,
+  );
+  const visibleEpisodes = isTvUi()
+    ? episodes.slice(episodeWindow.start, episodeWindow.end)
+    : episodes;
+  const showLoadMore = Boolean(hasMore && (!isTvUi() || episodeWindow.end >= episodes.length));
 
   const loadMore = showLoadMore ? (
     <TvFocusable
@@ -238,6 +238,7 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
         index={index}
         progress={progressByEpisodeId[item.id] ?? 0}
         onPlay={onPlay}
+        railStart={index === 0}
       />
     </View>
   );
@@ -250,16 +251,23 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
         // sibling rails ("Похожее") on Android TV when the hero had no poster.
         <View style={styles.listShell}>
           <View style={styles.listContent}>
-            {visibleEpisodes.map((episode, index) => (
-              <EpisodeCard
-                key={episode.id}
-                episode={episode}
-                index={index}
-                progress={progressByEpisodeId[episode.id] ?? 0}
-                onPlay={onPlay}
-                onFocused={onCardFocus}
-              />
-            ))}
+            {spacers.top > 0 ? <View style={{ height: spacers.top }} /> : null}
+            {visibleEpisodes.map((episode, offset) => {
+              const index = episodeWindow.start + offset;
+              return (
+                <View key={episode.id} style={styles.tvCardSlot}>
+                  <EpisodeCard
+                    episode={episode}
+                    index={index}
+                    progress={progressByEpisodeId[episode.id] ?? 0}
+                    onPlay={onPlay}
+                    onFocused={onCardFocus}
+                    railStart={offset === 0}
+                  />
+                </View>
+              );
+            })}
+            {spacers.bottom > 0 ? <View style={{ height: spacers.bottom }} /> : null}
             {loadMore}
           </View>
         </View>
@@ -324,7 +332,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.sm,
-    gap: 6,
+  },
+  tvCardSlot: {
+    marginBottom: TV_EPISODE_ROW_GAP,
   },
   card: {
     width: CARD_WIDTH,
@@ -337,6 +347,8 @@ const styles = StyleSheet.create({
   },
   cardTv: {
     width: FILL,
+    height: TV_EPISODE_CARD_HEIGHT,
+    minHeight: TV_EPISODE_CARD_HEIGHT,
     flexDirection: 'row',
     alignItems: 'stretch',
     borderRadius: radii.md,
@@ -345,7 +357,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
     padding: 0,
-    minHeight: 72,
   },
   cardDisabled: { opacity: 0.55 },
   thumbWrap: {

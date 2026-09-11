@@ -7,8 +7,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 
 import { fetchLampaDetail, mapLampaToRailItem, type LampaItem } from '@/api/catalog';
@@ -26,18 +24,21 @@ import {
 import { fetchLampaExternalRatings } from '@/api/lampaRatings';
 import { fetchLampaProgress } from '@/api/progress';
 import { fetchActivityHistory } from '@/api/user';
-import { LazyCatalogRail } from '@/components/catalog/LazyCatalogRail';
-import { PosterRail, type RailItem } from '@/components/catalog/PosterRail';
+import {
+  DetailCollapsibleRail,
+  DetailCollapsibleSection,
+} from '@/components/catalog/DetailCollapsibleSection';
+import { type RailItem } from '@/components/catalog/PosterRail';
 import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
-import { LampaDetailPlot } from '@/components/lampa/detail/LampaDetailPlot';
 import { LampaDetailSeasons } from '@/components/lampa/detail/LampaDetailSeasons';
 import { LampaDetailSkeleton } from '@/components/lampa/detail/LampaDetailSkeleton';
 import { LampaSourceSheet } from '@/components/lampa/LampaSourceSheet';
 import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBackButton';
 import { TvFocusable } from '@/components/tv/TvFocusable';
-import { colors, layout, spacing } from '@/constants/aniverse';
+import { colors, spacing } from '@/constants/aniverse';
 import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
+import { useExclusiveDetailSection } from '@/hooks/useExclusiveDetailSection';
 import { capDetailRailItems } from '@/lib/catalogRailPage';
 import {
   excludeRelatedLampaItems,
@@ -58,7 +59,6 @@ import {
 import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { useAuth } from '@/providers/AuthProvider';
 import { isTvUi } from '@/lib/isTvUi';
-import { notifyViewportScroll } from '@/lib/viewportScroll';
 
 function parseOptionalNumber(value?: string): number | undefined {
   if (value == null || value === '') return undefined;
@@ -80,6 +80,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const { isAuthenticated } = useAuth();
   const isSerial = kind === 'tv';
   const belowFoldReady = useBelowFoldReady();
+  const { openId, toggle: toggleSection } = useExclusiveDetailSection();
   const resumeSeason = parseOptionalNumber(Array.isArray(season) ? season[0] : season);
   const resumeEpisode = parseOptionalNumber(Array.isArray(episode) ? episode[0] : episode);
   const resumeStartProgress = parseOptionalNumber(
@@ -171,22 +172,22 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     [detail],
   );
 
-  const { data: similar = [], isLoading: similarLoading } = useQuery({
+  const { data: similar = [], isFetching: similarFetching, isFetched: similarFetched } = useQuery({
     queryKey: ['lampa-similar', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaSimilar(kind, tmdbId!),
-    enabled: belowFoldReady && tmdbId != null,
+    enabled: openId === 'similar' && tmdbId != null,
   });
 
-  const { data: recommendations = [], isLoading: recommendationsLoading } = useQuery({
+  const { data: recommendations = [], isFetching: recommendationsFetching, isFetched: recommendationsFetched } = useQuery({
     queryKey: ['lampa-recommendations', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaRecommendations(kind, tmdbId!),
-    enabled: belowFoldReady && tmdbId != null,
+    enabled: openId === 'recommendations' && tmdbId != null,
   });
 
-  const { data: franchise = [], isLoading: franchiseLoading } = useQuery({
+  const { data: franchise = [], isFetching: franchiseFetching, isFetched: franchiseFetched } = useQuery({
     queryKey: ['lampa-related', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaRelated(kind, tmdbId!, collectionId),
-    enabled: belowFoldReady && tmdbId != null && collectionId != null,
+    enabled: openId === 'related' && tmdbId != null && collectionId != null,
   });
 
   const similarItems = useMemo(
@@ -194,13 +195,13 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     [similar, franchise],
   );
 
-  const { data: cast = [], isLoading: castLoading } = useQuery({
+  const { data: cast = [], isFetching: castFetching, isFetched: castFetched } = useQuery({
     queryKey: ['lampa-cast', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaCast(kind, tmdbId!),
-    enabled: belowFoldReady && tmdbId != null,
+    enabled: openId === 'characters' && tmdbId != null,
   });
 
-  const { data: externalRatings = [] } = useQuery({
+  const { data: externalRatings } = useQuery({
     queryKey: ['lampa-ratings', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaExternalRatings(kind, tmdbId!, detail),
     enabled: belowFoldReady && tmdbId != null && !!detail,
@@ -330,7 +331,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   }, [kind, router]);
 
   const toRailItems = useCallback((items: LampaItem[]) => {
-    return capDetailRailItems(items, isTvUi()).map((item) => ({
+    return capDetailRailItems(items).map((item) => ({
       ...mapLampaToRailItem(item),
       subtitle: lampaCardSubtitle(item),
     }));
@@ -381,48 +382,37 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     [detail, kind, routeId],
   );
 
-  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    notifyViewportScroll(event.nativeEvent.contentOffset.y);
-  }, []);
-
   const relatedRails = (
     <>
-      {franchise.length > 0 || franchiseLoading ? (
-        <LazyCatalogRail>
-          <PosterRail
-            title="Связанные"
-            items={franchiseRail}
-            loading={franchiseLoading}
-            itemWidth={layout.posterWidthDetail}
-            flush
-            onItemPress={onPressFranchise}
-          />
-        </LazyCatalogRail>
+      {collectionId != null ? (
+        <DetailCollapsibleRail
+          title="Связанные"
+          expanded={openId === 'related'}
+          onToggle={() => toggleSection('related')}
+          items={franchiseRail}
+          loading={franchiseFetching}
+          fetched={franchiseFetched}
+          onItemPress={onPressFranchise}
+        />
       ) : null}
-      {recommendations.length > 0 || recommendationsLoading ? (
-        <LazyCatalogRail>
-          <PosterRail
-            title="Рекомендации"
-            items={recommendationsRail}
-            loading={recommendationsLoading}
-            itemWidth={layout.posterWidthDetail}
-            flush
-            onItemPress={onPressRecommendations}
-          />
-        </LazyCatalogRail>
-      ) : null}
-      {similarItems.length > 0 || similarLoading ? (
-        <LazyCatalogRail>
-          <PosterRail
-            title="Похожее"
-            items={similarRail}
-            loading={similarLoading}
-            itemWidth={layout.posterWidthDetail}
-            flush
-            onItemPress={onPressSimilar}
-          />
-        </LazyCatalogRail>
-      ) : null}
+      <DetailCollapsibleRail
+        title="Рекомендации"
+        expanded={openId === 'recommendations'}
+        onToggle={() => toggleSection('recommendations')}
+        items={recommendationsRail}
+        loading={recommendationsFetching}
+        fetched={recommendationsFetched}
+        onItemPress={onPressRecommendations}
+      />
+      <DetailCollapsibleRail
+        title="Похожее"
+        expanded={openId === 'similar'}
+        onToggle={() => toggleSection('similar')}
+        items={similarRail}
+        loading={similarFetching}
+        fetched={similarFetched}
+        onItemPress={onPressSimilar}
+      />
     </>
   );
 
@@ -462,8 +452,6 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
-          onScroll={onScroll}
-          scrollEventThrottle={64}
         >
           <LampaDetailHero
             detail={detail}
@@ -494,12 +482,15 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           ) : null}
 
           <View style={styles.stack}>
-            <LampaDetailPlot detail={detail} />
-            {castLoading || cast.length > 0 ? (
-              <LazyCatalogRail placeholderMinHeight={180}>
-                <LampaDetailCast cast={cast} loading={castLoading} />
-              </LazyCatalogRail>
-            ) : null}
+            <DetailCollapsibleSection
+              title="Актёры"
+              expanded={openId === 'characters'}
+              onToggle={() => toggleSection('characters')}
+              loading={openId === 'characters' && cast.length === 0 && (castFetching || !castFetched)}
+              empty={openId === 'characters' && castFetched && cast.length === 0}
+            >
+              <LampaDetailCast hideTitle cast={cast} loading={castFetching} />
+            </DetailCollapsibleSection>
           </View>
           <View style={styles.stack}>{relatedRails}</View>
         </ScrollView>
