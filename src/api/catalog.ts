@@ -216,6 +216,8 @@ export interface LampaDetail {
   seasons?: LampaSeason[] | Record<string, number> | unknown;
   belongs_to_collection?: { id?: number } | null;
   belongsToCollection?: { id?: number } | null;
+  /** Set once WatchHub TMDB data has been merged or skipped. */
+  tmdbMerged?: boolean;
 }
 
 export interface LampaSectionFetch {
@@ -611,17 +613,55 @@ export async function fetchLampaDetail(
 
   if (options?.skipTmdb) return payload.detail;
 
-  const tmdbId = resolveLampaTmdbId(payload.detail, routeId);
-  if (tmdbId != null) {
-    try {
-      const tmdb = await fetchTmdbLampaDetail(mediaKind, tmdbId);
-      if (tmdb) return mergeLampaWithTmdb(payload, tmdb, normalizedKind).detail;
-    } catch {
-      /* keep backend payload */
-    }
-  }
+  return attachLampaTmdbDetail(normalizedKind, routeId, payload.detail);
+}
 
-  return payload.detail;
+/**
+ * Backend payload first. Callers paint that, then merge WatchHub TMDB
+ * without blocking the hero on the second response.
+ */
+export async function fetchLampaDetailBackendFirst(
+  kind: string,
+  routeId: string,
+): Promise<LampaDetail> {
+  try {
+    return await fetchLampaDetail(kind, routeId, { skipTmdb: true });
+  } catch (error) {
+    const normalizedKind = kind === 'home' ? 'tv' : kind;
+    const mediaKind = (normalizedKind === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv';
+    if (/^\d+$/.test(routeId)) {
+      const tmdb = await fetchTmdbLampaDetail(mediaKind, Number(routeId));
+      if (tmdb) {
+        return {
+          ...mergeLampaWithTmdb(null, tmdb, normalizedKind).detail,
+          tmdbMerged: true,
+        };
+      }
+    }
+    throw error;
+  }
+}
+
+export async function attachLampaTmdbDetail(
+  kind: string,
+  routeId: string,
+  detail: LampaDetail,
+): Promise<LampaDetail> {
+  if (detail.tmdbMerged) return detail;
+  const normalizedKind = kind === 'home' ? 'tv' : kind;
+  const mediaKind = (normalizedKind === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv';
+  const tmdbId = resolveLampaTmdbId(detail, routeId);
+  if (tmdbId == null) return { ...detail, tmdbMerged: true };
+  try {
+    const tmdb = await fetchTmdbLampaDetail(mediaKind, tmdbId);
+    if (!tmdb) return { ...detail, tmdbMerged: true };
+    return {
+      ...mergeLampaWithTmdb({ detail, isSaved: false }, tmdb, normalizedKind).detail,
+      tmdbMerged: true,
+    };
+  } catch {
+    return { ...detail, tmdbMerged: true };
+  }
 }
 
 export interface CatalogSearchParams {

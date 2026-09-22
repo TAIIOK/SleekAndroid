@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countdownUnits,
   formatNextEpisodeDateTime,
+  isSeriesFullyAired,
   nextEpisodeNumber,
   parseNextEpisodeDate,
   remainingParts,
@@ -47,6 +48,32 @@ describe('shouldShowNextEpisode', () => {
     expect(shouldShowNextEpisode(new Date('2026-08-14T12:00:00.000Z'), now)).toBe(false);
     expect(shouldShowNextEpisode(new Date('2026-08-14T11:59:59.000Z'), now)).toBe(false);
     expect(shouldShowNextEpisode(undefined, now)).toBe(false);
+  });
+
+  it('hides a future date when every announced episode has already aired', () => {
+    const future = new Date('2026-08-14T12:00:01.000Z');
+    expect(
+      shouldShowNextEpisode(future, now, { episodesAired: 14, episodesTotal: 14 }),
+    ).toBe(false);
+    expect(
+      shouldShowNextEpisode(future, now, { episodesAired: 15, episodesTotal: 14 }),
+    ).toBe(false);
+    expect(isSeriesFullyAired(14, 14)).toBe(true);
+  });
+
+  it('keeps a future date when episodes are still unaired or the total is unknown', () => {
+    const future = new Date('2026-08-14T12:00:01.000Z');
+    expect(
+      shouldShowNextEpisode(future, now, { episodesAired: 13, episodesTotal: 14 }),
+    ).toBe(true);
+    expect(
+      shouldShowNextEpisode(future, now, { episodesAired: 14, episodesTotal: 0 }),
+    ).toBe(true);
+    expect(shouldShowNextEpisode(future, now, { episodesAired: 14 })).toBe(true);
+    expect(shouldShowNextEpisode(future, now, { episodesTotal: 14 })).toBe(true);
+    expect(isSeriesFullyAired(13, 14)).toBe(false);
+    expect(isSeriesFullyAired(14, 0)).toBe(false);
+    expect(isSeriesFullyAired(undefined, 14)).toBe(false);
   });
 });
 

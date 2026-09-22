@@ -19,6 +19,7 @@ import { mapAnimeToRailItem } from '@/lib/poster';
 import { currentSeasonalShowcase } from '@/lib/seasonal';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { isTvUi } from '@/lib/isTvUi';
+import { useTvHubRetained } from '@/hooks/useTvHubRetained';
 import { useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 
 function SeasonalAnimeRail() {
@@ -66,9 +67,14 @@ function SeasonalAnimeRail() {
 }
 
 export default function AnimeBrowseScreen() {
+  const hubRetained = useTvHubRetained('/anime');
   const { config, ready } = useHomeCatalogConfig();
   const catalogScroll = useTvCatalogScrollRestore('/anime');
   const chromeScrollProps = useMobileChromeScrollProps(catalogScroll.onScroll, styles.content);
+
+  if (isTvUi() && !hubRetained) {
+    return <ScrollView style={styles.scroll} />;
+  }
 
   return (
     <ScrollView

@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchUserBrief, fetchUserFriends } from '@/api/userProfile';
 import { UserProfileHeader } from '@/components/friends/UserProfileHeader';
@@ -63,7 +64,13 @@ export default function UserProfileFriendsScreen() {
             style={styles.row}
           >
             {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.avatar} />
+              <Image
+                source={{ uri: avatar, width: 40, height: 40 }}
+                style={styles.avatar}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={0}
+              />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarLetter}>

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -20,27 +20,29 @@ import {
   isRedundantEpisodeTitle,
 } from '@/lib/animeDetail';
 import { resolveAnimePosterUrl } from '@/lib/config';
-import {
-  slideTvEpisodeWindow,
-  tvEpisodeWindowSpacerHeights,
-  TV_EPISODE_CARD_HEIGHT,
-  TV_EPISODE_ROW_GAP,
-  TV_EPISODE_THUMB_DECODE,
-} from '@/lib/detailEpisodeWindow';
+import { TV_EPISODE_PAGE_SIZE } from '@/lib/detailEpisodeWindow';
 import {
   reportYaniPosterLoadError,
   reportYaniPosterLoadSuccess,
 } from '@/lib/imageCdn';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
+import {
+  DETAIL_FOCUS_EPISODES,
+  DETAIL_FOCUS_EPISODE_TAIL,
+  useDetailFocusSlot,
+} from '@/lib/detailFocus';
 
-const CARD_WIDTH = isTvUi() ? 200 : 112;
-const CARD_GAP = 6;
-const CARD_STRIDE = CARD_WIDTH + CARD_GAP;
+const PHONE_CARD_WIDTH = 112;
+const TV_CARD_WIDTH = 176;
+const CARD_WIDTH = isTvUi() ? TV_CARD_WIDTH : PHONE_CARD_WIDTH;
+const CARD_GAP = isTvUi() ? 10 : 6;
+const CARD_STRIDE = PHONE_CARD_WIDTH + 6;
 const FILL: DimensionValue = '100%';
-const THUMB_DECODE = isTvUi()
-  ? TV_EPISODE_THUMB_DECODE
-  : { width: CARD_WIDTH, height: Math.round((CARD_WIDTH * 9) / 16) };
+const THUMB_DECODE = {
+  width: CARD_WIDTH,
+  height: Math.round((CARD_WIDTH * 9) / 16),
+};
 
 interface AnimeDetailEpisodesProps {
   episodes: AnimeEpisode[];
@@ -50,6 +52,7 @@ interface AnimeDetailEpisodesProps {
   onLoadMore?: () => void;
   progressByEpisodeId?: Record<number, number>;
   onPlay: (episode: AnimeEpisode) => void;
+  totalPages?: number;
   dubbingOptions?: string[];
   selectedDubbing?: string;
   onSelectDubbing?: (value: string) => void;
@@ -63,6 +66,9 @@ interface EpisodeCardProps {
   onPlay: (episode: AnimeEpisode) => void;
   onFocused?: (index: number) => void;
   railStart?: boolean;
+  hostRef?: (node: View | null) => void;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
 }
 
 const EpisodeCard = memo(function EpisodeCard({
@@ -72,6 +78,9 @@ const EpisodeCard = memo(function EpisodeCard({
   onPlay,
   onFocused,
   railStart = false,
+  hostRef,
+  nextFocusUp,
+  nextFocusDown,
 }: EpisodeCardProps) {
   const playable = hasPlayableVideo(episode);
   const thumb = resolveAnimePosterUrl(episodeThumbnail(episode));
@@ -99,12 +108,12 @@ const EpisodeCard = memo(function EpisodeCard({
       onPress={handlePress}
       onFocus={onFocused ? handleFocus : undefined}
       railStart={railStart}
-      style={[
-        isTvUi() ? styles.cardTv : styles.card,
-        !playable && styles.cardDisabled,
-      ]}
+      hostRef={hostRef}
+      nextFocusUp={nextFocusUp}
+      nextFocusDown={nextFocusDown}
+      style={[styles.card, !playable && styles.cardDisabled]}
     >
-      <View style={isTvUi() ? styles.thumbWrapTv : styles.thumbWrap}>
+      <View style={styles.thumbWrap}>
         {thumb ? (
           <Image
             source={{ uri: thumb, width: THUMB_DECODE.width, height: THUMB_DECODE.height }}
@@ -131,7 +140,7 @@ const EpisodeCard = memo(function EpisodeCard({
         )}
       </View>
       <View style={styles.cardBody}>
-        <Text style={styles.epTitle} numberOfLines={isTvUi() ? 1 : 2}>
+        <Text style={styles.epTitle} numberOfLines={2}>
           {customTitle
             ? `${episodeLabel(episode)} · ${customTitle}`
             : episodeLabel(episode)}
@@ -149,28 +158,64 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
   onLoadMore,
   progressByEpisodeId = {},
   onPlay,
+  totalPages = 1,
   dubbingOptions = [],
   selectedDubbing = '',
   onSelectDubbing,
   filteredEmptyWhileLoading,
 }: AnimeDetailEpisodesProps) {
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const episodeHead = useDetailFocusSlot(DETAIL_FOCUS_EPISODES);
+  const episodeTail = useDetailFocusSlot(DETAIL_FOCUS_EPISODE_TAIL);
+  const [page, setPage] = useState(0);
+  const [wantNext, setWantNext] = useState(false);
+  const [columns, setColumns] = useState(6);
   const listKey = episodes[0]?.id ?? 0;
+  const firstCardRef = useRef<View | null>(null);
+  const focusPageRef = useRef(false);
 
   useEffect(() => {
-    setFocusedIndex(0);
+    setPage(0);
+    setWantNext(false);
   }, [listKey]);
 
   useEffect(() => {
-    setFocusedIndex((index) => {
-      if (episodes.length <= 0) return 0;
-      return Math.min(index, episodes.length - 1);
-    });
-  }, [episodes.length]);
+    if (!wantNext) return;
+    const nextStart = (page + 1) * TV_EPISODE_PAGE_SIZE;
+    if (episodes.length > nextStart) {
+      focusPageRef.current = true;
+      setPage((value) => value + 1);
+      setWantNext(false);
+      return;
+    }
+    if (!isFetchingMore && !hasMore) setWantNext(false);
+  }, [episodes.length, hasMore, isFetchingMore, page, wantNext]);
 
-  const onCardFocus = useCallback((index: number) => {
-    setFocusedIndex(index);
+  useEffect(() => {
+    if (!isTvUi() || !focusPageRef.current) return;
+    focusPageRef.current = false;
+    const timer = setTimeout(() => {
+      const node = firstCardRef.current as { requestTVFocus?: () => void } | null;
+      node?.requestTVFocus?.();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [page]);
+
+  const showPreviousPage = useCallback(() => {
+    focusPageRef.current = true;
+    setPage((value) => Math.max(0, value - 1));
   }, []);
+
+  const showNextPage = useCallback(() => {
+    const nextStart = (page + 1) * TV_EPISODE_PAGE_SIZE;
+    if (episodes.length > nextStart) {
+      focusPageRef.current = true;
+      setPage((value) => value + 1);
+      return;
+    }
+    if (!hasMore || isFetchingMore) return;
+    setWantNext(true);
+    onLoadMore?.();
+  }, [episodes.length, hasMore, isFetchingMore, onLoadMore, page]);
 
   const header = (
     <View style={styles.header}>
@@ -208,22 +253,21 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
     return null;
   }
 
-  const episodeWindow = slideTvEpisodeWindow(focusedIndex, episodes.length);
-  const spacers = tvEpisodeWindowSpacerHeights(
-    episodeWindow.start,
-    episodeWindow.end,
-    episodes.length,
-  );
-  const visibleEpisodes = isTvUi()
-    ? episodes.slice(episodeWindow.start, episodeWindow.end)
-    : episodes;
-  const showLoadMore = Boolean(hasMore && (!isTvUi() || episodeWindow.end >= episodes.length));
+  const pageStart = page * TV_EPISODE_PAGE_SIZE;
+  const pageEpisodes = episodes.slice(pageStart, pageStart + TV_EPISODE_PAGE_SIZE);
+  const loadedPages = Math.max(1, Math.ceil(episodes.length / TV_EPISODE_PAGE_SIZE));
+  const pageCount = Math.max(totalPages, loadedPages);
+  const showPrev = page > 0;
+  const showNext = page + 1 < loadedPages || Boolean(hasMore);
+  const showPager = showPrev || showNext;
+  const lastRowCount = pageEpisodes.length % columns || columns;
+  const lastRowStart = Math.max(0, pageEpisodes.length - lastRowCount);
 
-  const loadMore = showLoadMore ? (
+  const loadMore = hasMore ? (
     <TvFocusable
       disabled={isFetchingMore}
       onPress={onLoadMore}
-      style={isTvUi() ? styles.loadMoreTv : styles.loadMore}
+      style={styles.loadMore}
     >
       <Text style={styles.loadMoreLabel}>
         {isFetchingMore ? 'Загрузка…' : 'Ещё эпизоды'}
@@ -247,29 +291,73 @@ export const AnimeDetailEpisodes = memo(function AnimeDetailEpisodes({
     <View style={styles.section}>
       {header}
       {isTvUi() ? (
-        // Plain column — nested ScrollView inside the page ScrollView was overlapping
-        // sibling rails ("Похожее") on Android TV when the hero had no poster.
-        <View style={styles.listShell}>
-          <View style={styles.listContent}>
-            {spacers.top > 0 ? <View style={{ height: spacers.top }} /> : null}
-            {visibleEpisodes.map((episode, offset) => {
-              const index = episodeWindow.start + offset;
+        <View style={styles.page}>
+          <View
+            style={styles.grid}
+            onLayout={(event) => {
+              const width = event.nativeEvent.layout.width;
+              const stride = TV_CARD_WIDTH + CARD_GAP;
+              const next = Math.max(1, Math.floor((width + CARD_GAP) / stride));
+              setColumns((current) => (current === next ? current : next));
+            }}
+          >
+            {pageEpisodes.map((episode, index) => {
+              const isFirst = index === 0;
+              const onLastRow = index >= lastRowStart;
               return (
-                <View key={episode.id} style={styles.tvCardSlot}>
-                  <EpisodeCard
-                    episode={episode}
-                    index={index}
-                    progress={progressByEpisodeId[episode.id] ?? 0}
-                    onPlay={onPlay}
-                    onFocused={onCardFocus}
-                    railStart={offset === 0}
-                  />
-                </View>
+                <EpisodeCard
+                  key={episode.id}
+                  episode={episode}
+                  index={pageStart + index}
+                  progress={progressByEpisodeId[episode.id] ?? 0}
+                  onPlay={onPlay}
+                  railStart={index % columns === 0}
+                  hostRef={
+                    isFirst
+                      ? (node) => {
+                          firstCardRef.current = node;
+                          episodeHead.hostRef?.(node);
+                        }
+                      : undefined
+                  }
+                  nextFocusUp={index < columns ? episodeHead.nextFocusUp : undefined}
+                  nextFocusDown={onLastRow ? episodeHead.nextFocusDown : undefined}
+                />
               );
             })}
-            {spacers.bottom > 0 ? <View style={{ height: spacers.bottom }} /> : null}
-            {loadMore}
           </View>
+          {showPager ? (
+            <View style={styles.pager}>
+              {showPrev ? (
+                <TvFocusable
+                  onPress={showPreviousPage}
+                  hostRef={!showNext ? episodeTail.hostRef : undefined}
+                  nextFocusUp={!showNext ? episodeTail.nextFocusUp : undefined}
+                  nextFocusDown={!showNext ? episodeTail.nextFocusDown : undefined}
+                  style={styles.pageBtn}
+                >
+                  <Text style={styles.pageBtnLabel}>Назад</Text>
+                </TvFocusable>
+              ) : null}
+              <Text style={styles.pageLabel}>
+                {page + 1} / {pageCount}
+              </Text>
+              {showNext ? (
+                <TvFocusable
+                  disabled={wantNext || isFetchingMore}
+                  onPress={showNextPage}
+                  hostRef={episodeTail.hostRef}
+                  nextFocusUp={episodeTail.nextFocusUp}
+                  nextFocusDown={episodeTail.nextFocusDown}
+                  style={styles.pageBtn}
+                >
+                  <Text style={styles.pageBtnLabel}>
+                    {wantNext || isFetchingMore ? 'Загрузка…' : 'Дальше'}
+                  </Text>
+                </TvFocusable>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       ) : (
         <FlatList
@@ -319,38 +407,40 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   phoneCardWrap: {
-    width: CARD_WIDTH,
-    marginRight: CARD_GAP,
+    width: PHONE_CARD_WIDTH,
+    marginRight: 6,
   },
-  listShell: {
-    borderRadius: radii.md,
+  page: { gap: spacing.sm },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: CARD_GAP,
+  },
+  pager: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  pageBtn: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    overflow: 'hidden',
-    width: FILL,
   },
-  listContent: {
-    padding: spacing.sm,
+  pageBtnLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
   },
-  tvCardSlot: {
-    marginBottom: TV_EPISODE_ROW_GAP,
+  pageLabel: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   card: {
     width: CARD_WIDTH,
-    borderRadius: radii.md,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    padding: 0,
-  },
-  cardTv: {
-    width: FILL,
-    height: TV_EPISODE_CARD_HEIGHT,
-    minHeight: TV_EPISODE_CARD_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'stretch',
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
@@ -362,14 +452,6 @@ const styles = StyleSheet.create({
   thumbWrap: {
     width: FILL,
     aspectRatio: 16 / 9,
-    backgroundColor: colors.bgElevated,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  thumbWrapTv: {
-    width: 120,
-    minHeight: 72,
-    alignSelf: 'stretch',
     backgroundColor: colors.bgElevated,
     position: 'relative',
     overflow: 'hidden',
@@ -403,10 +485,10 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     flex: 1,
-    paddingHorizontal: isTvUi() ? spacing.md : 8,
+    paddingHorizontal: isTvUi() ? spacing.sm : 8,
     paddingVertical: isTvUi() ? spacing.sm : 6,
     justifyContent: 'center',
-    minHeight: isTvUi() ? undefined : 32,
+    minHeight: 32,
   },
   epTitle: {
     color: colors.text,
@@ -430,15 +512,6 @@ const styles = StyleSheet.create({
   loadMore: {
     width: 88,
     height: CARD_WIDTH * (9 / 16) + 40,
-    borderRadius: radii.md,
-    backgroundColor: colors.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.sm,
-  },
-  loadMoreTv: {
-    width: FILL,
-    minHeight: 48,
     borderRadius: radii.md,
     backgroundColor: colors.bgElevated,
     alignItems: 'center',

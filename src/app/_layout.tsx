@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { enableFreeze } from 'react-native-screens';
 
@@ -17,6 +17,8 @@ initCrashReporting();
 void ensureImageCdnPreference();
 
 export default function RootLayout() {
+  const segments = useSegments();
+  const watchOpen = segments[0] === 'watch';
   const watchScreenOptions = isTvUi()
     ? {
         presentation: 'fullScreenModal' as const,
@@ -45,7 +47,7 @@ export default function RootLayout() {
             <Stack.Screen name="catalog/connect" />
             <Stack.Screen
               name="(main)"
-              options={isTvUi() ? { freezeOnBlur: false } : undefined}
+              options={isTvUi() ? { freezeOnBlur: watchOpen } : undefined}
             />
             <Stack.Screen name="watch" options={watchScreenOptions} />
           </Stack>

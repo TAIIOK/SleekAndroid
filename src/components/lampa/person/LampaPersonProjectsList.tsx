@@ -1,7 +1,7 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -122,7 +122,13 @@ function ProjectRow({ item, isLast }: { item: LampaPersonCredit; isLast: boolean
       <View style={styles.mid}>
         <View style={styles.poster}>
           {poster ? (
-            <Image source={{ uri: poster }} style={styles.posterImage} />
+            <Image
+              source={{ uri: poster, width: 48, height: 72 }}
+              style={styles.posterImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={0}
+            />
           ) : (
             <View style={styles.posterFallback}>
               <Text style={styles.posterLetter}>

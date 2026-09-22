@@ -134,10 +134,15 @@ export function registerTvCatalogChrome(
 }
 
 export function registerTvCatalogRail(path: string, priority: number, node: unknown) {
-  if (node == null) return;
+  const state = ensurePath(path);
+  if (node == null) {
+    if (!state.rails.has(priority)) return;
+    state.rails.delete(priority);
+    emit(path);
+    return;
+  }
   const host = asHost(node);
   if (!host) return;
-  const state = ensurePath(path);
   const entry: RailEntry = state.rails.get(priority) ?? { host };
   entry.host = host;
   state.rails.set(priority, entry);

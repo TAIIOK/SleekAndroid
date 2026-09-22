@@ -146,10 +146,12 @@ export function PosterRail({
       flush={flush}
       hideTitle={hideTitle}
       itemWidth={itemWidth ?? layout.posterWidthRail}
-      renderItem={(item, index) => (
+      renderItem={(item, index, focus) => (
         <RailPosterCard
           item={item}
           index={index}
+          onItemFocused={focus?.onFocused}
+          verticalAnchor={focus?.verticalAnchor}
           bindItem={bindItem}
           subscribePin={subscribePin}
           hostsRef={hostsRef}
@@ -189,6 +191,8 @@ function RailPosterCard({
   railFocusPriority,
   nextFocusUp,
   nextFocusDown,
+  onItemFocused,
+  verticalAnchor,
 }: {
   item: RailItem;
   index: number;
@@ -207,20 +211,33 @@ function RailPosterCard({
   railFocusPriority?: number;
   nextFocusUp?: number;
   nextFocusDown?: number;
+  onItemFocused?: () => void;
+  /** TV window: the leftmost mounted card owns the vertical focus slot. */
+  verticalAnchor?: boolean;
 }) {
   const railFocus = bindItem(index);
   const [pinVerticalFocus, setPinVerticalFocus] = useState(false);
+  const hostRef = useRef<View | null>(null);
+  const ownsVerticalSlot = verticalAnchor ?? index === 0;
 
   useEffect(() => subscribePin(index, setPinVerticalFocus), [index, subscribePin]);
+
+  useEffect(() => {
+    if (!restorePath || railFocusPriority == null || !ownsVerticalSlot) return;
+    const node = hostRef.current;
+    if (!node) return;
+    registerTvCatalogRail(restorePath, railFocusPriority, node);
+    return () => {
+      registerTvCatalogRail(restorePath, railFocusPriority, null);
+    };
+  }, [ownsVerticalSlot, railFocusPriority, restorePath]);
 
   return (
     <CatalogPosterCard
       ref={(node) => {
         hostsRef.current.set(index, node);
         railFocus.ref?.(node);
-        if (restorePath && railFocusPriority != null && index === 0) {
-          registerTvCatalogRail(restorePath, railFocusPriority, node);
-        }
+        hostRef.current = node;
       }}
       title={item.title}
       poster={item.poster}
@@ -229,6 +246,7 @@ function RailPosterCard({
       rating={item.score}
       onPress={() => onItemPress?.(item)}
       onFocus={() => {
+        onItemFocused?.();
         railFocus.onFocus?.();
         if (restorePath) {
           setCatalogActiveFocus(restorePath, railKey, index);

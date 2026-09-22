@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { colors, radii, spacing } from '@/constants/aniverse';
@@ -104,7 +105,15 @@ export function ProfileAvatar({
   const uri = resolvePosterUrl(typeof avatar === 'string' ? avatar : avatar?.url);
   const dim = size === 'sm' ? 32 : 40;
   if (uri) {
-    return <Image source={{ uri }} style={{ width: dim, height: dim, borderRadius: dim / 2 }} />;
+    return (
+      <Image
+        source={{ uri, width: dim, height: dim }}
+        style={{ width: dim, height: dim, borderRadius: dim / 2 }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={0}
+      />
+    );
   }
   return (
     <View style={[styles.avatarFallback, { width: dim, height: dim, borderRadius: dim / 2 }]}>

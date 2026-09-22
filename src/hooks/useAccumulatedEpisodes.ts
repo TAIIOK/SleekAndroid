@@ -3,14 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 
 import { fetchAnimeEpisodes } from '@/api/catalog';
 import { TV_EPISODE_PAGE_SIZE } from '@/lib/detailEpisodeWindow';
+import { projectEpisodeForList, type ListedAnimeEpisode } from '@/lib/episodeListSources';
 import { isTvUi } from '@/lib/isTvUi';
-import type { AnimeEpisode } from '@aniverse/types';
 
 const DEFAULT_PAGE_SIZE = isTvUi() ? TV_EPISODE_PAGE_SIZE : 24;
 
 export function useAccumulatedEpisodes(animeId: number, pageSize = DEFAULT_PAGE_SIZE) {
   const [page, setPage] = useState(1);
-  const [episodes, setEpisodes] = useState<AnimeEpisode[]>([]);
+  const [episodes, setEpisodes] = useState<ListedAnimeEpisode[]>([]);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['anime-episodes', animeId, page, pageSize],
@@ -29,7 +29,7 @@ export function useAccumulatedEpisodes(animeId: number, pageSize = DEFAULT_PAGE_
       const seen = new Set(prev.map((ep) => ep.id));
       const next = [...prev];
       for (const ep of data.episodes) {
-        if (!seen.has(ep.id)) next.push(ep);
+        if (!seen.has(ep.id)) next.push(projectEpisodeForList(ep));
       }
       return next;
     });

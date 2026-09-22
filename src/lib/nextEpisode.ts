@@ -65,7 +65,28 @@ export function parseNextEpisodeDate(raw: unknown): Date | undefined {
   return undefined;
 }
 
-export function shouldShowNextEpisode(date: Date | undefined, now = new Date()): boolean {
+export interface NextEpisodeCounts {
+  episodesAired?: number;
+  episodesTotal?: number;
+}
+
+/** True when the announced run is already fully aired (for example 14 / 14). */
+export function isSeriesFullyAired(
+  episodesAired?: number,
+  episodesTotal?: number,
+): boolean {
+  if (episodesAired == null || episodesTotal == null) return false;
+  if (!Number.isFinite(episodesAired) || !Number.isFinite(episodesTotal)) return false;
+  if (episodesTotal <= 0) return false;
+  return Math.trunc(episodesAired) >= Math.trunc(episodesTotal);
+}
+
+export function shouldShowNextEpisode(
+  date: Date | undefined,
+  now = new Date(),
+  counts?: NextEpisodeCounts,
+): boolean {
+  if (isSeriesFullyAired(counts?.episodesAired, counts?.episodesTotal)) return false;
   return date != null && date.getTime() > now.getTime();
 }
 

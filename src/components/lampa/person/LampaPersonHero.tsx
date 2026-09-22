@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Image,
-  ImageBackground,
   Pressable,
   Share,
   StyleSheet,
@@ -46,13 +45,7 @@ export function LampaPersonHero({ person }: LampaPersonHeroProps) {
 
   return (
     <View style={styles.wrap}>
-      {image ? (
-        <ImageBackground source={{ uri: image }} style={StyleSheet.absoluteFill} blurRadius={28}>
-          <View style={styles.bgDim} />
-        </ImageBackground>
-      ) : (
-        <View style={[StyleSheet.absoluteFill, styles.bgSolid]} />
-      )}
+      <View style={[StyleSheet.absoluteFill, styles.bgSolid]} />
       <LinearGradient
         colors={['rgba(0,0,0,0.2)', 'rgba(18,20,28,0.9)', colors.bg]}
         style={StyleSheet.absoluteFill}
@@ -61,7 +54,14 @@ export function LampaPersonHero({ person }: LampaPersonHeroProps) {
       <View style={[styles.inner, tv && styles.innerTv]}>
         <View style={[styles.photoWrap, tv && styles.photoWrapTv]}>
           {image ? (
-            <Image source={{ uri: image }} style={styles.photo} />
+            <Image
+              source={{ uri: image, width: tv ? 180 : 160, height: tv ? 250 : 220 }}
+              style={styles.photo}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={image}
+              transition={0}
+            />
           ) : (
             <View style={[styles.photo, styles.photoFallback]}>
               <Text style={styles.photoLetter}>{person.name.slice(0, 1).toUpperCase()}</Text>
@@ -110,10 +110,6 @@ const styles = StyleSheet.create({
   wrap: {
     overflow: 'hidden',
     backgroundColor: '#12141c',
-  },
-  bgDim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   bgSolid: { backgroundColor: '#12141c' },
   inner: {

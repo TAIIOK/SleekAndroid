@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 
 import { colors } from '@/constants/aniverse';
+import { isTvUi } from '@/lib/isTvUi';
 
 /**
  * Keep Home / Anime / Movies / Series mounted after first visit so phone (and TV)
@@ -13,6 +14,8 @@ import { colors } from '@/constants/aniverse';
  *
  * `detachInactiveScreens={false}` is required: Android defaults to detaching
  * inactive tab scenes, which tears down the catalog tree on every hub switch.
+ * TV still keeps detach off, but only the current hub and the previous hub
+ * render their catalogs (`useTvHubRetained`). Phone keeps freeze-on-blur.
  */
 export default function MainTabsLayout() {
   return (
@@ -22,7 +25,7 @@ export default function MainTabsLayout() {
       screenOptions={{
         headerShown: false,
         lazy: true,
-        freezeOnBlur: true,
+        freezeOnBlur: !isTvUi(),
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >

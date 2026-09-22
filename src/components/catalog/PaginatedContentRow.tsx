@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
   ScrollView,
@@ -14,13 +14,18 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { PosterSkeleton } from '@/components/ui/Skeleton';
 import { colors, layout, spacing } from '@/constants/aniverse';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
+import { resolveHeldTvRailWindow } from '@/lib/tvRailWindow';
 import { isTvUi } from '@/lib/isTvUi';
 
 interface PaginatedContentRowProps<T> {
   title: string;
   subtitle?: string;
   items: T[];
-  renderItem: (item: T, index: number) => ReactNode;
+  renderItem: (
+    item: T,
+    index: number,
+    focus?: { onFocused: () => void; verticalAnchor?: boolean },
+  ) => ReactNode;
   getItemKey: (item: T, index: number) => string | number;
   isLoading?: boolean;
   isError?: boolean;
@@ -76,6 +81,22 @@ export function PaginatedContentRow<T>({
       : layout.gutterMobile;
   const skeletonCount = isTvUi() ? 4 : 6;
   const stride = itemWidth + RAIL_GAP;
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const railWindowRef = useRef({ start: 0, end: 0 });
+  const clampedFocus = items.length <= 0 ? 0 : Math.min(focusedIndex, items.length - 1);
+  if (items.length === 0) railWindowRef.current = { start: 0, end: 0 };
+  const railWindow = isTvUi()
+    ? resolveHeldTvRailWindow(
+        clampedFocus,
+        items.length,
+        railWindowRef.current.end === 0 ? null : railWindowRef.current,
+      )
+    : { start: 0, end: items.length };
+  if (isTvUi()) railWindowRef.current = railWindow;
+
+  const reportFocused = (index: number) => {
+    setFocusedIndex(index);
+  };
 
   const skeletonRow = (
     <ScrollView
@@ -90,11 +111,17 @@ export function PaginatedContentRow<T>({
     </ScrollView>
   );
 
+  const visibleItems = isTvUi()
+    ? items.slice(railWindow.start, railWindow.end)
+    : items;
+  const leftSpacer = isTvUi() ? Math.max(0, railWindow.start) * stride : 0;
+  const rightSpacer = isTvUi() ? Math.max(0, items.length - railWindow.end) * stride : 0;
+
   const tvRow = (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
+      contentContainerStyle={[styles.tvScroll, { paddingHorizontal: horizontalPad }]}
       {...tvHorizontalCatalogScrollProps}
       onScrollEndDrag={(event) =>
         maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)
@@ -106,11 +133,23 @@ export function PaginatedContentRow<T>({
       onScroll={(event) => maybeLoadMore(event, hasNextPage, isFetchingNextPage, onLoadMore)}
       scrollEventThrottle={64}
     >
-      {items.map((item, index) => (
-        <View key={String(getItemKey(item, index))} collapsable={false}>
-          {renderItem(item, index)}
-        </View>
-      ))}
+      {leftSpacer > 0 ? <View style={{ width: leftSpacer }} /> : null}
+      {visibleItems.map((item, offset) => {
+        const index = railWindow.start + offset;
+        return (
+          <View
+            key={String(getItemKey(item, index))}
+            collapsable={false}
+            style={{ width: itemWidth, marginRight: RAIL_GAP }}
+          >
+            {renderItem(item, index, {
+              onFocused: () => reportFocused(index),
+              verticalAnchor: offset === 0,
+            })}
+          </View>
+        );
+      })}
+      {rightSpacer > 0 ? <View style={{ width: rightSpacer }} /> : null}
       {isFetchingNextPage ? <PosterSkeleton /> : null}
     </ScrollView>
   );
@@ -185,6 +224,10 @@ const styles = StyleSheet.create({
     paddingTop: isTvUi() ? 8 : 0,
     paddingBottom: isTvUi() ? 10 : spacing.sm,
     gap: isTvUi() ? 10 : 12,
+  },
+  tvScroll: {
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   phoneScroll: {
     paddingBottom: spacing.sm,

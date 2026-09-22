@@ -46,6 +46,7 @@ import { detailHeroDecodeSize } from '@/lib/catalogRailLayout';
 import type { CollectionItemInput } from '@/types/collection';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
+import { DETAIL_FOCUS_LIBRARY, DETAIL_FOCUS_PLAY, useDetailFocusSlot } from '@/lib/detailFocus';
 
 const HERO_OVERVIEW_LIMIT = 260;
 
@@ -90,6 +91,8 @@ export const AnimeDetailHero = memo(function AnimeDetailHero({
   onToggleFavorite,
 }: AnimeDetailHeroProps) {
   const tv = isTvUi();
+  const playFocus = useDetailFocusSlot(DETAIL_FOCUS_PLAY);
+  const libraryFocus = useDetailFocusSlot(DETAIL_FOCUS_LIBRARY);
   const { createParty, creating: creatingParty } = useCreatePartyFromAnime();
   const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [overrideBackdrop, setOverrideBackdrop] = useState<string | null>(null);
@@ -101,7 +104,10 @@ export const AnimeDetailHero = memo(function AnimeDetailHero({
   const year = detail.year ? String(detail.year) : undefined;
   const genres = animeGenreNames(detail.genres).slice(0, 4);
   const infoRows = buildAnimeHeroInfoRows(detail, episodesTotal);
-  const showNextEpisode = shouldShowNextEpisode(parseNextEpisodeDate(detail));
+  const showNextEpisode = shouldShowNextEpisode(parseNextEpisodeDate(detail), new Date(), {
+    episodesAired: detail.episodesAired,
+    episodesTotal: detail.episodesTotal,
+  });
   const baseCandidates = useMemo(() => animeHeroImageCandidates(detail), [detail]);
   const resolvedCandidates = useMemo(
     () =>
@@ -281,6 +287,8 @@ export const AnimeDetailHero = memo(function AnimeDetailHero({
           hasTVPreferredFocus={tv}
           contentEntry={tv}
           railStart={tv}
+          hostRef={playFocus.hostRef}
+          nextFocusDown={playFocus.nextFocusDown}
           style={[styles.playBtn, !canPlay && styles.playDisabled]}
         >
           <Text style={styles.playLabel}>▶ {playLabel}</Text>
@@ -291,6 +299,9 @@ export const AnimeDetailHero = memo(function AnimeDetailHero({
           userStatus={userStatus}
           isFavorite={isFavorite}
           disabled={libraryDisabled}
+          focusHostRef={libraryFocus.hostRef}
+          nextFocusUp={libraryFocus.nextFocusUp}
+          nextFocusDown={libraryFocus.nextFocusDown}
           collectionItem={
             collectionItem ?? {
               mediaType: 'anime',
@@ -376,26 +387,14 @@ export const AnimeDetailHero = memo(function AnimeDetailHero({
           pointerEvents="none"
         />
       ) : (
-        <>
-          <LinearGradient
-            colors={['rgba(19,18,27,0.75)', 'rgba(19,18,27,0.2)', 'transparent']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 0.55, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <LinearGradient
-            colors={[
-              'transparent',
-              'rgba(19,18,27,0.35)',
-              'rgba(19,18,27,0.85)',
-              colors.bg,
-            ]}
-            locations={[0.35, 0.62, 0.85, 1]}
-            style={styles.bottomFade}
-            pointerEvents="none"
-          />
-        </>
+        <LinearGradient
+          colors={['rgba(19,18,27,0.72)', 'rgba(19,18,27,0.28)', colors.bg]}
+          locations={[0, 0.42, 1]}
+          start={{ x: 0, y: 0.35 }}
+          end={{ x: 0.85, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
       )}
 
       <View style={[styles.content, tv && styles.contentTv]}>
@@ -492,9 +491,13 @@ const styles = StyleSheet.create({
     fontSize: isTvUi() ? 36 : 22,
     fontWeight: '700',
     letterSpacing: -0.5,
-    textShadowColor: 'rgba(0,0,0,0.65)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    ...(isTvUi()
+      ? {}
+      : {
+          textShadowColor: 'rgba(0,0,0,0.65)',
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 6,
+        }),
   },
   alt: {
     color: 'rgba(255,255,255,0.9)',

@@ -9,9 +9,8 @@ import {
   View,
 } from 'react-native';
 
-import { fetchLampaDetail, mapLampaToRailItem, type LampaItem } from '@/api/catalog';
+import { attachLampaTmdbDetail, fetchLampaDetailBackendFirst, mapLampaToRailItem, type LampaItem } from '@/api/catalog';
 import {
-  fetchSavedLampaLibrary,
   toggleLampaFavorite,
   updateLibraryLampaStatus,
 } from '@/api/library';
@@ -22,12 +21,7 @@ import {
   fetchLampaSimilar,
 } from '@/api/lampaExtras';
 import { fetchLampaExternalRatings } from '@/api/lampaRatings';
-import { fetchLampaProgress } from '@/api/progress';
-import { fetchActivityHistory } from '@/api/user';
-import {
-  DetailCollapsibleRail,
-  DetailCollapsibleSection,
-} from '@/components/catalog/DetailCollapsibleSection';
+import { DetailPreviewRail } from '@/components/catalog/DetailPreviewRail';
 import { type RailItem } from '@/components/catalog/PosterRail';
 import { LampaDetailCast } from '@/components/lampa/detail/LampaDetailCast';
 import { LampaDetailHero } from '@/components/lampa/detail/LampaDetailHero';
@@ -38,8 +32,9 @@ import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBack
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
-import { useExclusiveDetailSection } from '@/hooks/useExclusiveDetailSection';
-import { capDetailRailItems } from '@/lib/catalogRailPage';
+import { useDetailLampaLibrary } from '@/hooks/useDetailLibrary';
+import { useLampaDetailPlayback } from '@/hooks/useLampaDetailPlayback';
+import { DETAIL_CAST_FETCH_LIMIT } from '@/lib/catalogRailPage';
 import {
   excludeRelatedLampaItems,
   lampaCardSubtitle,
@@ -51,7 +46,7 @@ import {
 } from '@/lib/lampaDetail';
 import type { UserListStatus } from '@/lib/libraryStatus';
 import { lampaPosterPath } from '@/lib/poster';
-import { buildLampaPlaybackState, explicitResumeProgress, isUnfinishedProgress } from '@/lib/progressUtils';
+import { explicitResumeProgress, isUnfinishedProgress } from '@/lib/progressUtils';
 import {
   lampaWatchHistoryKey,
   rememberWatchHistoryMeta,
@@ -59,6 +54,13 @@ import {
 import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { useAuth } from '@/providers/AuthProvider';
 import { isTvUi } from '@/lib/isTvUi';
+import {
+  DETAIL_FOCUS_RECOMMENDATIONS,
+  DETAIL_FOCUS_RELATED,
+  DETAIL_FOCUS_SIMILAR,
+  DetailFocusScope,
+  detailFocusPath,
+} from '@/lib/detailFocus';
 
 function parseOptionalNumber(value?: string): number | undefined {
   if (value == null || value === '') return undefined;
@@ -80,7 +82,6 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const { isAuthenticated } = useAuth();
   const isSerial = kind === 'tv';
   const belowFoldReady = useBelowFoldReady();
-  const { openId, toggle: toggleSection } = useExclusiveDetailSection();
   const resumeSeason = parseOptionalNumber(Array.isArray(season) ? season[0] : season);
   const resumeEpisode = parseOptionalNumber(Array.isArray(episode) ? episode[0] : episode);
   const resumeStartProgress = parseOptionalNumber(
@@ -103,16 +104,27 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     isError,
   } = useQuery({
     queryKey: ['lampa', kind, routeId],
-    queryFn: () => fetchLampaDetail(kind, routeId),
+    queryFn: () => fetchLampaDetailBackendFirst(kind, routeId),
     enabled: !!routeId,
   });
 
-  // Same query keys as Continue Watching so detail reuses the home cache.
-  const { data: savedLampa = [] } = useQuery({
-    queryKey: ['library-lampa', 'include-lampa'],
-    queryFn: fetchSavedLampaLibrary,
-    enabled: isAuthenticated,
-  });
+  const tmdbMergeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detail || !routeId || detail.tmdbMerged) return;
+    const key = `${kind}:${routeId}`;
+    if (tmdbMergeKeyRef.current === key) return;
+    let cancelled = false;
+    void attachLampaTmdbDetail(kind, routeId, detail).then((merged) => {
+      if (cancelled) return;
+      tmdbMergeKeyRef.current = key;
+      queryClient.setQueryData(['lampa', kind, routeId], merged);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, kind, queryClient, routeId]);
+
+  const savedLampa = useDetailLampaLibrary(isAuthenticated);
 
   const lampaObjectId = useMemo(() => {
     if (!detail) return '';
@@ -133,35 +145,12 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     }
   }, [detail, kind, lampaObjectId, routeId]);
 
-  // Unfiltered list (same as CW). Filtered `?lampaId=` can miss rows keyed under
-  // a sibling id (UUID vs TMDB) even when Home already has them.
-  const { data: lampaProgress = [] } = useQuery({
-    queryKey: ['lampa-progress'],
-    queryFn: () => fetchLampaProgress(),
+  const savedState = useLampaDetailPlayback({
     enabled: isAuthenticated,
-    staleTime: 30_000,
+    detail,
+    routeId,
+    saved: savedLampa,
   });
-
-  const { data: historyFeed = [] } = useQuery({
-    queryKey: ['history-feed'],
-    queryFn: fetchActivityHistory,
-    enabled: isAuthenticated,
-    staleTime: 60_000,
-  });
-
-  const savedState = useMemo(
-    () =>
-      detail
-        ? buildLampaPlaybackState(
-            savedLampa,
-            detail,
-            lampaProgress,
-            routeId,
-            historyFeed,
-          )
-        : null,
-    [savedLampa, detail, lampaProgress, routeId, historyFeed],
-  );
 
   const tmdbId = useMemo(
     () => (detail ? resolveLampaTmdbId(detail, routeId) : undefined),
@@ -172,22 +161,22 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     [detail],
   );
 
-  const { data: similar = [], isFetching: similarFetching, isFetched: similarFetched } = useQuery({
+  const { data: similar = [], isFetching: similarFetching } = useQuery({
     queryKey: ['lampa-similar', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaSimilar(kind, tmdbId!),
-    enabled: openId === 'similar' && tmdbId != null,
+    enabled: belowFoldReady && tmdbId != null,
   });
 
-  const { data: recommendations = [], isFetching: recommendationsFetching, isFetched: recommendationsFetched } = useQuery({
+  const { data: recommendations = [], isFetching: recommendationsFetching } = useQuery({
     queryKey: ['lampa-recommendations', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaRecommendations(kind, tmdbId!),
-    enabled: openId === 'recommendations' && tmdbId != null,
+    enabled: belowFoldReady && tmdbId != null,
   });
 
-  const { data: franchise = [], isFetching: franchiseFetching, isFetched: franchiseFetched } = useQuery({
+  const { data: franchise = [], isFetching: franchiseFetching } = useQuery({
     queryKey: ['lampa-related', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaRelated(kind, tmdbId!, collectionId),
-    enabled: openId === 'related' && tmdbId != null && collectionId != null,
+    enabled: belowFoldReady && tmdbId != null && collectionId != null,
   });
 
   const similarItems = useMemo(
@@ -195,10 +184,10 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     [similar, franchise],
   );
 
-  const { data: cast = [], isFetching: castFetching, isFetched: castFetched } = useQuery({
-    queryKey: ['lampa-cast', kind, tmdbId ?? 0],
-    queryFn: () => fetchLampaCast(kind, tmdbId!),
-    enabled: openId === 'characters' && tmdbId != null,
+  const { data: cast = [], isFetching: castFetching } = useQuery({
+    queryKey: ['lampa-cast', kind, tmdbId ?? 0, DETAIL_CAST_FETCH_LIMIT],
+    queryFn: () => fetchLampaCast(kind, tmdbId!, DETAIL_CAST_FETCH_LIMIT),
+    enabled: belowFoldReady && tmdbId != null,
   });
 
   const { data: externalRatings } = useQuery({
@@ -331,7 +320,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   }, [kind, router]);
 
   const toRailItems = useCallback((items: LampaItem[]) => {
-    return capDetailRailItems(items).map((item) => ({
+    return items.map((item) => ({
       ...mapLampaToRailItem(item),
       subtitle: lampaCardSubtitle(item),
     }));
@@ -382,36 +371,51 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     [detail, kind, routeId],
   );
 
+  const openFullList = useCallback(
+    (section: 'cast' | 'related' | 'recommendations' | 'similar', title: string) => {
+      if (tmdbId == null) return;
+      router.push({
+        pathname: '/detail-list',
+        params: {
+          media: 'lampa',
+          kind,
+          id: String(tmdbId),
+          section,
+          title,
+          ...(collectionId != null ? { collectionId: String(collectionId) } : {}),
+        },
+      });
+    },
+    [collectionId, kind, router, tmdbId],
+  );
+
   const relatedRails = (
     <>
       {collectionId != null ? (
-        <DetailCollapsibleRail
+        <DetailPreviewRail
           title="Связанные"
-          expanded={openId === 'related'}
-          onToggle={() => toggleSection('related')}
           items={franchiseRail}
-          loading={franchiseFetching}
-          fetched={franchiseFetched}
+          loading={belowFoldReady && franchiseFetching && franchiseRail.length === 0}
           onItemPress={onPressFranchise}
+          onSeeAll={() => openFullList('related', 'Связанные')}
+          focusPriority={DETAIL_FOCUS_RELATED}
         />
       ) : null}
-      <DetailCollapsibleRail
+      <DetailPreviewRail
         title="Рекомендации"
-        expanded={openId === 'recommendations'}
-        onToggle={() => toggleSection('recommendations')}
         items={recommendationsRail}
-        loading={recommendationsFetching}
-        fetched={recommendationsFetched}
+        loading={belowFoldReady && recommendationsFetching && recommendationsRail.length === 0}
         onItemPress={onPressRecommendations}
+        onSeeAll={() => openFullList('recommendations', 'Рекомендации')}
+        focusPriority={DETAIL_FOCUS_RECOMMENDATIONS}
       />
-      <DetailCollapsibleRail
+      <DetailPreviewRail
         title="Похожее"
-        expanded={openId === 'similar'}
-        onToggle={() => toggleSection('similar')}
         items={similarRail}
-        loading={similarFetching}
-        fetched={similarFetched}
+        loading={belowFoldReady && similarFetching && similarRail.length === 0}
         onItemPress={onPressSimilar}
+        onSeeAll={() => openFullList('similar', 'Похожее')}
+        focusPriority={DETAIL_FOCUS_SIMILAR}
       />
     </>
   );
@@ -482,15 +486,11 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
           ) : null}
 
           <View style={styles.stack}>
-            <DetailCollapsibleSection
-              title="Актёры"
-              expanded={openId === 'characters'}
-              onToggle={() => toggleSection('characters')}
-              loading={openId === 'characters' && cast.length === 0 && (castFetching || !castFetched)}
-              empty={openId === 'characters' && castFetched && cast.length === 0}
-            >
-              <LampaDetailCast hideTitle cast={cast} loading={castFetching} />
-            </DetailCollapsibleSection>
+            <LampaDetailCast
+              cast={cast}
+              loading={belowFoldReady && castFetching && cast.length === 0}
+              onSeeAll={() => openFullList('cast', 'Актёры')}
+            />
           </View>
           <View style={styles.stack}>{relatedRails}</View>
         </ScrollView>
@@ -499,6 +499,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   }
 
   return (
+    <DetailFocusScope focusPath={detailFocusPath(kind, routeId)}>
     <View style={styles.root} collapsable={false}>
       {main}
       {sheetOpen && detail && !resuming ? (
@@ -517,6 +518,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
       ) : null}
       <MobileDetailBackButton />
     </View>
+    </DetailFocusScope>
   );
 }
 

@@ -151,6 +151,42 @@ function ensureLocalHoistedPackage(name) {
 
 ensureLocalHoistedPackage('react-native-video');
 
+/**
+ * A directory without package.json shadows the hoisted copy. Autolinking then
+ * skips the native module (AsyncStorage ends up null in the APK).
+ */
+function ensureCompleteHoistedPackage(name) {
+  const localPath = path.join(workspaceModules, name);
+  const rootPath = path.join(rootModules, name);
+  if (!fs.existsSync(path.join(rootPath, 'package.json'))) return;
+
+  const localPackageJson = path.join(localPath, 'package.json');
+  let replace = !fs.existsSync(localPath);
+  if (!replace) {
+    try {
+      const stat = fs.lstatSync(localPath);
+      if (stat.isSymbolicLink()) {
+        const resolved = path.resolve(path.dirname(localPath), fs.readlinkSync(localPath));
+        if (resolved === rootPath) return;
+        replace = true;
+      } else if (!fs.existsSync(localPackageJson)) {
+        replace = true;
+      }
+    } catch {
+      replace = true;
+    }
+  }
+  if (!replace) return;
+
+  fs.rmSync(localPath, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(localPath), { recursive: true });
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  fs.symlinkSync(rootPath, localPath, type);
+  console.log(`[aniverse-tv] Replaced incomplete ${name} with monorepo package`);
+}
+
+ensureCompleteHoistedPackage('@react-native-async-storage/async-storage');
+
 if (linked.length) {
   console.log(`[aniverse-tv] Linked ${linked.length} package(s) to monorepo root: ${linked.join(', ')}`);
 } else {

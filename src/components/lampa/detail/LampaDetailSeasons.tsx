@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   FlatList,
@@ -22,7 +22,17 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { formatRuDate } from '@/lib/catalogLocalization';
 import { resolveLampaPosterUrl } from '@/lib/config';
+import {
+  resolveHeldTvEpisodeWindow,
+  tvEpisodeWindowSpacerHeights,
+} from '@/lib/detailEpisodeWindow';
 import { lampaProgressKey } from '@/lib/lampaDetail';
+import {
+  DETAIL_FOCUS_EPISODES,
+  DETAIL_FOCUS_EPISODE_TAIL,
+  DETAIL_FOCUS_SEASONS,
+  useDetailFocusSlot,
+} from '@/lib/detailFocus';
 import { isTvUi } from '@/lib/isTvUi';
 import { formatProgressLabel } from '@/lib/progressUtils';
 
@@ -48,6 +58,11 @@ interface EpisodeCardProps {
   progress: number;
   season: number;
   onSelectEpisode: (season: number, episode: number) => void;
+  onFocused?: () => void;
+  railStart?: boolean;
+  hostRef?: (node: View | null) => void;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
 }
 
 const EpisodeCard = memo(function EpisodeCard({
@@ -55,6 +70,11 @@ const EpisodeCard = memo(function EpisodeCard({
   progress,
   season,
   onSelectEpisode,
+  onFocused,
+  railStart = false,
+  hostRef,
+  nextFocusUp,
+  nextFocusDown,
 }: EpisodeCardProps) {
   const still = resolveLampaPosterUrl(episode.stillPath, 'w342');
   const airDate = formatRuDate(episode.airDate);
@@ -69,7 +89,15 @@ const EpisodeCard = memo(function EpisodeCard({
   }, [episode.episodeNumber, onSelectEpisode, season]);
 
   return (
-    <TvFocusable onPress={onPress} style={styles.episodeCard}>
+    <TvFocusable
+      onPress={onPress}
+      onFocus={onFocused}
+      railStart={railStart}
+      hostRef={hostRef}
+      nextFocusUp={nextFocusUp}
+      nextFocusDown={nextFocusDown}
+      style={styles.episodeCard}
+    >
       <View style={styles.episodeRow}>
         <View style={styles.stillWrap}>
           {still ? (
@@ -123,6 +151,61 @@ const EpisodeSeparator = memo(function EpisodeSeparator() {
   return <View style={styles.episodeSeparator} />;
 });
 
+function TvSeasonEpisodeWindow({
+  episodes,
+  episodeWindow,
+  season,
+  episodeProgressByKey,
+  onSelectEpisode,
+  onEpisodeFocus,
+}: {
+  episodes: LampaEpisodeDetail[];
+  episodeWindow: { start: number; end: number };
+  season: number;
+  episodeProgressByKey: Record<string, number>;
+  onSelectEpisode: (season: number, episode: number) => void;
+  onEpisodeFocus: (index: number) => void;
+}) {
+  const episodeHead = useDetailFocusSlot(DETAIL_FOCUS_EPISODES);
+  const episodeTail = useDetailFocusSlot(DETAIL_FOCUS_EPISODE_TAIL);
+  const spacers = tvEpisodeWindowSpacerHeights(
+    episodeWindow.start,
+    episodeWindow.end,
+    episodes.length,
+    EPISODE_STRIDE,
+  );
+  const visible = episodes.slice(episodeWindow.start, episodeWindow.end);
+  return (
+    <View style={styles.tvEpisodeColumn}>
+      {spacers.top > 0 ? <View style={{ height: spacers.top }} /> : null}
+      {visible.map((episode, offset) => {
+        const index = episodeWindow.start + offset;
+        const isFirst = index === episodeWindow.start;
+        const isLast = index === Math.max(episodeWindow.start, episodeWindow.end - 1);
+        return (
+          <View key={`${season}-${episode.episodeNumber}-${episode.id}`} style={styles.tvEpisodeSlot}>
+            <EpisodeCard
+              episode={episode}
+              season={season}
+              progress={episodeProgressByKey[lampaProgressKey(season, episode.episodeNumber)] ?? 0}
+              onSelectEpisode={onSelectEpisode}
+              onFocused={() => onEpisodeFocus(index)}
+              railStart={isFirst}
+              hostRef={(node) => {
+                if (isFirst) episodeHead.hostRef?.(node);
+                if (isLast) episodeTail.hostRef?.(node);
+              }}
+              nextFocusUp={isFirst ? episodeHead.nextFocusUp : undefined}
+              nextFocusDown={isLast ? episodeTail.nextFocusDown : undefined}
+            />
+          </View>
+        );
+      })}
+      {spacers.bottom > 0 ? <View style={{ height: spacers.bottom }} /> : null}
+    </View>
+  );
+}
+
 export const LampaDetailSeasons = memo(function LampaDetailSeasons({
   seasons,
   tmdbId,
@@ -164,6 +247,28 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
     }));
   }, [data?.episodes, selectedMeta?.episodeCount]);
 
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [episodeWindow, setEpisodeWindow] = useState({ start: 0, end: 0 });
+  const seasonKeyRef = useRef(selectedSeason);
+  const seasonFocus = useDetailFocusSlot(DETAIL_FOCUS_SEASONS);
+
+  useEffect(() => {
+    const seasonChanged = seasonKeyRef.current !== selectedSeason;
+    seasonKeyRef.current = selectedSeason;
+    if (seasonChanged) setFocusedIndex(0);
+    setEpisodeWindow((current) =>
+      resolveHeldTvEpisodeWindow(
+        seasonChanged ? 0 : focusedIndex,
+        episodes.length,
+        seasonChanged || current.end === 0 ? null : current,
+      ),
+    );
+  }, [episodes.length, focusedIndex, selectedSeason]);
+
+  const onEpisodeFocus = useCallback((index: number) => {
+    setFocusedIndex(index);
+  }, []);
+
   const renderEpisode = useCallback(
     ({ item }: ListRenderItemInfo<LampaEpisodeDetail>) => (
       <EpisodeCard
@@ -182,13 +287,22 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
 
   if (!playableSeasons.length) return null;
 
-  const episodeList = (
+  const episodeList = isTvUi() ? (
+    <TvSeasonEpisodeWindow
+      episodes={episodes}
+      episodeWindow={episodeWindow}
+      season={selectedSeason}
+      episodeProgressByKey={episodeProgressByKey}
+      onSelectEpisode={onSelectEpisode}
+      onEpisodeFocus={onEpisodeFocus}
+    />
+  ) : (
     <FlatList
       data={episodes}
       keyExtractor={(item) => `${selectedSeason}-${item.episodeNumber}-${item.id}`}
       renderItem={renderEpisode}
       style={styles.listScroll}
-      contentContainerStyle={isTvUi() ? styles.listContentTv : styles.listContent}
+      contentContainerStyle={styles.listContent}
       ItemSeparatorComponent={EpisodeSeparator}
       nestedScrollEnabled
       showsVerticalScrollIndicator
@@ -196,15 +310,6 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
       maxToRenderPerBatch={4}
       windowSize={5}
       removeClippedSubviews
-      getItemLayout={
-        isTvUi()
-          ? (_data, index) => ({
-              length: EPISODE_STRIDE,
-              offset: EPISODE_STRIDE * index,
-              index,
-            })
-          : undefined
-      }
     />
   );
 
@@ -213,7 +318,13 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
 
   const seasonPicker = (
     <View style={styles.seasonRailWrap}>
-      <TvFocusable onPress={() => setPickerOpen(true)} style={styles.seasonTrigger}>
+      <TvFocusable
+        onPress={() => setPickerOpen(true)}
+        hostRef={seasonFocus.hostRef}
+        nextFocusUp={seasonFocus.nextFocusUp}
+        nextFocusDown={seasonFocus.nextFocusDown}
+        style={styles.seasonTrigger}
+      >
         <Text style={styles.seasonTriggerLabel} numberOfLines={1}>
           {selectedSeasonLabel}
         </Text>
@@ -268,13 +379,16 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.seasonRow}
       >
-        {playableSeasons.map((season) => {
+        {playableSeasons.map((season, index) => {
           const num = season.seasonNumber ?? 0;
           const active = selectedSeason === num;
           return (
             <TvFocusable
               key={num}
               onPress={() => setSelectedSeason(num)}
+              hostRef={index === 0 ? seasonFocus.hostRef : undefined}
+              nextFocusUp={seasonFocus.nextFocusUp}
+              nextFocusDown={seasonFocus.nextFocusDown}
               style={[styles.seasonChip, active && styles.seasonChipActive]}
             >
               <Text style={[styles.seasonChipLabel, active && styles.seasonChipLabelActive]}>
@@ -308,7 +422,7 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
 
       <View style={styles.listShell}>
         {episodeList}
-        {episodes.length > 2 ? (
+        {episodes.length > 2 && !isTvUi() ? (
           <Text style={styles.scrollHint}>Прокрутите, чтобы увидеть остальные серии</Text>
         ) : null}
       </View>
@@ -456,8 +570,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  listContentTv: {
-    paddingBottom: spacing.xs,
+  tvEpisodeColumn: {
+    width: '100%',
+  },
+  tvEpisodeSlot: {
+    marginBottom: spacing.sm,
   },
   episodeSeparator: {
     height: spacing.sm,

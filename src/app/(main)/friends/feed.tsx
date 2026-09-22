@@ -1,8 +1,8 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -50,7 +50,13 @@ function FeedActivityRow({ item }: { item: ActivityFeedDisplayItem }) {
     </>
   );
   const poster = item.poster ? (
-    <Image source={{ uri: item.poster }} style={styles.poster} />
+    <Image
+      source={{ uri: item.poster, width: 48, height: 72 }}
+      style={styles.poster}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={0}
+    />
   ) : null;
 
   if (isTvUi()) {

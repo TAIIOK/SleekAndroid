@@ -66,6 +66,8 @@ export function videosForDubbing(videos: AnimeVideo[], dubbing: string): AnimeVi
 
 export function episodeHasDubbing(episode: AnimeEpisode, dubbing: string): boolean {
   if (!dubbing) return false;
+  const names = (episode as AnimeEpisode & { dubbingNames?: string[] }).dubbingNames;
+  if (names?.length) return names.some((name) => dubbingEquals(name, dubbing));
   return videosForDubbing(episode.video ?? [], dubbing).some((video) => !!pickVideoUrl(video));
 }
 

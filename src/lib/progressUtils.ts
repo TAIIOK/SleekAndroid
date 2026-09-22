@@ -424,13 +424,8 @@ export interface SavedLampaPlaybackState {
   episodeProgressByKey: Record<string, number>;
 }
 
-export function buildLampaPlaybackState(
-  saved: unknown[],
-  detail: LampaDetail,
-  progressRows: UserLampaProgress[],
-  routeId?: string,
-  historyFeed: unknown[] = [],
-): SavedLampaPlaybackState {
+/** Ids that may key progress or library rows for this detail (UUID, TMDB, route). */
+export function lampaDetailAliasIds(detail: LampaDetail, routeId?: string): string[] {
   const objectId =
     typeof detail.objectId === 'string'
       ? detail.objectId
@@ -441,7 +436,22 @@ export function buildLampaPlaybackState(
   const tmdbId = detail.tmdbId != null ? String(detail.tmdbId).trim() : undefined;
   const route =
     routeId?.trim() && /^\d+$/.test(routeId.trim()) ? routeId.trim() : undefined;
-  const dualIds = uniqueNonEmptyIds([objectId, numericId, tmdbId, route]);
+  return uniqueNonEmptyIds([objectId, numericId, tmdbId, route]);
+}
+
+export function lampaPlaybackHasResume(state: SavedLampaPlaybackState | null | undefined): boolean {
+  if (!state) return false;
+  return isUnfinishedProgress(state.lastProgress) || state.hasHistory;
+}
+
+export function buildLampaPlaybackState(
+  saved: unknown[],
+  detail: LampaDetail,
+  progressRows: UserLampaProgress[],
+  routeId?: string,
+  historyFeed: unknown[] = [],
+): SavedLampaPlaybackState {
+  const dualIds = lampaDetailAliasIds(detail, routeId);
 
   const match = saved.find((raw) => {
     if (!raw || typeof raw !== 'object') return false;
@@ -452,7 +462,7 @@ export function buildLampaPlaybackState(
   }) as Record<string, unknown> | undefined;
 
   const candidateIds = uniqueNonEmptyIds([
-    ...collectLampaProgressAliasIds(route, dualIds, historyFeed),
+    ...collectLampaProgressAliasIds(routeId, dualIds, historyFeed),
     ...idsFromSavedLampaRow(match),
   ]);
   const candidateSet = new Set(candidateIds);
@@ -461,18 +471,17 @@ export function buildLampaPlaybackState(
     : [];
   // Rows may be keyed by objectId or numeric route/tmdb id — merge without a single-id filter.
   const episodeProgressByKey = lampaProgressByKey(scopedRows);
-  const latestUnfinished = pickLatestUnfinishedLampaRow(scopedRows);
+  const latest = pickLatestContinueLampaRow(scopedRows);
 
   let lastEpisode: number;
   let lastSeason: number;
   let lastProgress: number;
 
-  if (latestUnfinished) {
-    const isMovieCoords =
-      latestUnfinished.seasonOrdinal === 0 && latestUnfinished.episodeOrdinal === 0;
-    lastSeason = isMovieCoords ? 1 : latestUnfinished.seasonOrdinal || 1;
-    lastEpisode = isMovieCoords ? 1 : latestUnfinished.episodeOrdinal || 1;
-    lastProgress = normalizeProgress(latestUnfinished.progress);
+  if (latest) {
+    const isMovieCoords = latest.seasonOrdinal === 0 && latest.episodeOrdinal === 0;
+    lastSeason = isMovieCoords ? 1 : latest.seasonOrdinal || 1;
+    lastEpisode = isMovieCoords ? 1 : latest.episodeOrdinal || 1;
+    lastProgress = normalizeProgress(latest.progress);
   } else {
     // Library lastEpisode/lastSeason only when there is no unfinished progress row.
     lastEpisode = Number(match?.lastEpisode ?? 1) || 1;
@@ -489,8 +498,8 @@ export function buildLampaPlaybackState(
     lastSeason,
     lastProgress,
     hasHistory:
-      isUnfinishedProgress(lastProgress) ||
-      (typeof match?.status === 'string' && match.status === 'watching' && lastProgress >= 0),
+      hasMeaningfulProgress(lastProgress) ||
+      (typeof match?.status === 'string' && match.status === 'watching'),
     episodeProgressByKey,
   };
 }

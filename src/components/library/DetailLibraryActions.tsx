@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type View as NativeView,
 } from 'react-native';
 
 import { DetailCollectionPicker } from '@/components/library/DetailCollectionPicker';
@@ -28,6 +29,10 @@ interface DetailLibraryActionsProps {
   /** When set, shows «В коллекцию» picker for this media item. */
   collectionItem?: CollectionItemInput | null;
   extraActions?: ReactNode;
+  /** TV: this row sits directly under Play in the vertical focus chain. */
+  focusHostRef?: (node: NativeView | null) => void;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
 }
 
 /**
@@ -41,6 +46,9 @@ export function DetailLibraryActions({
   onToggleFavorite,
   collectionItem,
   extraActions,
+  focusHostRef,
+  nextFocusUp,
+  nextFocusDown,
 }: DetailLibraryActionsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const focusedStatusRef = useRef<UserListStatus | 'close' | null>(null);
@@ -134,6 +142,9 @@ export function DetailLibraryActions({
       <TvFocusable
         disabled={disabled}
         onPress={() => setMenuOpen(true)}
+        hostRef={focusHostRef}
+        nextFocusUp={nextFocusUp}
+        nextFocusDown={nextFocusDown}
         style={[styles.dropdown, userStatus ? styles.dropdownActive : null]}
       >
         <Text style={styles.dropdownLabel} numberOfLines={1}>
@@ -145,6 +156,8 @@ export function DetailLibraryActions({
       <TvFocusable
         disabled={disabled}
         onPress={onToggleFavorite}
+        nextFocusUp={nextFocusUp}
+        nextFocusDown={nextFocusDown}
         style={[styles.iconBtn, isFavorite && styles.iconBtnActive]}
       >
         <Text style={styles.iconLabel}>{isFavorite ? '★' : '☆'}</Text>

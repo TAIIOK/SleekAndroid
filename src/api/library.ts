@@ -200,6 +200,17 @@ export async function fetchSavedLampaLibrary(): Promise<unknown[]> {
   return rows.map(mapLibraryLampaToSavedRow);
 }
 
+/** Status rows for a detail screen. Skips embedded anime/lampa payloads. */
+export async function fetchAnimeLibraryStatus(): Promise<SavedAnimeItem[]> {
+  const rows = await fetchLibraryAnime();
+  return rows.map(mapLibraryAnimeToSavedItem);
+}
+
+export async function fetchLampaLibraryStatus(): Promise<unknown[]> {
+  const rows = await fetchLibraryLampa();
+  return rows.map(mapLibraryLampaToSavedRow);
+}
+
 /** Map public `/api/user/:id/library/*` rows into the same shapes as own My Lists. */
 export async function mapPublicLibraryAnime(rawRows: unknown[]): Promise<SavedAnimeItem[]> {
   const entries = rawRows

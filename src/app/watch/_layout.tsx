@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { colors } from '@/constants/aniverse';
 import { isTvUi } from '@/lib/isTvUi';
 import { setTvImmersiveFocusLock } from '@/lib/tvImmersiveFocus';
+import { setTvViewportProbeSuspended } from '@/lib/tvViewportProbe';
 import { markWatchSessionOpen } from '@/lib/watchResumeSync';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -20,7 +21,11 @@ export default function WatchLayout() {
   useEffect(() => {
     if (phoneWatch) return;
     setTvImmersiveFocusLock(true);
-    return () => setTvImmersiveFocusLock(false);
+    setTvViewportProbeSuspended(true);
+    return () => {
+      setTvImmersiveFocusLock(false);
+      setTvViewportProbeSuspended(false);
+    };
   }, [phoneWatch]);
 
   if (loading) {

@@ -15,7 +15,6 @@ import {
   fetchAnimeSimilar,
 } from '@/api/catalog';
 import {
-  fetchSavedAnimeLibrary,
   toggleAnimeFavorite,
   updateLibraryAnimeStatus,
 } from '@/api/library';
@@ -25,33 +24,29 @@ import { AnimeDetailEpisodes } from '@/components/anime/AnimeDetailEpisodes';
 import { AnimeDetailHero } from '@/components/anime/AnimeDetailHero';
 import { AnimeDetailSidebar } from '@/components/anime/AnimeDetailSidebar';
 import { AnimeDetailSkeleton } from '@/components/anime/AnimeDetailSkeleton';
-import { DetailCollapsibleSection } from '@/components/catalog/DetailCollapsibleSection';
 import { MobileDetailBackButton } from '@/components/navigation/MobileDetailBackButton';
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, spacing } from '@/constants/aniverse';
 import { useAccumulatedEpisodes } from '@/hooks/useAccumulatedEpisodes';
-import { useExclusiveDetailSection } from '@/hooks/useExclusiveDetailSection';
-import { useResumeEpisode } from '@/hooks/useResumeEpisode';
+import { useBelowFoldReady } from '@/hooks/useBelowFoldReady';
+import { useDetailAnimeLibrary } from '@/hooks/useDetailLibrary';
 import {
   excludeRelatedFromSimilar,
   extractRelatedItems,
+  hasPlayableVideo,
   sortAnimeItemsByYear,
 } from '@/lib/animeDetail';
 import { loadAnimeLastDubbing, saveAnimeLastDubbing } from '@/lib/animeLastDubbing';
 import {
   filterEpisodesByDubbing,
-  getUniqueDubbingOptions,
-  pickBestDubbingOption,
 } from '@/lib/animePlaybackOptions';
 import type { UserListStatus } from '@/lib/libraryStatus';
 import { animePoster } from '@/lib/poster';
 import { buildAnimePlaybackState } from '@/lib/progressUtils';
 import { useAuth } from '@/providers/AuthProvider';
-import { pickPlaybackUrl } from '@aniverse/playback';
 import type { AnimeEpisode } from '@aniverse/types';
 import { isTvUi } from '@/lib/isTvUi';
-
-const DEFAULT_QUALITY = '720p' as const;
+import { DetailFocusScope, detailFocusPath } from '@/lib/detailFocus';
 
 export default function AnimeDetailScreen() {
   const router = useRouter();
@@ -59,7 +54,7 @@ export default function AnimeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const animeId = Number(id);
   const { isAuthenticated } = useAuth();
-  const { openId, toggle: toggleSection } = useExclusiveDetailSection();
+  const belowFoldReady = useBelowFoldReady();
 
   const {
     episodes: allEpisodes,
@@ -67,6 +62,7 @@ export default function AnimeDetailScreen() {
     loadMore,
     isFetchingMore,
     isLoading: episodesLoading,
+    totalPages: episodePages,
   } = useAccumulatedEpisodes(animeId);
 
   const {
@@ -80,11 +76,7 @@ export default function AnimeDetailScreen() {
     enabled: Number.isFinite(animeId),
   });
 
-  const { data: savedAnime = [] } = useQuery({
-    queryKey: ['library-anime'],
-    queryFn: fetchSavedAnimeLibrary,
-    enabled: isAuthenticated,
-  });
+  const savedAnime = useDetailAnimeLibrary(isAuthenticated);
 
   const { data: animeProgress = [] } = useQuery({
     queryKey: ['anime-progress', animeId],
@@ -97,29 +89,31 @@ export default function AnimeDetailScreen() {
     [savedAnime, animeId, animeProgress],
   );
 
-  const { resumeEpisode, isLoading: resumeLoading } = useResumeEpisode(
-    animeId,
-    savedState.lastEpisodeId,
-  );
+  const resumeEpisode = useMemo(() => {
+    if (!allEpisodes.length) return null;
+    if (savedState.lastEpisodeId) {
+      const match = allEpisodes.find((episode) => episode.id === savedState.lastEpisodeId);
+      if (match) return match;
+    }
+    return allEpisodes.find((episode) => hasPlayableVideo(episode)) ?? allEpisodes[0] ?? null;
+  }, [allEpisodes, savedState.lastEpisodeId]);
 
-  const { data: related = [], isFetching: relatedFetching, isFetched: relatedFetched } = useQuery({
+  const { data: related = [], isFetching: relatedFetching } = useQuery({
     queryKey: ['anime-related', animeId],
     queryFn: () => fetchAnimeRelated(animeId),
-    enabled:
-      Number.isFinite(animeId) &&
-      (openId === 'related' || openId === 'recommendations'),
+    enabled: belowFoldReady && Number.isFinite(animeId),
   });
 
-  const { data: similar = [], isFetching: similarFetching, isFetched: similarFetched } = useQuery({
+  const { data: similar = [], isFetching: similarFetching } = useQuery({
     queryKey: ['anime-similar', animeId],
     queryFn: () => fetchAnimeSimilar(animeId),
-    enabled: Number.isFinite(animeId) && openId === 'similar',
+    enabled: belowFoldReady && Number.isFinite(animeId),
   });
 
-  const { data: characters = [], isFetching: charactersFetching, isFetched: charactersFetched } = useQuery({
+  const { data: characters = [], isFetching: charactersFetching } = useQuery({
     queryKey: ['anime-characters', animeId],
     queryFn: () => fetchAnimeCharacters(animeId),
-    enabled: Number.isFinite(animeId) && openId === 'characters',
+    enabled: belowFoldReady && Number.isFinite(animeId),
   });
 
   const relatedItems = useMemo(
@@ -135,11 +129,18 @@ export default function AnimeDetailScreen() {
     [similar, relatedItems],
   );
 
-  const allVideos = useMemo(
-    () => allEpisodes.flatMap((episode) => episode.video ?? []),
-    [allEpisodes],
-  );
-  const dubbingOptions = useMemo(() => getUniqueDubbingOptions(allVideos), [allVideos]);
+  const dubbingOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const episode of allEpisodes) {
+      for (const name of episode.dubbingNames) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        names.push(name);
+      }
+    }
+    return names.sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'accent' }));
+  }, [allEpisodes]);
   const [watchedDubbing, setWatchedDubbing] = useState<string | null>(null);
   const [selectedDubbing, setSelectedDubbing] = useState('');
 
@@ -164,9 +165,9 @@ export default function AnimeDetailScreen() {
     setSelectedDubbing((current) => {
       if (watchedDubbing && dubbingOptions.includes(watchedDubbing)) return watchedDubbing;
       if (current && dubbingOptions.includes(current)) return current;
-      return pickBestDubbingOption(allVideos) ?? dubbingOptions[0];
+      return dubbingOptions[0];
     });
-  }, [dubbingOptions, watchedDubbing, allVideos]);
+  }, [dubbingOptions, watchedDubbing]);
 
   const activeDubbing = selectedDubbing || dubbingOptions[0] || 'Не указана';
   const filteredEpisodes = useMemo(
@@ -190,16 +191,16 @@ export default function AnimeDetailScreen() {
   }, [queryClient]);
 
   const playEpisode = useCallback((episode: AnimeEpisode, startProgress?: number) => {
-    const videos = episode.video ?? [];
-    const url = pickPlaybackUrl(videos, activeDubbing, DEFAULT_QUALITY);
-    if (!url) return;
+    if (!Number.isFinite(episode.id) || episode.id <= 0) return;
     router.push({
       pathname: '/watch/anime/[animeId]/[episodeId]',
       params: {
         animeId: String(animeId),
         episodeId: String(episode.id),
         title: detail?.title ?? '',
-        preferredDubbing: activeDubbing,
+        ...(activeDubbing && activeDubbing !== 'Не указана'
+          ? { preferredDubbing: activeDubbing }
+          : {}),
         ...(startProgress != null ? { startProgress: String(startProgress) } : {}),
       },
     });
@@ -252,17 +253,26 @@ export default function AnimeDetailScreen() {
     [animeId, detail],
   );
 
+  const openCharacterList = useCallback(() => {
+    router.push({
+      pathname: '/detail-list',
+      params: {
+        media: 'anime',
+        id: String(animeId),
+        section: 'characters',
+        title: 'Персонажи',
+      },
+    });
+  }, [animeId, router]);
+
   const sidebar = (
     <AnimeDetailSidebar
+      animeId={animeId}
       relatedItems={relatedItems}
       recommendationItems={recommendationItems}
       similarItems={similarItems}
-      relatedLoading={relatedFetching}
-      similarLoading={similarFetching}
-      relatedFetched={relatedFetched}
-      similarFetched={similarFetched}
-      openId={openId}
-      onToggle={toggleSection}
+      relatedLoading={belowFoldReady && relatedFetching}
+      similarLoading={belowFoldReady && similarFetching}
     />
   );
 
@@ -275,6 +285,7 @@ export default function AnimeDetailScreen() {
       onLoadMore={loadMore}
       progressByEpisodeId={savedState.progressByEpisodeId}
       onPlay={onPlayEpisode}
+      totalPages={episodePages}
       dubbingOptions={dubbingOptions}
       selectedDubbing={activeDubbing}
       onSelectDubbing={onSelectDubbing}
@@ -282,19 +293,14 @@ export default function AnimeDetailScreen() {
     />
   );
 
-  // Episodes right under hero; extra sections stay collapsed until opened.
   const body = (
     <View style={styles.stack}>
       {episodesBlock}
-      <DetailCollapsibleSection
-        title="Персонажи"
-        expanded={openId === 'characters'}
-        onToggle={() => toggleSection('characters')}
-        loading={openId === 'characters' && characters.length === 0 && (charactersFetching || !charactersFetched)}
-        empty={openId === 'characters' && charactersFetched && characters.length === 0}
-      >
-        <AnimeDetailCharacters hideTitle characters={characters} loading={charactersFetching} />
-      </DetailCollapsibleSection>
+      <AnimeDetailCharacters
+        characters={characters}
+        loading={belowFoldReady && charactersFetching && characters.length === 0}
+        onSeeAll={openCharacterList}
+      />
       {sidebar}
     </View>
   );
@@ -329,7 +335,7 @@ export default function AnimeDetailScreen() {
         <AnimeDetailHero
           detail={detail}
           resumeEpisode={resumeEpisode}
-          resumeLoading={resumeLoading}
+          resumeLoading={episodesLoading}
           hasHistory={savedState.hasHistory}
           lastProgress={savedState.lastProgress}
           episodesTotal={detail.episodesTotal}
@@ -347,10 +353,12 @@ export default function AnimeDetailScreen() {
   }
 
   return (
+    <DetailFocusScope focusPath={detailFocusPath('anime', animeId)}>
     <View style={styles.root} collapsable={false}>
       {main}
       <MobileDetailBackButton />
     </View>
+    </DetailFocusScope>
   );
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  resolveHeldTvEpisodeWindow,
   slideTvEpisodeWindow,
   tvEpisodeWindowSpacerHeights,
   TV_EPISODE_ROW_STRIDE,
@@ -31,6 +32,26 @@ describe('slideTvEpisodeWindow', () => {
   it('slides away from the start so far-above rows can unmount', () => {
     expect(slideTvEpisodeWindow(10, 24).start).toBeGreaterThan(0);
     expect(slideTvEpisodeWindow(10, 24).end).toBeLessThan(24);
+  });
+});
+
+describe('resolveHeldTvEpisodeWindow', () => {
+  it('does not move while focus stays inside the mounted rows', () => {
+    const initial = slideTvEpisodeWindow(0, 24);
+    expect(resolveHeldTvEpisodeWindow(1, 24, initial)).toBe(initial);
+    expect(resolveHeldTvEpisodeWindow(initial.end - 2, 24, initial)).toBe(initial);
+  });
+
+  it('slides once focus reaches the last mounted row with more below', () => {
+    const initial = slideTvEpisodeWindow(0, 24);
+    const next = resolveHeldTvEpisodeWindow(initial.end - 1, 24, initial);
+    expect(next).not.toBe(initial);
+    expect(next.end).toBeGreaterThan(initial.end);
+  });
+
+  it('stays put on the first row when nothing is above', () => {
+    const initial = slideTvEpisodeWindow(0, 24);
+    expect(resolveHeldTvEpisodeWindow(0, 24, initial)).toBe(initial);
   });
 });
 

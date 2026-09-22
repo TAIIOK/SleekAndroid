@@ -1,4 +1,5 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/constants/aniverse';
 import { resolvePosterUrl } from '@/lib/config';
@@ -16,7 +17,15 @@ export function FriendAvatar({ avatar, nickname, size = 44 }: FriendAvatarProps)
   const dim = { width: size, height: size, borderRadius: size / 2 };
 
   if (uri) {
-    return <Image source={{ uri }} style={dim} />;
+    return (
+      <Image
+        source={{ uri, width: size, height: size }}
+        style={dim}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={0}
+      />
+    );
   }
 
   return (

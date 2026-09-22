@@ -1,4 +1,5 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { PartyMemberAvatar } from '@/components/party/PartyMemberAvatar';
 import { TvFocusable } from '@/components/tv/TvFocusable';
@@ -44,7 +45,13 @@ export function PartyRoomCard({
   return (
     <View style={styles.card}>
       {poster ? (
-        <Image source={{ uri: poster }} style={styles.poster} />
+        <Image
+          source={{ uri: poster, width: 52, height: 74 }}
+          style={styles.poster}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={0}
+        />
       ) : (
         <View style={[styles.poster, styles.posterFallback]}>
           <Text style={styles.posterLetter}>

@@ -1,4 +1,5 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/constants/aniverse';
 import { resolvePosterUrl } from '@/lib/config';
@@ -31,7 +32,13 @@ export function PartyMemberAvatar({
   return (
     <View style={{ width: dim, height: dim }}>
       {uri ? (
-        <Image source={{ uri }} style={[styles.avatar, { width: dim, height: dim, borderRadius: dim / 2 }]} />
+        <Image
+          source={{ uri, width: dim, height: dim }}
+          style={[styles.avatar, { width: dim, height: dim, borderRadius: dim / 2 }]}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={0}
+        />
       ) : (
         <View
           style={[

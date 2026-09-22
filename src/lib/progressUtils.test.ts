@@ -333,4 +333,33 @@ describe('buildLampaPlaybackState', () => {
     expect(state.lastProgress).toBe(0);
     expect(state.episodeProgressByKey).toEqual({});
   });
+
+  it('keeps continue on a finished movie progress row', () => {
+    const detail = {
+      id: 10,
+      tmdbId: 10,
+      title: 'Finished Movie',
+    } as LampaDetail;
+
+    const state = buildLampaPlaybackState(
+      [],
+      detail,
+      [
+        {
+          lampaId: '10',
+          seasonOrdinal: 0,
+          episodeOrdinal: 0,
+          progress: 1,
+          completed: true,
+          updatedAt: '2026-07-24T12:00:00.000Z',
+        },
+      ],
+      '10',
+    );
+
+    expect(state.hasHistory).toBe(true);
+    expect(state.lastProgress).toBe(1);
+    expect(state.lastSeason).toBe(1);
+    expect(state.lastEpisode).toBe(1);
+  });
 });

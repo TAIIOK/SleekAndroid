@@ -2,47 +2,44 @@ import { useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { DetailCollapsibleRail } from '@/components/catalog/DetailCollapsibleSection';
+import { DetailPreviewRail } from '@/components/catalog/DetailPreviewRail';
 import { type RailItem } from '@/components/catalog/PosterRail';
 import { spacing } from '@/constants/aniverse';
 import {
   animeListCardSubtitle,
   type AnimeRelatedItem,
 } from '@/lib/animeDetail';
-import { capDetailRailItems } from '@/lib/catalogRailPage';
-import type { DetailExtraSection } from '@/lib/detailSections';
 import { isTvUi } from '@/lib/isTvUi';
+import {
+  DETAIL_FOCUS_RECOMMENDATIONS,
+  DETAIL_FOCUS_RELATED,
+  DETAIL_FOCUS_SIMILAR,
+} from '@/lib/detailFocus';
 import { mapAnimeToRailItem } from '@/lib/poster';
 
 interface AnimeDetailRelatedProps {
+  animeId: number;
   relatedItems: AnimeRelatedItem[];
   recommendationItems: AnimeRelatedItem[];
   similarItems: AnimeRelatedItem[];
   relatedLoading?: boolean;
   similarLoading?: boolean;
-  relatedFetched?: boolean;
-  similarFetched?: boolean;
-  openId: DetailExtraSection | null;
-  onToggle: (id: DetailExtraSection) => void;
 }
 
 function toRailItems(items: AnimeRelatedItem[]) {
-  return capDetailRailItems(items).map((item) => ({
+  return items.map((item) => ({
     ...mapAnimeToRailItem(item),
     subtitle: animeListCardSubtitle(item),
   }));
 }
 
 export function AnimeDetailSidebar({
+  animeId,
   relatedItems,
   recommendationItems,
   similarItems,
   relatedLoading,
   similarLoading,
-  relatedFetched = false,
-  similarFetched = false,
-  openId,
-  onToggle,
 }: AnimeDetailRelatedProps) {
   const router = useRouter();
   const relatedRail = useMemo(() => toRailItems(relatedItems), [relatedItems]);
@@ -54,35 +51,46 @@ export function AnimeDetailSidebar({
   const onItemPress = useCallback((item: RailItem) => {
     router.push(`/anime/${item.id}`);
   }, [router]);
+  const openFullList = useCallback(
+    (section: 'related' | 'recommendations' | 'similar', title: string) => {
+      router.push({
+        pathname: '/detail-list',
+        params: {
+          media: 'anime',
+          id: String(animeId),
+          section,
+          title,
+        },
+      });
+    },
+    [animeId, router],
+  );
 
   return (
     <View style={styles.rails}>
-      <DetailCollapsibleRail
+      <DetailPreviewRail
         title="Связанные"
-        expanded={openId === 'related'}
-        onToggle={() => onToggle('related')}
         items={relatedRail}
-        loading={relatedLoading}
-        fetched={relatedFetched}
+        loading={relatedLoading && relatedRail.length === 0}
         onItemPress={onItemPress}
+        onSeeAll={() => openFullList('related', 'Связанные')}
+        focusPriority={DETAIL_FOCUS_RELATED}
       />
-      <DetailCollapsibleRail
+      <DetailPreviewRail
         title="Рекомендации"
-        expanded={openId === 'recommendations'}
-        onToggle={() => onToggle('recommendations')}
         items={recommendationRail}
-        loading={relatedLoading}
-        fetched={relatedFetched}
+        loading={relatedLoading && recommendationRail.length === 0}
         onItemPress={onItemPress}
+        onSeeAll={() => openFullList('recommendations', 'Рекомендации')}
+        focusPriority={DETAIL_FOCUS_RECOMMENDATIONS}
       />
-      <DetailCollapsibleRail
+      <DetailPreviewRail
         title="Похожее"
-        expanded={openId === 'similar'}
-        onToggle={() => onToggle('similar')}
         items={similarRail}
-        loading={similarLoading}
-        fetched={similarFetched}
+        loading={similarLoading && similarRail.length === 0}
         onItemPress={onItemPress}
+        onSeeAll={() => openFullList('similar', 'Похожее')}
+        focusPriority={DETAIL_FOCUS_SIMILAR}
       />
     </View>
   );

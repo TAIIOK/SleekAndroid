@@ -1,9 +1,9 @@
+import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -633,7 +633,13 @@ function SourceEpisodeRow({
     >
       <View style={styles.stillWrap}>
         {still ? (
-          <Image source={{ uri: still }} style={styles.still} resizeMode="cover" />
+          <Image
+            source={{ uri: still, width: isTvUi() ? 160 : 120, height: isTvUi() ? 90 : 68 }}
+            style={styles.still}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={0}
+          />
         ) : (
           <View style={styles.stillFallback}>
             <Text style={styles.stillFallbackText}>{episode.episode}</Text>

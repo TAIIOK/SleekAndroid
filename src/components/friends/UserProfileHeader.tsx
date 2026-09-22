@@ -1,6 +1,7 @@
 import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { fetchUserBrief } from '@/api/userProfile';
 import { TvFocusable } from '@/components/tv/TvFocusable';
@@ -42,7 +43,13 @@ export function UserProfileHeader() {
     <View style={styles.wrap}>
       <View style={styles.hero}>
         {avatar ? (
-          <Image source={{ uri: avatar }} style={styles.avatar} />
+          <Image
+            source={{ uri: avatar, width: 64, height: 64 }}
+            style={styles.avatar}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={0}
+          />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
             <Text style={styles.avatarLetter}>

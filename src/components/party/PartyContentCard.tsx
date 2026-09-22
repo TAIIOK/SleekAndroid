@@ -1,4 +1,5 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
@@ -54,7 +55,13 @@ export function PartyContentCard({
         style={styles.posterWrap}
       >
         {poster ? (
-          <Image source={{ uri: poster }} style={styles.poster} />
+          <Image
+            source={{ uri: poster, width: 110, height: 156 }}
+            style={styles.poster}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={0}
+          />
         ) : (
           <View style={[styles.poster, styles.posterFallback]}>
             <Text style={styles.posterLetter}>

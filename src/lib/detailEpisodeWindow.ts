@@ -33,6 +33,39 @@ export function slideTvEpisodeWindow(
   return { start, end };
 }
 
+/**
+ * Keep the mounted window while focus stays on an interior row.
+ * Shift only when focus sits on the first row with rows above it,
+ * or the last row with rows below it.
+ */
+export function resolveHeldTvEpisodeWindow(
+  focusedIndex: number,
+  itemCount: number,
+  current: { start: number; end: number } | null,
+): { start: number; end: number } {
+  if (current && !shouldShiftTvEpisodeWindow(focusedIndex, itemCount, current)) {
+    return current;
+  }
+  const next = slideTvEpisodeWindow(focusedIndex, itemCount);
+  if (current && current.start === next.start && current.end === next.end) return current;
+  return next;
+}
+
+function shouldShiftTvEpisodeWindow(
+  focusedIndex: number,
+  itemCount: number,
+  current: { start: number; end: number },
+): boolean {
+  if (itemCount <= 0) return current.start !== 0 || current.end !== 0;
+  const focus = Math.min(Math.max(0, focusedIndex), itemCount - 1);
+  if (focus < current.start || focus >= current.end || current.end > itemCount || current.start < 0) {
+    return true;
+  }
+  if (focus > current.start && focus < current.end - 1) return false;
+  if (focus === current.start) return current.start > 0;
+  return current.end < itemCount;
+}
+
 export function tvEpisodeWindowSpacerHeights(
   start: number,
   end: number,

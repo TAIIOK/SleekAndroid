@@ -7,6 +7,7 @@ import { isTvUi } from '@/lib/isTvUi';
 import {
   countdownUnits,
   formatNextEpisodeDateTime,
+  isSeriesFullyAired,
   nextEpisodeNumber,
   parseNextEpisodeDate,
   remainingParts,
@@ -30,6 +31,7 @@ export function NextEpisodeCountdown({
     [dateMs],
   );
 
+  if (isSeriesFullyAired(detail.episodesAired, detail.episodesTotal)) return null;
   if (!date || !startedInFuture) return null;
 
   const expired = remaining <= 0;

@@ -107,6 +107,8 @@ export function episodeThumbnail(ep: AnimeEpisode): string | undefined {
 }
 
 export function hasPlayableVideo(ep: AnimeEpisode): boolean {
+  const listed = ep as AnimeEpisode & { playable?: boolean };
+  if (typeof listed.playable === 'boolean' && !(ep.video?.length)) return listed.playable;
   return (ep.video ?? []).some((v) => !!pickVideoUrl(v));
 }
 

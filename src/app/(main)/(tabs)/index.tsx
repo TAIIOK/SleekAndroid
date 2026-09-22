@@ -52,6 +52,7 @@ import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
 import { useAuth } from '@/providers/AuthProvider';
 import { HomeScrollLazyProvider, notifyHomeScrollLazy } from '@/providers/HomeScrollLazy';
 import { isTvUi } from '@/lib/isTvUi';
+import { useTvHubRetained } from '@/hooks/useTvHubRetained';
 import { useMobileChromeScroll, useMobileChromeScrollProps } from '@/providers/MobileChromeScroll';
 import {
   resolveAvailableTvHomeFeedTabs,
@@ -63,6 +64,7 @@ import {
 
 export default function HomeScreen() {
   const isTv = isTvUi();
+  const hubRetained = useTvHubRetained('/');
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -308,6 +310,10 @@ export default function HomeScreen() {
       movieSectionsLoading ||
       tvSectionsLoading);
 
+  if (isTv && !hubRetained) {
+    return <View style={styles.scroll} />;
+  }
+
   if (!ready) {
     return (
       <ScrollView
@@ -369,14 +375,12 @@ export default function HomeScreen() {
               </Text>
             ) : tvSources.length === 1 ? (
               <TvHomeFeedGrid
-                key={tvSources[0].key}
                 source={tvSources[0]}
                 config={config}
                 contentEntry={false}
               />
             ) : (
               <TvHomeFeedRails
-                key={`${activeFeedTab}-${activeTypeFilter}`}
                 sources={tvSources}
                 config={config}
                 restorePath="/"

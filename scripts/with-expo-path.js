@@ -43,9 +43,11 @@ function resolveAndroidJavaHome() {
   return process.env.JAVA_HOME;
 }
 
+const polyfillPatch = path.resolve(__dirname, 'patch-rn-polyfills-resolve.js');
 const env = {
   ...process.env,
   NODE_PATH: extraPaths,
+  NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require ${polyfillPatch}`].filter(Boolean).join(' '),
 };
 
 const javaHome = resolveAndroidJavaHome();

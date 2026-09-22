@@ -7,7 +7,7 @@ Anime detail (`/anime/[id]`) shows the next episode air date and a live countdow
 ## Requirements
 
 1. [x] `AnimeDetail` includes optional `nextEpisodeDate` and `episodesAired` from `GET /api/animes/:id`.
-2. [x] The countdown block is shown only when `nextEpisodeDate` parses and is still in the future on first render.
+2. [x] The countdown block is shown only when `nextEpisodeDate` parses and is still in the future on first render, and the run is not already fully aired (`episodesTotal > 0` and `episodesAired >= episodesTotal`, for example 14 / 14). A missing total, a total of 0, or a missing aired count does not hide the block.
 3. [x] The block shows heading «Следующая серия» with local date/time on the same row, and a live `ДД чч мм сс` timer prefixed with «Через» (days omitted under 24 hours).
 4. [x] Episode number is `episodesAired + 1` when `episodesAired` is present.
 5. [x] When the timer reaches zero the block shows «Серия вышла» instead of hiding immediately.
@@ -19,7 +19,8 @@ Anime detail (`/anime/[id]`) shows the next episode air date and a live countdow
 ## Acceptance Criteria
 
 - Opening an ongoing anime with a future `nextEpisodeDate` shows the date and a ticking countdown on phone and TV.
-- Anime without `nextEpisodeDate`, or with a past date, does not show the block.
+- Anime without `nextEpisodeDate`, with a past date, or with every announced episode already aired (`episodesAired >= episodesTotal > 0`) does not show the block.
+- An ongoing title that still has unaired episodes (13 / 14) with a future date still shows the block.
 - After the countdown hits zero, the copy switches to «Серия вышла».
 - The rest of the detail page does not re-render every second.
 

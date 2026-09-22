@@ -13,6 +13,7 @@ import {
   isSlotClearlyFarFromViewport,
 } from '@/lib/nearViewport';
 import { getViewportScrollY, subscribeViewportScroll } from '@/lib/viewportScroll';
+import { registerTvViewportProbe } from '@/lib/tvViewportProbe';
 
 type SlotLayout = { y: number; height: number };
 
@@ -143,9 +144,16 @@ export function useNearViewport(options: UseNearViewportOptions = {}) {
     const shouldWatch = deactivateWhenFar || !eager || recheckOnFocus;
     if (!shouldWatch) return undefined;
 
-    const id = setInterval(() => {
-      if (focusedRef.current) check({ forceMeasure: true });
-    }, intervalMs);
+    const unsubProbe = isTvUi()
+      ? registerTvViewportProbe(() => {
+          if (focusedRef.current) check({ forceMeasure: true });
+        })
+      : null;
+    const id = isTvUi()
+      ? null
+      : setInterval(() => {
+          if (focusedRef.current) check({ forceMeasure: true });
+        }, intervalMs);
     const unsubScroll = subscribeViewportScroll(() => {
       if (focusedRef.current) check();
     });
@@ -153,7 +161,8 @@ export function useNearViewport(options: UseNearViewportOptions = {}) {
       if (state === 'active') check({ forceMeasure: true });
     });
     return () => {
-      clearInterval(id);
+      unsubProbe?.();
+      if (id) clearInterval(id);
       unsubScroll();
       sub.remove();
     };

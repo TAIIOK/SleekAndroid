@@ -1,8 +1,8 @@
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -93,7 +93,13 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.headerRow}>
             {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              <Image
+                source={{ uri: avatarUrl, width: 64, height: 64 }}
+                style={styles.avatar}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={0}
+              />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarLetter}>{nickname.slice(0, 1).toUpperCase()}</Text>

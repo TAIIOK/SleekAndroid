@@ -1,9 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   StyleSheet,
   Text,
@@ -102,7 +102,13 @@ export function ProfileEditSheet({
 
           <TvFocusable onPress={() => void pickAvatar()} style={styles.avatarBtn}>
             {preview ? (
-              <Image source={{ uri: preview }} style={styles.avatar} />
+              <Image
+                source={{ uri: preview, width: 72, height: 72 }}
+                style={styles.avatar}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={0}
+              />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarLetter}>
