@@ -166,6 +166,7 @@ export default function SearchAllScreen() {
         <ActivityIndicator color={colors.brand} style={styles.loader} />
       ) : (
         <FlatList
+          key={columns}
           data={items}
           keyExtractor={(item) => item.key}
           numColumns={columns}

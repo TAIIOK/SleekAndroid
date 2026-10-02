@@ -1,11 +1,18 @@
-import { useMemo } from 'react';
+import { useSegments } from 'expo-router';
+import { useMemo, useRef } from 'react';
 import { useWindowDimensions } from 'react-native';
 
 import { layout, spacing } from '@/constants/aniverse';
 import { isTvUi } from '@/lib/isTvUi';
 
 export function usePosterGridLayout(horizontalPadding = spacing.lg) {
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const watchOpen = useSegments()[0] === 'watch';
+  // Phone player locks the activity to landscape. That width must not reflow
+  // grids still mounted under the modal — FlatList crashes if numColumns changes.
+  const widthRef = useRef(windowWidth);
+  if (!watchOpen) widthRef.current = windowWidth;
+  const width = widthRef.current;
 
   return useMemo(() => {
     // TV rails use ~10px gaps; keep the grid equally dense.

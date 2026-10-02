@@ -239,6 +239,7 @@ export default function DetailListScreen() {
         <Text style={styles.empty}>Нет данных</Text>
       ) : (
         <FlatList
+          key={columns}
           data={cards}
           keyExtractor={(item) => item.key}
           numColumns={columns}

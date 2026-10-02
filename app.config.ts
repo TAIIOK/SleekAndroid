@@ -14,7 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: isTvBuild ? 'Sleek TV' : 'Sleek',
   slug: 'sleek',
-  version: '1.0.20',
+  version: '1.0.21',
   scheme: 'sleek',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -44,7 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     predictiveBackGestureEnabled: false,
     package: isTvBuild ? 'ru.taiiok.aniverse.tv' : 'ru.taiiok.aniverse.app',
     permissions: ['android.permission.REQUEST_INSTALL_PACKAGES'],
-    versionCode: 21,
+    versionCode: 22,
     softwareKeyboardLayoutMode: 'pan',
     intentFilters: [
       {
