@@ -5,8 +5,12 @@ import { findNodeHandle, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
+import { useTvCatalogVerticalNeighbors } from '@/hooks/useTvCatalogVerticalNeighbors';
 import { isTvUi } from '@/lib/isTvUi';
-import { registerTvHomeFiltersFocus } from '@/lib/tvHomeFocusHandoff';
+import {
+  HOME_FILTERS_RAIL_PRIORITY,
+  registerTvHomeFiltersFocus,
+} from '@/lib/tvHomeFocusHandoff';
 import {
   TV_HOME_TYPE_FILTERS,
   type TvHomeTypeFilter,
@@ -33,6 +37,7 @@ export function TvHomeTypeFilters({
 }: TvHomeTypeFiltersProps) {
   const router = useRouter();
   const shellFocus = useTvShellFocus();
+  const neighbors = useTvCatalogVerticalNeighbors('/', HOME_FILTERS_RAIL_PRIORITY);
   const [rowExitTag, setRowExitTag] = useState<number | undefined>();
 
   if (!options.length) return null;
@@ -54,6 +59,8 @@ export function TvHomeTypeFilters({
               railStart={isRailStart}
               contentEntry={isEntry}
               nextFocusLeft={isRailStart ? rowExitTag : undefined}
+              nextFocusUp={neighbors.up}
+              nextFocusDown={neighbors.down}
               hostRef={index === 0 ? registerTvHomeFiltersFocus : undefined}
             >
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
@@ -69,6 +76,8 @@ export function TvHomeTypeFilters({
           onPress={onOpenSettings}
           style={styles.iconBtn}
           focusedStyle={styles.iconFocused}
+          nextFocusUp={neighbors.up}
+          nextFocusDown={neighbors.down}
           accessibilityLabel="Настройки лент"
         >
           <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
@@ -79,6 +88,8 @@ export function TvHomeTypeFilters({
         onPress={() => router.navigate('/search')}
         style={styles.iconBtn}
         focusedStyle={styles.iconFocused}
+        nextFocusUp={neighbors.up}
+        nextFocusDown={neighbors.down}
         accessibilityLabel="Поиск"
         railEnd
       >

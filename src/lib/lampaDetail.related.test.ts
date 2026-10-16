@@ -18,12 +18,18 @@ import {
   lampaCardSubtitle,
   lampaCollectionId,
   mergeLampaWithTmdb,
+  mergeRelatedLampaItems,
   sortLampaItemsByYear,
 } from './lampaDetail';
 
 function item(
   id: number,
-  extra?: Partial<LampaItem> & { release_date?: string; first_air_date?: string; year?: number },
+  extra?: Partial<LampaItem> & {
+    release_date?: string;
+    first_air_date?: string;
+    year?: number;
+    tmdbId?: number;
+  },
 ): LampaItem {
   return { id, ...extra } as LampaItem;
 }
@@ -38,6 +44,25 @@ describe('sortLampaItemsByYear', () => {
     ];
 
     expect(sortLampaItemsByYear(items).map((entry) => Number(entry.id))).toEqual([2, 3, 1, 4]);
+  });
+});
+
+describe('mergeRelatedLampaItems', () => {
+  it('keeps collection year order and appends kinopoisk titles that are not duplicates', () => {
+    const collection: LampaItem[] = [
+      item(2, { title: 'First', year: 2010, tmdbId: 2, kind: 'movie' }),
+      item(9, { title: 'Current', year: 2011, tmdbId: 9, kind: 'movie' }),
+      item(1, { title: 'Third', year: 2020, tmdbId: 1, kind: 'movie' }),
+    ];
+    const kinopoisk: LampaItem[] = [
+      item(1, { title: 'Dup', year: 2020, tmdbId: 1, kind: 'movie' }),
+      item(4, { title: 'Spinoff', year: 2015, tmdbId: 4, kind: 'tv' }),
+      item(9, { title: 'Current again', year: 2011, tmdbId: 9, kind: 'movie' }),
+    ];
+
+    const merged = mergeRelatedLampaItems(collection, kinopoisk, 9);
+    expect(merged.map((entry) => Number(entry.id))).toEqual([2, 1, 4]);
+    expect(merged.at(-1)?.kind).toBe('tv');
   });
 });
 

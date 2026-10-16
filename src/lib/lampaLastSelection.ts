@@ -7,6 +7,18 @@ export interface LampaLastSelection {
   seasonNumber: number;
   /** Translator / dub name previously chosen by the user. */
   dubId: string;
+  /** Preferred playback quality, when the client stored one. */
+  quality?: string;
+}
+
+/** Pill label: `AlexFilm • 4K`, or just the dub name. */
+export function formatLampaVoicePillLabel(
+  selection: LampaLastSelection | null | undefined,
+): string {
+  const dub = selection?.dubId?.trim();
+  if (!dub) return 'Озвучка';
+  const quality = selection?.quality?.trim();
+  return quality ? `${dub} • ${quality}` : dub;
 }
 
 function storageKey(mediaId: string): string {
@@ -38,6 +50,10 @@ export async function loadLampaLastSelection(
       sourceId: parsed.sourceId.trim(),
       seasonNumber,
       dubId: parsed.dubId.trim(),
+      quality:
+        typeof parsed.quality === 'string' && parsed.quality.trim()
+          ? parsed.quality.trim()
+          : undefined,
     };
   } catch {
     return null;

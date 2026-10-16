@@ -115,7 +115,7 @@ export default function DetailListScreen() {
     enabled:
       ready &&
       media === 'lampa' &&
-      (section === 'related' || (section === 'similar' && collectionId != null)),
+      (section === 'related' || section === 'similar'),
   });
   const castQuery = useQuery({
     queryKey: ['lampa-cast', kind, id ?? 0, DETAIL_CAST_FETCH_LIMIT],
@@ -207,7 +207,7 @@ export default function DetailListScreen() {
 
   const loading =
     ready &&
-    ((media === 'lampa' && section === 'similar' && (similarQuery.isLoading || (collectionId != null && franchiseQuery.isLoading))) ||
+    ((media === 'lampa' && section === 'similar' && (similarQuery.isLoading || franchiseQuery.isLoading)) ||
       (media === 'lampa' && section === 'recommendations' && recommendationsQuery.isLoading) ||
       (media === 'lampa' && section === 'related' && franchiseQuery.isLoading) ||
       (media === 'lampa' && section === 'cast' && castQuery.isLoading) ||

@@ -29,18 +29,22 @@ function shouldLink(targetPath) {
 
 function linkIntoRoot(relativeName, sourcePath) {
   const destPath = path.join(rootModules, relativeName);
+  const resolvedSource = path.resolve(sourcePath);
 
-  if (fs.existsSync(destPath)) {
-    try {
-      const stat = fs.lstatSync(destPath);
-      if (stat.isSymbolicLink()) {
-        const resolved = path.resolve(rootModules, fs.readlinkSync(destPath));
-        if (resolved === sourcePath) return;
-        fs.unlinkSync(destPath);
-      } else {
-        return;
-      }
-    } catch {
+  // existsSync follows links and returns false for a dangling symlink, which
+  // happens after the repo is moved: the link file is still there and points
+  // at the old absolute path. lstat sees that file so we can replace it.
+  try {
+    const stat = fs.lstatSync(destPath);
+    if (stat.isSymbolicLink()) {
+      const resolved = path.resolve(path.dirname(destPath), fs.readlinkSync(destPath));
+      if (resolved === resolvedSource) return;
+      fs.unlinkSync(destPath);
+    } else {
+      return;
+    }
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') {
       /* attempt link below */
     }
   }
@@ -48,7 +52,7 @@ function linkIntoRoot(relativeName, sourcePath) {
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
 
   const type = process.platform === 'win32' ? 'junction' : 'dir';
-  fs.symlinkSync(sourcePath, destPath, type);
+  fs.symlinkSync(resolvedSource, destPath, type);
   linked.push(relativeName);
 }
 

@@ -450,7 +450,7 @@ export function applyEpisodeOrdinalsToContinueItems(
     if (item.kind !== 'anime' || !item.episodeId) return item;
     const ordinal = ordinalByEpisodeId.get(item.episodeId);
     if (!ordinal) return item;
-    return { ...item, subtitle: `Эпизод ${ordinal}` };
+    return { ...item, episode: ordinal, subtitle: `Эпизод ${ordinal}` };
   });
 }
 
@@ -552,4 +552,47 @@ export function formatContinueProgressLabel(
     return `${formatProgressTime(progress, durationSec)} · ${pct}`;
   }
   return pct;
+}
+
+/** «осталось N мин» when duration is known; percent otherwise. */
+export function formatContinueRemainingLabel(
+  fraction: number,
+  durationSec?: number,
+): string {
+  const progress = Math.min(1, Math.max(0, fraction));
+  if (durationSec == null || durationSec <= 1) {
+    return formatContinueProgressLabel(progress);
+  }
+  const remainingSec = Math.max(0, (1 - progress) * durationSec);
+  const minutes = Math.round(remainingSec / 60);
+  if (minutes < 1) return 'осталось меньше минуты';
+  return `осталось ${minutes} мин`;
+}
+
+/** Hero line: «продолжить · 1 сезон, 2 серия · осталось 3 мин». */
+export function formatContinueHeroEyebrow(
+  item: Pick<ContinueWatchingItem, 'season' | 'episode' | 'progress' | 'durationSec'>,
+): string {
+  const parts = ['продолжить'];
+  const season = item.season != null && item.season > 0 ? item.season : undefined;
+  const episode = item.episode != null && item.episode > 0 ? item.episode : undefined;
+  if (season != null && episode != null) {
+    parts.push(`${season} сезон, ${episode} серия`);
+  } else if (episode != null) {
+    parts.push(`${episode} серия`);
+  } else if (season != null) {
+    parts.push(`${season} сезон`);
+  }
+  parts.push(formatContinueRemainingLabel(item.progress, item.durationSec));
+  return parts.join(' · ');
+}
+
+/** Title page when it differs from the continue destination. */
+export function continueSecondaryAction(
+  item: ContinueWatchingItem,
+): { label: string; href: string } | null {
+  if (item.kind !== 'anime' || item.animeId == null) return null;
+  const href = `/anime/${item.animeId}`;
+  if (!href || href === item.href) return null;
+  return { label: 'Все серии', href };
 }

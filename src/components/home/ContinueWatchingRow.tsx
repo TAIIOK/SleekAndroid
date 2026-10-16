@@ -22,7 +22,10 @@ import { continuePosterDecodeSize } from '@/lib/catalogRailLayout';
 import { isTvUi } from '@/lib/isTvUi';
 import { tvHorizontalCatalogScrollProps, tvRailSectionSnapProps } from '@/lib/tvCatalogScroll';
 import { setCatalogActiveFocus } from '@/lib/tvCatalogScrollRestore';
-import { registerTvCatalogRail } from '@/lib/tvCatalogVerticalFocus';
+import {
+  registerTvCatalogRail,
+  requestTvCatalogRailAbove,
+} from '@/lib/tvCatalogVerticalFocus';
 import { tvNextFocusLeft } from '@/lib/tvRailFocus';
 import { useTvEventHandlerSafe } from '@/lib/tvEventHandler';
 import {
@@ -38,9 +41,11 @@ const CARD_WIDTH = layout.continueCardWidth;
 
 interface ContinueWatchingRowProps {
   items: ContinueWatchingItem[];
+  /** TV focus previews this card; `null` returns the hero to the latest item. */
+  onPreview?: (item: ContinueWatchingItem | null) => void;
 }
 
-export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
+export function ContinueWatchingRow({ items, onPreview }: ContinueWatchingRowProps) {
   const router = useRouter();
   const neighbors = useTvCatalogVerticalNeighbors('/', CONTINUE_RAIL_PRIORITY);
   const nextFocusUp = neighbors.up;
@@ -68,7 +73,9 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
     if (!isTvUi() || event.eventKeyAction === 0) return;
     if (!ownsFocusRef.current) return;
     if (event.eventType === 'up') {
-      requestTvHomeChromeFocus();
+      if (!requestTvCatalogRailAbove('/', CONTINUE_RAIL_PRIORITY)) {
+        requestTvHomeChromeFocus();
+      }
       return;
     }
     if (event.eventType === 'down') {
@@ -95,9 +102,15 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
                 if (index === 0) registerTvCatalogRail('/', CONTINUE_RAIL_PRIORITY, node);
               }}
               item={item}
-              onPress={() => openItem(router, item)}
-              onFocus={railFocus.onFocus}
-              onBlur={railFocus.onBlur}
+              onPress={() => openContinueWatchingItem(router, item)}
+              onFocus={() => {
+                railFocus.onFocus?.();
+                onPreview?.(item);
+              }}
+              onBlur={() => {
+                railFocus.onBlur?.();
+                onPreview?.(null);
+              }}
               isContentEntry={false}
               railStart={index === 0}
               railEnd={index === items.length - 1}
@@ -127,7 +140,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
   );
 }
 
-function openItem(
+export function openContinueWatchingItem(
   router: ReturnType<typeof useRouter>,
   item: ContinueWatchingItem,
 ) {

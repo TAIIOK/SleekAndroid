@@ -24,6 +24,7 @@ import { fetchFavoriteBookmarks, fetchSavedAnimeLibrary, fetchSavedLampaLibrary 
 import { getPartyRoom } from '@/api/party';
 import { AnimeCatalogRails } from '@/components/catalog/AnimeCatalogRails';
 import { LampaKindRails } from '@/components/catalog/LampaKindRails';
+import { ContinueWatchingHero } from '@/components/home/ContinueWatchingHero';
 import { ContinueWatchingRow } from '@/components/home/ContinueWatchingRow';
 import { HomeSettingsSheet } from '@/components/home/HomeSettingsSheet';
 import { HomeWelcomeModal } from '@/components/home/HomeWelcomeModal';
@@ -49,6 +50,7 @@ import { prefetchCatalogHubQueries } from '@/lib/catalogHubPrefetch';
 import { setHomeSettingsOpener } from '@/lib/homeSettingsBridge';
 import { isHomeConfigConfigured, resolveEnabledContentTypes } from '@/lib/homeSettings';
 import { tvVerticalCatalogScrollProps } from '@/lib/tvCatalogScroll';
+import type { ContinueWatchingItem } from '@/lib/continueWatching';
 import { useAuth } from '@/providers/AuthProvider';
 import { HomeScrollLazyProvider, notifyHomeScrollLazy } from '@/providers/HomeScrollLazy';
 import { isTvUi } from '@/lib/isTvUi';
@@ -100,6 +102,15 @@ export default function HomeScreen() {
   const refreshInset =
     !isTv && chrome?.contentInsetsEnabled ? chrome.topContentInset : 0;
   const { items: continueItems, ready: continueReady } = useContinueWatching();
+  const [previewContinueId, setPreviewContinueId] = useState<string | null>(null);
+  const previewItem = useMemo(() => {
+    if (!isTv || continueItems.length === 0) return null;
+    if (!previewContinueId) return continueItems[0];
+    return continueItems.find((item) => item.id === previewContinueId) ?? continueItems[0];
+  }, [continueItems, isTv, previewContinueId]);
+  const handleContinuePreview = useCallback((item: ContinueWatchingItem | null) => {
+    setPreviewContinueId(item?.id ?? null);
+  }, []);
   useRefreshProgressOnResume();
   const continueWatchingDedupe = useMemo(
     () => buildContinueWatchingDedupeKeys(continueItems),
@@ -351,11 +362,19 @@ export default function HomeScreen() {
           <View ref={homeContentRef} collapsable={false} style={styles.homeBody}>
         {isTv ? (
           <>
+            {previewItem ? (
+              <ContinueWatchingHero item={previewItem} isContentEntry />
+            ) : null}
+            <ContinueWatchingRow items={continueItems} onPreview={handleContinuePreview} />
+            <QuickActionsSection
+              actionIds={quickActionIds}
+              contentEntry={!previewItem}
+            />
             <TvHomeTypeFilters
               value={activeTypeFilter}
               onChange={setTypeFilter}
               options={availableTypeFilters}
-              contentEntry
+              contentEntry={!previewItem && quickActionIds.length === 0}
               onOpenSettings={() => setSettingsOpen(true)}
             />
             <TvHomeFeedTabs
@@ -363,9 +382,6 @@ export default function HomeScreen() {
               onChange={setFeedTab}
               tabs={availableFeedTabs}
             />
-
-            <ContinueWatchingRow items={continueItems} />
-            <QuickActionsSection actionIds={quickActionIds} />
 
             {tvCatalogLoading ? (
               <ActivityIndicator color={colors.brand} style={styles.loader} />

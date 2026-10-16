@@ -22,14 +22,9 @@ import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, radii, spacing } from '@/constants/aniverse';
 import { formatRuDate } from '@/lib/catalogLocalization';
 import { resolveLampaPosterUrl } from '@/lib/config';
-import {
-  resolveHeldTvEpisodeWindow,
-  tvEpisodeWindowSpacerHeights,
-} from '@/lib/detailEpisodeWindow';
 import { lampaProgressKey } from '@/lib/lampaDetail';
 import {
   DETAIL_FOCUS_EPISODES,
-  DETAIL_FOCUS_EPISODE_TAIL,
   DETAIL_FOCUS_SEASONS,
   useDetailFocusSlot,
 } from '@/lib/detailFocus';
@@ -43,12 +38,14 @@ const STILL_WIDTH = isTvUi() ? 140 : 96;
 const STILL_HEIGHT = isTvUi() ? 79 : 54;
 const STILL_DECODE = { width: STILL_WIDTH, height: STILL_HEIGHT };
 const EPISODE_CARD_PAD = isTvUi() ? spacing.sm : 6;
-const EPISODE_CARD_HEIGHT = STILL_HEIGHT + EPISODE_CARD_PAD * 2;
-const EPISODE_STRIDE = EPISODE_CARD_HEIGHT + spacing.sm;
+const TV_STILL_WIDTH = 232;
+const TV_STILL_HEIGHT = 130;
 
 interface LampaDetailSeasonsProps {
   seasons: LampaSeason[];
   tmdbId?: number;
+  /** Last watched season. TV opens here when that season exists. */
+  initialSeason?: number;
   episodeProgressByKey?: Record<string, number>;
   onSelectEpisode: (season: number, episode: number) => void;
 }
@@ -151,64 +148,105 @@ const EpisodeSeparator = memo(function EpisodeSeparator() {
   return <View style={styles.episodeSeparator} />;
 });
 
-function TvSeasonEpisodeWindow({
+function TvEpisodeRail({
   episodes,
-  episodeWindow,
   season,
   episodeProgressByKey,
   onSelectEpisode,
-  onEpisodeFocus,
 }: {
   episodes: LampaEpisodeDetail[];
-  episodeWindow: { start: number; end: number };
   season: number;
   episodeProgressByKey: Record<string, number>;
   onSelectEpisode: (season: number, episode: number) => void;
-  onEpisodeFocus: (index: number) => void;
 }) {
-  const episodeHead = useDetailFocusSlot(DETAIL_FOCUS_EPISODES);
-  const episodeTail = useDetailFocusSlot(DETAIL_FOCUS_EPISODE_TAIL);
-  const spacers = tvEpisodeWindowSpacerHeights(
-    episodeWindow.start,
-    episodeWindow.end,
-    episodes.length,
-    EPISODE_STRIDE,
-  );
-  const visible = episodes.slice(episodeWindow.start, episodeWindow.end);
+  const episodeFocus = useDetailFocusSlot(DETAIL_FOCUS_EPISODES);
   return (
-    <View style={styles.tvEpisodeColumn}>
-      {spacers.top > 0 ? <View style={{ height: spacers.top }} /> : null}
-      {visible.map((episode, offset) => {
-        const index = episodeWindow.start + offset;
-        const isFirst = index === episodeWindow.start;
-        const isLast = index === Math.max(episodeWindow.start, episodeWindow.end - 1);
-        return (
-          <View key={`${season}-${episode.episodeNumber}-${episode.id}`} style={styles.tvEpisodeSlot}>
-            <EpisodeCard
-              episode={episode}
-              season={season}
-              progress={episodeProgressByKey[lampaProgressKey(season, episode.episodeNumber)] ?? 0}
-              onSelectEpisode={onSelectEpisode}
-              onFocused={() => onEpisodeFocus(index)}
-              railStart={isFirst}
-              hostRef={(node) => {
-                if (isFirst) episodeHead.hostRef?.(node);
-                if (isLast) episodeTail.hostRef?.(node);
-              }}
-              nextFocusUp={isFirst ? episodeHead.nextFocusUp : undefined}
-              nextFocusDown={isLast ? episodeTail.nextFocusDown : undefined}
-            />
-          </View>
-        );
-      })}
-      {spacers.bottom > 0 ? <View style={{ height: spacers.bottom }} /> : null}
-    </View>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.tvRail}
+    >
+      {episodes.map((episode, index) => (
+        <TvEpisodeStill
+          key={`${season}-${episode.episodeNumber}-${episode.id}`}
+          episode={episode}
+          progress={episodeProgressByKey[lampaProgressKey(season, episode.episodeNumber)] ?? 0}
+          onPress={() => onSelectEpisode(season, episode.episodeNumber)}
+          railStart={index === 0}
+          railEnd={index === episodes.length - 1}
+          hostRef={index === 0 ? episodeFocus.hostRef : undefined}
+          nextFocusUp={episodeFocus.nextFocusUp}
+          nextFocusDown={episodeFocus.nextFocusDown}
+        />
+      ))}
+    </ScrollView>
   );
 }
+
+const TvEpisodeStill = memo(function TvEpisodeStill({
+  episode,
+  progress,
+  onPress,
+  railStart,
+  railEnd,
+  hostRef,
+  nextFocusUp,
+  nextFocusDown,
+}: {
+  episode: LampaEpisodeDetail;
+  progress: number;
+  onPress: () => void;
+  railStart: boolean;
+  railEnd: boolean;
+  hostRef?: (node: View | null) => void;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
+}) {
+  const still = resolveLampaPosterUrl(episode.stillPath, 'w500');
+  const meta = episodeCardMeta(episode, progress);
+  return (
+    <TvFocusable
+      onPress={onPress}
+      railStart={railStart}
+      railEnd={railEnd}
+      hostRef={hostRef}
+      nextFocusUp={nextFocusUp}
+      nextFocusDown={nextFocusDown}
+      style={styles.tvCard}
+    >
+      <View style={styles.tvStillWrap}>
+        {still ? (
+          <Image
+            source={{ uri: still, width: TV_STILL_WIDTH, height: TV_STILL_HEIGHT }}
+            style={styles.tvStill}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={still}
+            transition={0}
+          />
+        ) : (
+          <View style={styles.stillFallback}>
+            <Text style={styles.stillFallbackText}>{episode.episodeNumber}</Text>
+          </View>
+        )}
+        <Text style={styles.tvNumber}>{episode.episodeNumber}</Text>
+      </View>
+      <Text style={styles.tvCardTitle} numberOfLines={2}>
+        {episode.episodeNumber}. {episode.name}
+      </Text>
+      {meta ? (
+        <Text style={styles.tvCardMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      ) : null}
+    </TvFocusable>
+  );
+});
 
 export const LampaDetailSeasons = memo(function LampaDetailSeasons({
   seasons,
   tmdbId,
+  initialSeason,
   episodeProgressByKey = {},
   onSelectEpisode,
 }: LampaDetailSeasonsProps) {
@@ -216,10 +254,24 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
     () => seasons.filter((season) => (season.seasonNumber ?? 0) > 0),
     [seasons],
   );
+  const preferredSeason =
+    isTvUi() &&
+    initialSeason != null &&
+    playableSeasons.some((season) => season.seasonNumber === initialSeason)
+      ? initialSeason
+      : undefined;
   const [selectedSeason, setSelectedSeason] = useState(
-    playableSeasons[0]?.seasonNumber ?? 1,
+    preferredSeason ?? playableSeasons[0]?.seasonNumber ?? 1,
   );
+  const appliedInitial = useRef(preferredSeason != null);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isTvUi() || appliedInitial.current || initialSeason == null) return;
+    if (!playableSeasons.some((season) => season.seasonNumber === initialSeason)) return;
+    appliedInitial.current = true;
+    setSelectedSeason(initialSeason);
+  }, [initialSeason, playableSeasons]);
 
   useEffect(() => {
     const first = playableSeasons[0]?.seasonNumber;
@@ -247,27 +299,9 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
     }));
   }, [data?.episodes, selectedMeta?.episodeCount]);
 
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const [episodeWindow, setEpisodeWindow] = useState({ start: 0, end: 0 });
-  const seasonKeyRef = useRef(selectedSeason);
   const seasonFocus = useDetailFocusSlot(DETAIL_FOCUS_SEASONS);
-
-  useEffect(() => {
-    const seasonChanged = seasonKeyRef.current !== selectedSeason;
-    seasonKeyRef.current = selectedSeason;
-    if (seasonChanged) setFocusedIndex(0);
-    setEpisodeWindow((current) =>
-      resolveHeldTvEpisodeWindow(
-        seasonChanged ? 0 : focusedIndex,
-        episodes.length,
-        seasonChanged || current.end === 0 ? null : current,
-      ),
-    );
-  }, [episodes.length, focusedIndex, selectedSeason]);
-
-  const onEpisodeFocus = useCallback((index: number) => {
-    setFocusedIndex(index);
-  }, []);
+  const tvEpisodes = data?.episodes ?? [];
+  const tvCount = tvEpisodes.length || seasonEpisodeCount(selectedMeta);
 
   const renderEpisode = useCallback(
     ({ item }: ListRenderItemInfo<LampaEpisodeDetail>) => (
@@ -288,13 +322,11 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
   if (!playableSeasons.length) return null;
 
   const episodeList = isTvUi() ? (
-    <TvSeasonEpisodeWindow
-      episodes={episodes}
-      episodeWindow={episodeWindow}
+    <TvEpisodeRail
+      episodes={tvEpisodes}
       season={selectedSeason}
       episodeProgressByKey={episodeProgressByKey}
       onSelectEpisode={onSelectEpisode}
-      onEpisodeFocus={onEpisodeFocus}
     />
   ) : (
     <FlatList
@@ -389,10 +421,18 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
               hostRef={index === 0 ? seasonFocus.hostRef : undefined}
               nextFocusUp={seasonFocus.nextFocusUp}
               nextFocusDown={seasonFocus.nextFocusDown}
-              style={[styles.seasonChip, active && styles.seasonChipActive]}
+              style={[
+                styles.seasonChip,
+                active && (isTvUi() ? styles.seasonChipActiveTv : styles.seasonChipActive),
+              ]}
             >
-              <Text style={[styles.seasonChipLabel, active && styles.seasonChipLabelActive]}>
-                {season.name ?? `Сезон ${num}`}
+              <Text
+                style={[
+                  styles.seasonChipLabel,
+                  active && (isTvUi() ? styles.seasonChipLabelActiveTv : styles.seasonChipLabelActive),
+                ]}
+              >
+                {isTvUi() ? `${num} сезон` : (season.name ?? `Сезон ${num}`)}
               </Text>
             </TvFocusable>
           );
@@ -401,22 +441,38 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
     </View>
   );
 
+  const waitingForEpisodes = isTvUi()
+    ? isPending && tvEpisodes.length === 0
+    : isPending && episodes.length === 0;
+  const episodesFailed = isTvUi()
+    ? isError && tvEpisodes.length === 0
+    : isError && episodes.length === 0;
+
   return (
     <View style={styles.section}>
-      <Text style={styles.title}>Сезоны и серии</Text>
+      {isTvUi() ? (
+        <View style={styles.tvHeader}>
+          <Text style={styles.tvTitle}>Серии</Text>
+          <Text style={styles.tvSummary}>{seasonSummary(selectedSeason, tvCount)}</Text>
+          <View style={styles.tvChipSlot}>{seasonChips}</View>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.title}>Сезоны и серии</Text>
+          {useSeasonPicker ? seasonPicker : seasonChips}
+        </>
+      )}
 
-      {useSeasonPicker ? seasonPicker : seasonChips}
-
-      {selectedMeta?.overview ? (
+      {!isTvUi() && selectedMeta?.overview ? (
         <Text style={styles.overview} numberOfLines={2}>
           {selectedMeta.overview}
         </Text>
       ) : null}
 
-      {isPending && !episodes.length ? (
+      {waitingForEpisodes ? (
         <Text style={styles.meta}>Загрузка эпизодов…</Text>
       ) : null}
-      {isError && !episodes.length ? (
+      {episodesFailed ? (
         <Text style={styles.meta}>Не удалось загрузить эпизоды сезона</Text>
       ) : null}
 
@@ -430,6 +486,62 @@ export const LampaDetailSeasons = memo(function LampaDetailSeasons({
   );
 });
 
+const EPISODE_MONTHS = [
+  'янв',
+  'фев',
+  'мар',
+  'апр',
+  'мая',
+  'июн',
+  'июл',
+  'авг',
+  'сен',
+  'окт',
+  'ноя',
+  'дек',
+];
+
+function seasonEpisodeCount(season?: LampaSeason): number {
+  const raw = season?.episodeCount;
+  const count = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function seasonSummary(seasonNumber: number, count: number): string {
+  if (count <= 0) return `${seasonNumber} сезон`;
+  return `${seasonNumber} сезон · ${count} ${episodeWord(count)}`;
+}
+
+function episodeWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'серия';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'серии';
+  return 'серий';
+}
+
+function formatCompactRuDate(raw?: string): string | undefined {
+  if (!raw?.trim()) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw.trim());
+  if (!match) return formatRuDate(raw);
+  const month = EPISODE_MONTHS[Number(match[2]) - 1];
+  if (!month) return formatRuDate(raw);
+  return `${Number(match[3])} ${month} ${match[1]}`;
+}
+
+function episodeCardMeta(episode: LampaEpisodeDetail, progress: number): string | undefined {
+  const runtime =
+    episode.runtime != null && episode.runtime > 0 ? Math.round(episode.runtime) : undefined;
+  const inProgress = progress > 0 && progress < 0.98;
+  if (inProgress && runtime != null) {
+    const left = Math.max(1, Math.round(runtime * (1 - progress)));
+    return `осталось ${left} мин`;
+  }
+  const date = formatCompactRuDate(episode.airDate);
+  const duration = runtime != null ? `${runtime} мин` : undefined;
+  return [date, duration].filter(Boolean).join(' · ') || undefined;
+}
+
 const styles = StyleSheet.create({
   section: {
     width: '100%',
@@ -439,6 +551,73 @@ const styles = StyleSheet.create({
     color: colors.brand,
     fontSize: isTvUi() ? 22 : 16,
     fontWeight: '700',
+  },
+  tvHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  tvChipSlot: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tvTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  tvSummary: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+  },
+  seasonChipActiveTv: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderColor: 'transparent',
+  },
+  seasonChipLabelActiveTv: {
+    color: '#1b1b24',
+  },
+  tvRail: {
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: 2,
+  },
+  tvCard: {
+    width: TV_STILL_WIDTH,
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  tvStillWrap: {
+    width: TV_STILL_WIDTH,
+    height: TV_STILL_HEIGHT,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  tvStill: {
+    width: '100%',
+    height: '100%',
+  },
+  tvNumber: {
+    position: 'absolute',
+    left: 12,
+    bottom: 8,
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  tvCardTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  tvCardMeta: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
   },
   seasonRailWrap: {
     width: '100%',
@@ -570,12 +749,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  tvEpisodeColumn: {
-    width: '100%',
-  },
-  tvEpisodeSlot: {
-    marginBottom: spacing.sm,
-  },
   episodeSeparator: {
     height: spacing.sm,
   },
@@ -586,7 +759,6 @@ const styles = StyleSheet.create({
   },
   episodeCard: {
     width: '100%',
-    height: isTvUi() ? EPISODE_CARD_HEIGHT : undefined,
     borderRadius: radii.md,
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,

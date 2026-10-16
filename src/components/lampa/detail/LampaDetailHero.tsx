@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useState } from 'react';
@@ -51,6 +52,8 @@ interface LampaDetailHeroProps {
   externalRatings?: LampaExternalRating[];
   onWatch: () => void;
   onOpenSources?: () => void;
+  /** Series voice pill, e.g. `AlexFilm • 4K`. Opens the source sheet. */
+  voiceLabel?: string;
   onStatusChange: (status: UserListStatus) => void;
   onToggleFavorite: () => void;
 }
@@ -79,10 +82,12 @@ export const LampaDetailHero = memo(function LampaDetailHero({
   externalRatings,
   onWatch,
   onOpenSources,
+  voiceLabel,
   onStatusChange,
   onToggleFavorite,
 }: LampaDetailHeroProps) {
   const tv = isTvUi();
+  const compact = tv && isSerial;
   const playFocus = useDetailFocusSlot(DETAIL_FOCUS_PLAY);
   const libraryFocus = useDetailFocusSlot(DETAIL_FOCUS_LIBRARY);
   const { createParty, creating: creatingParty } = useCreatePartyFromLampa();
@@ -207,7 +212,9 @@ export const LampaDetailHero = memo(function LampaDetailHero({
         <View
           style={[
             styles.watchRow,
-            hasHistory && onOpenSources ? styles.watchRowSplit : styles.watchRowSolo,
+            hasHistory && onOpenSources && !(tv && isSerial)
+              ? styles.watchRowSplit
+              : styles.watchRowSolo,
           ]}
         >
           <TvFocusable
@@ -219,7 +226,9 @@ export const LampaDetailHero = memo(function LampaDetailHero({
             nextFocusDown={playFocus.nextFocusDown}
             style={[
               styles.playBtn,
-              hasHistory && onOpenSources ? styles.playBtnCompact : styles.playBtnSolo,
+              hasHistory && onOpenSources && !(tv && isSerial)
+                ? styles.playBtnCompact
+                : styles.playBtnSolo,
             ]}
           >
             <Text style={styles.playLabel} numberOfLines={1}>
@@ -231,7 +240,19 @@ export const LampaDetailHero = memo(function LampaDetailHero({
               </Text>
             ) : null}
           </TvFocusable>
-          {hasHistory && onOpenSources ? (
+          {tv && isSerial && onOpenSources ? (
+            <TvFocusable
+              onPress={onOpenSources}
+              nextFocusDown={playFocus.nextFocusDown}
+              accessibilityLabel={voiceLabel || 'Озвучка'}
+              style={styles.voicePill}
+            >
+              <Text style={styles.voicePillLabel} numberOfLines={1}>
+                {voiceLabel || 'Озвучка'}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#fff" />
+            </TvFocusable>
+          ) : hasHistory && onOpenSources ? (
             <TvFocusable onPress={onOpenSources} nextFocusDown={playFocus.nextFocusDown} style={styles.sourcesBtn}>
               <Text style={styles.sourcesLabel} numberOfLines={1}>
                 Выбрать источник
@@ -304,7 +325,13 @@ export const LampaDetailHero = memo(function LampaDetailHero({
         />
       )}
 
-      <View style={[styles.content, tv && styles.contentTv]}>
+      <View
+        style={[
+          styles.content,
+          tv && styles.contentTv,
+          compact && styles.contentSerial,
+        ]}
+      >
         {leftCol}
         {aside}
       </View>
@@ -314,8 +341,8 @@ export const LampaDetailHero = memo(function LampaDetailHero({
   const backdropDecode = detailHeroDecodeSize();
 
   return (
-    <View style={styles.hero}>
-      <View style={styles.backdrop}>
+    <View style={[styles.hero, compact && styles.heroSerial]}>
+      <View style={[styles.backdrop, compact && styles.backdropSerial]}>
         {backdrop ? (
           <Image
             source={{
@@ -346,11 +373,18 @@ const styles = StyleSheet.create({
     marginHorizontal: -PAGE_PAD,
     backgroundColor: colors.bg,
   },
+  // Same photo height; the episode rail is pulled up over the lower part of the frame.
+  heroSerial: {
+    marginBottom: -100,
+  },
   backdrop: {
     width: '100%',
     minHeight: isTvUi() ? 520 : 280,
     justifyContent: 'flex-end',
     backgroundColor: colors.bg,
+  },
+  backdropSerial: {
+    justifyContent: 'flex-start',
   },
   bottomFade: {
     position: 'absolute',
@@ -371,6 +405,10 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     gap: spacing.lg,
     paddingBottom: spacing.lg,
+  },
+  contentSerial: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   leftCol: {
     flex: 1.2,
@@ -501,6 +539,25 @@ const styles = StyleSheet.create({
   sourcesLabel: {
     color: '#fff',
     fontSize: isTvUi() ? 15 : 13,
+    fontWeight: '700',
+  },
+  voicePill: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: 280,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  voicePillLabel: {
+    flexShrink: 1,
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '700',
   },
   infoGrid: {

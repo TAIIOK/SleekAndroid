@@ -2,8 +2,12 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { TvFocusable } from '@/components/tv/TvFocusable';
 import { colors, layout, spacing, tvFocus } from '@/constants/aniverse';
+import { useTvCatalogVerticalNeighbors } from '@/hooks/useTvCatalogVerticalNeighbors';
 import { tvHorizontalCatalogScrollProps } from '@/lib/tvCatalogScroll';
-import { registerTvHomeTabsFocus } from '@/lib/tvHomeFocusHandoff';
+import {
+  HOME_TABS_RAIL_PRIORITY,
+  registerTvHomeTabsFocus,
+} from '@/lib/tvHomeFocusHandoff';
 import type { TvHomeFeedTab, TvHomeFeedTabOption } from '@/lib/tvHomeFeeds';
 
 interface TvHomeFeedTabsProps {
@@ -13,6 +17,7 @@ interface TvHomeFeedTabsProps {
 }
 
 export function TvHomeFeedTabs({ value, onChange, tabs }: TvHomeFeedTabsProps) {
+  const neighbors = useTvCatalogVerticalNeighbors('/', HOME_TABS_RAIL_PRIORITY);
   if (!tabs.length) return null;
 
   return (
@@ -33,6 +38,8 @@ export function TvHomeFeedTabs({ value, onChange, tabs }: TvHomeFeedTabsProps) {
                 focusedStyle={styles.tabFocused}
                 railStart={index === 0}
                 railEnd={index === tabs.length - 1}
+                nextFocusUp={neighbors.up}
+                nextFocusDown={neighbors.down}
                 hostRef={index === 0 ? registerTvHomeTabsFocus : undefined}
               >
                 <Text

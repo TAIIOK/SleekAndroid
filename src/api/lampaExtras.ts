@@ -1,6 +1,6 @@
 import type { LampaItem } from '@/api/catalog';
 import { watchHubUrl } from '@/lib/config';
-import { sortLampaItemsByYear } from '@/lib/lampaDetail';
+import { mergeRelatedLampaItems } from '@/lib/lampaDetail';
 
 const TMDB_UID = '1q22w3e4';
 
@@ -93,8 +93,7 @@ export async function fetchLampaRecommendations(
   return mapTmdbResults(payload, kind).filter((item) => Number(item.id) !== tmdbId);
 }
 
-/** Titles from the same TMDB collection (franchise), oldest first. */
-export async function fetchLampaRelated(
+async function fetchCollectionRelated(
   kind: 'movie' | 'tv',
   tmdbId: number,
   collectionId?: number,
@@ -117,17 +116,64 @@ export async function fetchLampaRelated(
     `/tmdb/api/3/collection/${resolvedId}?${tmdbQuery()}`,
   );
   if (!Array.isArray(payload?.parts)) return [];
-
-  const seen = new Set<number>();
-  const items: LampaItem[] = [];
-  for (const raw of payload.parts) {
+  return payload.parts.flatMap((raw) => {
     const mapped = mapTmdbMediaToLampaItem(raw, kind);
-    const id = Number(mapped?.id);
-    if (!mapped || !Number.isFinite(id) || id === tmdbId || seen.has(id)) continue;
-    seen.add(id);
-    items.push(mapped);
-  }
-  return sortLampaItemsByYear(items);
+    return mapped ? [mapped] : [];
+  });
+}
+
+function mapWatchHubRelatedItem(raw: unknown, fallbackKind: 'movie' | 'tv'): LampaItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const item = raw as Record<string, unknown>;
+  const tmdbId =
+    typeof item.tmdb_id === 'number'
+      ? item.tmdb_id
+      : typeof item.id === 'number'
+        ? item.id
+        : undefined;
+  if (!tmdbId) return null;
+  const declared = item.kind ?? item.media_type;
+  const kind = declared === 'tv' ? 'tv' : declared === 'movie' ? 'movie' : fallbackKind;
+  const title = typeof item.title === 'string' ? item.title : undefined;
+  const name = typeof item.name === 'string' ? item.name : undefined;
+  const poster = typeof item.poster_path === 'string' ? item.poster_path : undefined;
+  const year = typeof item.year === 'number' && item.year > 0 ? item.year : undefined;
+  return {
+    id: tmdbId,
+    kind,
+    title,
+    name,
+    poster_path: poster,
+    ...(year ? { year } : {}),
+  } as LampaItem;
+}
+
+async function fetchKinopoiskRelated(
+  kind: 'movie' | 'tv',
+  tmdbId: number,
+): Promise<LampaItem[]> {
+  const serial = kind === 'tv' ? 'true' : 'false';
+  const payload = await watchHubJson<{ items?: unknown[] }>(
+    `/api/lampa/related?tmdb_id=${tmdbId}&serial=${serial}`,
+  );
+  if (!Array.isArray(payload?.items)) return [];
+  return payload.items.flatMap((raw) => {
+    const mapped = mapWatchHubRelatedItem(raw, kind);
+    return mapped ? [mapped] : [];
+  });
+}
+
+/** Franchise titles: TMDB collection parts, then Kinopoisk sequels that are not already listed. */
+export async function fetchLampaRelated(
+  kind: 'movie' | 'tv',
+  tmdbId: number,
+  collectionId?: number,
+): Promise<LampaItem[]> {
+  const [collection, kinopoisk] = await Promise.all([
+    fetchCollectionRelated(kind, tmdbId, collectionId),
+    fetchKinopoiskRelated(kind, tmdbId),
+  ]);
+  return mergeRelatedLampaItems(collection, kinopoisk, tmdbId);
 }
 
 export interface LampaCastMember {
@@ -192,6 +238,8 @@ export interface LampaEpisodeDetail {
   overview?: string;
   airDate?: string;
   stillPath?: string;
+  /** Runtime in minutes, from TMDB. */
+  runtime?: number;
 }
 
 export interface LampaSeasonDetail {
@@ -225,6 +273,9 @@ export async function fetchTmdbSeasonDetail(
         const id = Number(ep.id);
         const name = typeof ep.name === 'string' ? ep.name : '';
         if (!Number.isFinite(episodeNumber) || !name) return null;
+        const runtimeRaw = Number(ep.runtime);
+        const runtime =
+          Number.isFinite(runtimeRaw) && runtimeRaw > 0 ? Math.round(runtimeRaw) : undefined;
         return {
           id: Number.isFinite(id) ? id : episodeNumber,
           episodeNumber,
@@ -232,6 +283,7 @@ export async function fetchTmdbSeasonDetail(
           overview: typeof ep.overview === 'string' ? ep.overview : undefined,
           airDate: typeof ep.air_date === 'string' ? ep.air_date : undefined,
           stillPath: typeof ep.still_path === 'string' ? ep.still_path : undefined,
+          runtime,
         };
       })
       .filter((ep): ep is LampaEpisodeDetail => ep !== null)

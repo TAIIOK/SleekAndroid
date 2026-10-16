@@ -16,7 +16,13 @@ vi.mock('@/lib/isTvUi', () => ({
   isTvUi: () => false,
 }));
 
-import { buildContinueWatchingItems } from './continueWatching';
+import {
+  applyEpisodeOrdinalsToContinueItems,
+  buildContinueWatchingItems,
+  continueSecondaryAction,
+  formatContinueHeroEyebrow,
+  type ContinueWatchingItem,
+} from './continueWatching';
 import {
   animeWatchHistoryKey,
   rememberWatchHistoryMeta,
@@ -313,5 +319,84 @@ describe('buildContinueWatchingItems', () => {
     const card = items.find((item) => item.animeId === 12);
     expect(card?.poster).toBe('https://static.yani.tv/posters/full/12.jpg');
     expect(card?.poster).not.toContain('[object Object]');
+  });
+});
+
+
+describe('formatContinueHeroEyebrow', () => {
+  it('formats season, episode, and remaining minutes', () => {
+    expect(
+      formatContinueHeroEyebrow({
+        season: 1,
+        episode: 2,
+        progress: 0.9,
+        durationSec: 30 * 60,
+      }),
+    ).toBe('продолжить · 1 сезон, 2 серия · осталось 3 мин');
+  });
+
+  it('uses the episode ordinal alone for anime', () => {
+    expect(
+      formatContinueHeroEyebrow({
+        episode: 5,
+        progress: 0.5,
+        durationSec: 24 * 60,
+      }),
+    ).toBe('продолжить · 5 серия · осталось 12 мин');
+  });
+
+  it('falls back to percent when duration is unknown', () => {
+    expect(formatContinueHeroEyebrow({ progress: 0.4 })).toBe('продолжить · 40%');
+  });
+});
+
+describe('continueSecondaryAction', () => {
+  it('opens the anime page when continue goes to the player', () => {
+    const item = {
+      id: 'anime-7',
+      title: 'Show',
+      subtitle: 'Эпизод 5',
+      progress: 0.4,
+      href: '/watch/anime/7/77',
+      kind: 'anime',
+      animeId: 7,
+    } satisfies ContinueWatchingItem;
+    expect(continueSecondaryAction(item)).toEqual({
+      label: 'Все серии',
+      href: '/anime/7',
+    });
+  });
+
+  it('hides the second button when continue already opens the title', () => {
+    const item = {
+      id: 'movie-55',
+      title: 'Film',
+      subtitle: 'Продолжить',
+      progress: 0.4,
+      href: '/movies/55',
+      kind: 'movie',
+    } satisfies ContinueWatchingItem;
+    expect(continueSecondaryAction(item)).toBeNull();
+  });
+});
+
+describe('applyEpisodeOrdinalsToContinueItems', () => {
+  it('stores the episode ordinal for the hero line', () => {
+    const [item] = applyEpisodeOrdinalsToContinueItems(
+      [
+        {
+          id: 'anime-7',
+          title: 'Show',
+          subtitle: 'Продолжить',
+          progress: 0.4,
+          href: '/watch/anime/7/77',
+          kind: 'anime',
+          animeId: 7,
+          episodeId: 77,
+        },
+      ],
+      new Map([[77, 5]]),
+    );
+    expect(item).toMatchObject({ episode: 5, subtitle: 'Эпизод 5' });
   });
 });

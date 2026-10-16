@@ -165,3 +165,14 @@ export function requestTvCatalogRailFocus(path: string, minPriority = 0) {
   const match = sorted.find(([priority]) => priority >= minPriority);
   match?.[1].host.requestTVFocus?.();
 }
+
+/** Focus the closest rail strictly above `priority`. Returns whether a target existed. */
+export function requestTvCatalogRailAbove(path: string, priority: number): boolean {
+  const state = paths.get(path);
+  if (!state) return false;
+  const sorted = [...state.rails.entries()].sort((a, b) => b[0] - a[0]);
+  const match = sorted.find(([railPriority]) => railPriority < priority);
+  if (!match) return false;
+  match[1].host.requestTVFocus?.();
+  return true;
+}

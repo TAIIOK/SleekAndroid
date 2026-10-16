@@ -1,7 +1,7 @@
 {
   "name": "aniverse-tv",
   "main": "expo-router/entry",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "scripts": {
     "start": "node ./scripts/with-expo-path.js expo start",
     "android": "node ./scripts/ensure-android-variant.js phone && node ./scripts/with-expo-path.js expo run:android",
@@ -17,7 +17,7 @@
     "prebuild": "node ./scripts/with-expo-path.js expo prebuild --clean",
     "prebuild:phone": "node ./scripts/with-expo-path.js expo prebuild --clean",
     "prebuild:tv": "EXPO_TV=1 node ./scripts/with-expo-path.js expo prebuild --clean",
-    "android:tv": "node ./scripts/ensure-android-variant.js tv && EXPO_TV=1 node ./scripts/with-expo-path.js expo run:android -d Television_1080p",
+    "android:tv": "node ./scripts/ensure-android-variant.js tv && EXPO_TV=1 REACT_NATIVE_PACKAGER_HOSTNAME=10.0.2.2 node ./scripts/with-expo-path.js expo run:android -d Television_1080p",
     "android:release": "NODE_ENV=production node ./scripts/with-expo-path.js ./android/gradlew -p android assembleRelease",
     "android:release:phone": "npm run prebuild:phone && npm run android:release",
     "android:release:tv": "npm run prebuild:tv && EXPO_TV=1 npm run android:release",

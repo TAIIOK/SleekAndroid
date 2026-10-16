@@ -51,6 +51,10 @@ import {
   lampaWatchHistoryKey,
   rememberWatchHistoryMeta,
 } from '@/lib/watchHistoryMeta';
+import {
+  formatLampaVoicePillLabel,
+  loadLampaLastSelection,
+} from '@/lib/lampaLastSelection';
 import { resumeLampaFromLastSelection } from '@/lib/resumeLampaPlayback';
 import { useAuth } from '@/providers/AuthProvider';
 import { isTvUi } from '@/lib/isTvUi';
@@ -91,6 +95,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     isTvUi() && String(Array.isArray(resume) ? resume[0] : resume ?? '') === '1';
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [voiceLabel, setVoiceLabel] = useState('Озвучка');
   const [pickerSeason, setPickerSeason] = useState<number | undefined>();
   const [pickerEpisode, setPickerEpisode] = useState<number | undefined>();
   const [autoPlayPreferred, setAutoPlayPreferred] = useState(false);
@@ -176,7 +181,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
   const { data: franchise = [], isFetching: franchiseFetching } = useQuery({
     queryKey: ['lampa-related', kind, tmdbId ?? 0],
     queryFn: () => fetchLampaRelated(kind, tmdbId!, collectionId),
-    enabled: belowFoldReady && tmdbId != null && collectionId != null,
+    enabled: belowFoldReady && tmdbId != null,
   });
 
   const similarItems = useMemo(
@@ -310,6 +315,20 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
     setSheetOpen(false);
   }, []);
 
+  useEffect(() => {
+    if (!isSerial || !routeId) return;
+    let cancelled = false;
+    void (async () => {
+      const selection =
+        (await loadLampaLastSelection(routeId)) ??
+        (lampaObjectId ? await loadLampaLastSelection(lampaObjectId) : null);
+      if (!cancelled) setVoiceLabel(formatLampaVoicePillLabel(selection));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSerial, lampaObjectId, routeId, sheetOpen]);
+
   const seasons = detail ? parseLampaSeasons(detail.seasons) : [];
 
   const openLampaItem = useCallback((itemId: string | number, itemKind: 'movie' | 'tv' = kind) => {
@@ -391,7 +410,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
 
   const relatedRails = (
     <>
-      {collectionId != null ? (
+      {franchiseFetching || franchise.length > 0 ? (
         <DetailPreviewRail
           title="Связанные"
           items={franchiseRail}
@@ -471,6 +490,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
             collectionItem={collectionItem}
             onWatch={onWatch}
             onOpenSources={onOpenSourcesBrowse}
+            voiceLabel={voiceLabel}
             onStatusChange={onStatusChange}
             onToggleFavorite={onToggleFavorite}
             externalRatings={externalRatings}
@@ -480,6 +500,7 @@ export function LampaDetailView({ kind }: { kind: 'movie' | 'tv' }) {
             <LampaDetailSeasons
               seasons={seasons}
               tmdbId={tmdbId}
+              initialSeason={savedState?.hasHistory ? savedState.lastSeason : undefined}
               episodeProgressByKey={savedState?.episodeProgressByKey}
               onSelectEpisode={onSelectEpisode}
             />

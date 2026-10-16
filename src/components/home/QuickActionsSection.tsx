@@ -106,6 +106,7 @@ function itemsLabel(n: number): string {
 
 export function QuickActionsSection({
   counts,
+  contentEntry = false,
   activeParty,
   actionIds,
 }: QuickActionsSectionProps) {
@@ -153,6 +154,7 @@ export function QuickActionsSection({
               action={action}
               railStart={index === 0}
               railEnd={index === tvActions.length - 1}
+              contentEntry={contentEntry && index === 0}
               nextFocusUp={settingsTag ?? neighbors.up}
               nextFocusDown={neighbors.down}
               onFocus={railFocus.onFocus}
@@ -335,6 +337,7 @@ function TvQuickActionCard({
   action,
   railStart,
   railEnd,
+  contentEntry = false,
   nextFocusUp,
   nextFocusDown,
   onFocus,
@@ -344,6 +347,7 @@ function TvQuickActionCard({
   action: HomeQuickActionDef;
   railStart?: boolean;
   railEnd?: boolean;
+  contentEntry?: boolean;
   nextFocusUp?: number;
   nextFocusDown?: number;
   onFocus?: () => void;
@@ -366,6 +370,8 @@ function TvQuickActionCard({
       }}
       railStart={railStart}
       railEnd={railEnd}
+      contentEntry={contentEntry}
+      hasTVPreferredFocus={contentEntry}
       nextFocusUp={nextFocusUp}
       nextFocusDown={nextFocusDown}
       hostRef={hostRef}

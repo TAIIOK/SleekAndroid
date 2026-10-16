@@ -132,6 +132,48 @@ export function sortLampaItemsByYear(items: LampaItem[]): LampaItem[] {
   });
 }
 
+function relatedLampaId(item: LampaItem): number | undefined {
+  const record = item as LampaItem & { tmdbId?: number };
+  if (typeof record.tmdbId === 'number' && record.tmdbId > 0) return record.tmdbId;
+  const id = typeof item.id === 'number' ? item.id : Number(item.id);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
+}
+
+function prepareRelatedLampaItems(items: LampaItem[], currentTmdbId: number): LampaItem[] {
+  const seen = new Set<number>();
+  const prepared: LampaItem[] = [];
+  for (const item of items) {
+    const id = relatedLampaId(item);
+    if (!id || id === currentTmdbId || seen.has(id)) continue;
+    seen.add(id);
+    prepared.push(item);
+  }
+  return sortLampaItemsByYear(prepared);
+}
+
+/** Collection parts stay in year order. Kinopoisk relations are appended when they are not already in the collection. */
+export function mergeRelatedLampaItems(
+  collection: LampaItem[],
+  kinopoisk: LampaItem[],
+  currentTmdbId: number,
+): LampaItem[] {
+  const base = prepareRelatedLampaItems(collection, currentTmdbId);
+  const seen = new Set<number>(
+    base.flatMap((item) => {
+      const id = relatedLampaId(item);
+      return id ? [id] : [];
+    }),
+  );
+  seen.add(currentTmdbId);
+  const extras = prepareRelatedLampaItems(kinopoisk, currentTmdbId).filter((item) => {
+    const id = relatedLampaId(item);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return [...base, ...extras];
+}
+
 export function excludeRelatedLampaItems(
   similar: LampaItem[],
   related: LampaItem[],
