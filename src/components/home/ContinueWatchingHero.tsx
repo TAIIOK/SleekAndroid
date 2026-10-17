@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -93,6 +93,10 @@ export function ContinueWatchingHero({
 
   const secondary = continueSecondaryAction(item);
   const eyebrow = formatContinueHeroEyebrow(item);
+  const entryItemIdRef = useRef(item.id);
+  const releasedEntryFocusRef = useRef(false);
+  if (item.id !== entryItemIdRef.current) releasedEntryFocusRef.current = true;
+  const preferEntryFocus = isContentEntry && !releasedEntryFocusRef.current;
 
   return (
     <View style={styles.hero}>
@@ -147,7 +151,7 @@ export function ContinueWatchingHero({
           <HeroPlayButton
             label="Продолжить"
             accessibilityLabel={`Продолжить ${item.title}`}
-            hasTVPreferredFocus={isContentEntry}
+            hasTVPreferredFocus={preferEntryFocus}
             contentEntry={isContentEntry}
             railStart={isContentEntry}
             hostRef={registerTvHomeHeroFocus}

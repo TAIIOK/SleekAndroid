@@ -41,7 +41,7 @@ const CARD_WIDTH = layout.continueCardWidth;
 
 interface ContinueWatchingRowProps {
   items: ContinueWatchingItem[];
-  /** TV focus previews this card; `null` returns the hero to the latest item. */
+  /** TV focus previews this card in the home hero. */
   onPreview?: (item: ContinueWatchingItem | null) => void;
 }
 
@@ -50,9 +50,24 @@ export function ContinueWatchingRow({ items, onPreview }: ContinueWatchingRowPro
   const neighbors = useTvCatalogVerticalNeighbors('/', CONTINUE_RAIL_PRIORITY);
   const nextFocusUp = neighbors.up;
   const nextFocusDown = neighbors.down;
-  const { bindItem, ownsFocusRef } = useTvRailFocusRestore(items.length, {
+  const { bindItem, ownsFocusRef, subscribePin } = useTvRailFocusRestore(items.length, {
     stealHorizontalEscape: isTvUi(),
   });
+  const bindItemRef = useRef(bindItem);
+  bindItemRef.current = bindItem;
+  // Stable per-index hosts. Inline refs change every preview render and React 19
+  // detaches them (null), which re-registers the rail on card 0 and drops focus there.
+  const cardHostRefs = useRef(new Map<number, (node: View | null) => void>());
+  const cardHostRef = (index: number) => {
+    const found = cardHostRefs.current.get(index);
+    if (found) return found;
+    const cb = (node: View | null) => {
+      bindItemRef.current(index).ref?.(node);
+      if (index === 0) registerTvCatalogRail('/', CONTINUE_RAIL_PRIORITY, node);
+    };
+    cardHostRefs.current.set(index, cb);
+    return cb;
+  };
   const horizontalPad = isTvUi() ? layout.gutterDesktop : layout.gutterMobile;
   const itemTagsRef = useRef<(number | undefined)[]>([]);
   const [itemTags, setItemTags] = useState<(number | undefined)[]>([]);
@@ -89,6 +104,7 @@ export function ContinueWatchingRow({ items, onPreview }: ContinueWatchingRowPro
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      removeClippedSubviews={false}
       contentContainerStyle={[styles.scroll, { paddingHorizontal: horizontalPad }]}
       {...tvHorizontalCatalogScrollProps}
     >
@@ -97,10 +113,9 @@ export function ContinueWatchingRow({ items, onPreview }: ContinueWatchingRowPro
         return (
           <View key={item.id} collapsable={false}>
             <ContinueCard
-              ref={(node) => {
-                railFocus.ref?.(node);
-                if (index === 0) registerTvCatalogRail('/', CONTINUE_RAIL_PRIORITY, node);
-              }}
+              ref={cardHostRef(index)}
+              index={index}
+              subscribePin={subscribePin}
               item={item}
               onPress={() => openContinueWatchingItem(router, item)}
               onFocus={() => {
@@ -109,7 +124,6 @@ export function ContinueWatchingRow({ items, onPreview }: ContinueWatchingRowPro
               }}
               onBlur={() => {
                 railFocus.onBlur?.();
-                onPreview?.(null);
               }}
               isContentEntry={false}
               railStart={index === 0}
@@ -182,6 +196,8 @@ const ContinueCard = forwardRef<
   View,
   {
     item: ContinueWatchingItem;
+    index: number;
+    subscribePin?: (index: number, listener: (pinned: boolean) => void) => () => void;
     onPress: () => void;
     onFocus?: () => void;
     onBlur?: () => void;
@@ -197,6 +213,8 @@ const ContinueCard = forwardRef<
 >(function ContinueCard(
   {
     item,
+    index,
+    subscribePin,
     onPress,
     onFocus,
     onBlur,
@@ -212,10 +230,13 @@ const ContinueCard = forwardRef<
   ref,
 ) {
   const [focused, setFocused] = useState(false);
+  const [pinVerticalFocus, setPinVerticalFocus] = useState(false);
   const [selfTag, setSelfTag] = useState<number | undefined>();
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<(View & { requestTVFocus?: () => void }) | null>(null);
   const claimedEntryFocusRef = useRef(false);
+  const onNativeTagRef = useRef(onNativeTag);
+  onNativeTagRef.current = onNativeTag;
   const exitLeft = isTvUi() && Boolean(railStart || isContentEntry);
   const exitUp = isTvUi() && Boolean(isContentEntry);
   const pinnedRight =
@@ -225,28 +246,37 @@ const ContinueCard = forwardRef<
     exitTag: shellFocus?.sidebarNativeTag,
     siblingTag: nextFocusLeft,
   });
+  const pinVertical = isTvUi() && focused && pinVerticalFocus && selfTag != null;
   const { displayUrl, imageSource, onLoad, onError } = usePosterDisplayUri({
     poster: item.poster,
     animeId: item.animeId,
   });
   const decodeSize = continuePosterDecodeSize(CARD_WIDTH);
 
-  const captureTag = (node: View | null) => {
+  useEffect(
+    () => subscribePin?.(index, setPinVerticalFocus),
+    [index, subscribePin],
+  );
+
+  const publishTag = useCallback((node: View | null) => {
     if (!isTvUi()) return;
     const tag =
       node != null
         ? (findNodeHandle(node as Parameters<typeof findNodeHandle>[0]) ?? undefined)
         : undefined;
     setSelfTag((prev) => (prev === tag ? prev : tag));
-    onNativeTag?.(tag);
-  };
+    onNativeTagRef.current?.(tag);
+  }, []);
 
-  const setRefs = (node: View | null) => {
-    nodeRef.current = node as (View & { requestTVFocus?: () => void }) | null;
-    if (typeof ref === 'function') ref(node);
-    else if (ref) ref.current = node;
-    captureTag(node);
-  };
+  const setRefs = useCallback(
+    (node: View | null) => {
+      nodeRef.current = node as (View & { requestTVFocus?: () => void }) | null;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+      publishTag(node);
+    },
+    [publishTag, ref],
+  );
 
   useEffect(() => {
     if (!isTvUi() || !isContentEntry || claimedEntryFocusRef.current) return;
@@ -264,8 +294,9 @@ const ContinueCard = forwardRef<
         setFocused(true);
         if (isTvUi() && nodeRef.current) {
           shellFocus?.registerContentAnchor(nodeRef.current);
-          captureTag(nodeRef.current);
-          setCatalogActiveFocus('/', CONTINUE_RAIL_KEY, 0);
+          publishTag(nodeRef.current);
+          registerTvCatalogRail('/', CONTINUE_RAIL_PRIORITY, nodeRef.current);
+          setCatalogActiveFocus('/', CONTINUE_RAIL_KEY, index);
         }
         if (exitLeft) shellFocus?.setExitLeftEnabled(true);
         if (exitUp) shellFocus?.setExitUpEnabled(true);
@@ -285,8 +316,12 @@ const ContinueCard = forwardRef<
       ]}
       {...(isContentEntry && isTvUi() ? { hasTVPreferredFocus: true } : {})}
       {...(pinnedLeft != null ? { nextFocusLeft: pinnedLeft } : {})}
-      {...(nextFocusUp != null ? { nextFocusUp } : {})}
-      {...(nextFocusDown != null ? { nextFocusDown } : {})}
+      {...(pinVertical
+        ? { nextFocusUp: selfTag, nextFocusDown: selfTag }
+        : {
+            ...(nextFocusUp != null ? { nextFocusUp } : {}),
+            ...(nextFocusDown != null ? { nextFocusDown } : {}),
+          })}
       {...(pinnedRight != null ? { nextFocusRight: pinnedRight } : {})}
     >
       <View style={[styles.posterFrame, focused && styles.posterFrameFocused]}>
