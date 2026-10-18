@@ -16,6 +16,7 @@ import {
 } from '@/lib/tvHomeFocusHandoff';
 import { animeGenreNames, animeHeroImageCandidates, animeScore } from '@/lib/animeDetail';
 import { animeHeroImageUrls } from '@/lib/config';
+import { higherQualityImageUrl } from '@/lib/imageQuality';
 import {
   continueSecondaryAction,
   formatContinueHeroEyebrow,
@@ -38,10 +39,10 @@ export function ContinueWatchingHero({
   const neighbors = useTvCatalogVerticalNeighbors('/', HOME_HERO_RAIL_PRIORITY);
   const poster = item.poster;
   const lampaId = lampaRouteId(item);
-  const [imageFailed, setImageFailed] = useState(false);
+  const [rejectedUris, setRejectedUris] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
-    setImageFailed(false);
+    setRejectedUris(new Set());
   }, [item.id]);
 
   const { data: animeDetail } = useQuery({
@@ -58,15 +59,25 @@ export function ContinueWatchingHero({
     staleTime: 60_000,
   });
 
-  const backdrop = useMemo(() => {
+  const imageCandidates = useMemo(() => {
+    const urls: Array<string | undefined> = [];
     if (item.kind === 'anime' && animeDetail) {
-      return animeHeroImageUrls(animeHeroImageCandidates(animeDetail))[0];
+      urls.push(animeHeroImageUrls(animeHeroImageCandidates(animeDetail))[0]);
     }
-    if (lampaDetail) return lampaBackdrop(lampaDetail, 'w780');
-    return undefined;
-  }, [animeDetail, item.kind, lampaDetail]);
+    if (lampaDetail) {
+      urls.push(lampaBackdrop(lampaDetail, 'original'), lampaBackdrop(lampaDetail, 'w1280'));
+    }
+    urls.push(higherQualityImageUrl(poster, 'original'), higherQualityImageUrl(poster, 'w780'), poster);
+    const unique: string[] = [];
+    for (const url of urls) {
+      if (!url || unique.includes(url) || rejectedUris.has(url)) continue;
+      unique.push(url);
+    }
+    return unique;
+  }, [animeDetail, item.kind, lampaDetail, poster, rejectedUris]);
 
-  const imageUri = imageFailed ? poster : backdrop ?? poster;
+  const imageUri = imageCandidates[0];
+  const placeholderUri = poster && imageUri && poster !== imageUri ? poster : undefined;
 
   const meta = useMemo(() => {
     if (item.kind === 'anime' && animeDetail) {
@@ -102,16 +113,24 @@ export function ContinueWatchingHero({
     <View style={styles.hero}>
       {imageUri ? (
         <Image
-          key={imageUri}
           source={hotlinkImageSource(imageUri)}
+          placeholder={placeholderUri ? hotlinkImageSource(placeholderUri) : undefined}
+          placeholderContentFit="cover"
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           contentPosition={{ top: '18%', left: '72%' }}
           cachePolicy="memory-disk"
-          recyclingKey={imageUri}
-          transition={0}
+          recyclingKey={item.id}
+          allowDownscaling={false}
+          priority="high"
+          transition={200}
           onError={() => {
-            if (!imageFailed && backdrop && poster && backdrop !== poster) setImageFailed(true);
+            setRejectedUris((prev) => {
+              if (prev.has(imageUri)) return prev;
+              const next = new Set(prev);
+              next.add(imageUri);
+              return next;
+            });
           }}
         />
       ) : (

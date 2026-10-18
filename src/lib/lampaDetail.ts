@@ -5,7 +5,7 @@ import {
   localizedTmdbGenres,
   localizedTmdbStatus,
 } from '@/lib/catalogLocalization';
-import { resolveLampaPosterUrl } from '@/lib/config';
+import { resolveLampaPosterUrl, type LampaPosterSize } from '@/lib/config';
 import { extractPosterPath } from '@/lib/poster';
 
 export interface LampaDetailPayload {
@@ -79,7 +79,7 @@ export function lampaBackdropPath(item: LampaDetail): string | undefined {
 
 export function lampaBackdrop(
   item: LampaDetail,
-  size: 'w780' | 'w500' = 'w780',
+  size: LampaPosterSize = 'w780',
 ): string | undefined {
   return resolveLampaPosterUrl(lampaBackdropPath(item), size);
 }

@@ -16,6 +16,7 @@ import { colors, layout, radii, spacing, tvFocus } from '@/constants/aniverse';
 import { usePosterDisplayUri } from '@/hooks/usePosterDisplayUri';
 import { useTvCatalogVerticalNeighbors } from '@/hooks/useTvCatalogVerticalNeighbors';
 import { useTvRailFocusRestore } from '@/hooks/useTvRailFocusRestore';
+import { higherQualityImageUrl } from '@/lib/imageQuality';
 import type { ContinueWatchingItem } from '@/lib/continueWatching';
 import { formatContinueProgressLabel } from '@/lib/continueWatching';
 import { continuePosterDecodeSize } from '@/lib/catalogRailLayout';
@@ -231,6 +232,9 @@ const ContinueCard = forwardRef<
 ) {
   const [focused, setFocused] = useState(false);
   const [pinVerticalFocus, setPinVerticalFocus] = useState(false);
+  const [upgradeFailed, setUpgradeFailed] = useState(false);
+  const sharpPoster = higherQualityImageUrl(item.poster, 'w780');
+  const canUpgrade = Boolean(sharpPoster && item.poster && sharpPoster !== item.poster);
   const [selfTag, setSelfTag] = useState<number | undefined>();
   const shellFocus = useTvShellFocus();
   const nodeRef = useRef<(View & { requestTVFocus?: () => void }) | null>(null);
@@ -247,10 +251,20 @@ const ContinueCard = forwardRef<
     siblingTag: nextFocusLeft,
   });
   const pinVertical = isTvUi() && focused && pinVerticalFocus && selfTag != null;
-  const { displayUrl, imageSource, onLoad, onError } = usePosterDisplayUri({
+  useEffect(() => {
+    setUpgradeFailed(false);
+  }, [item.poster]);
+
+  const showingSharp = canUpgrade && !upgradeFailed;
+  const base = usePosterDisplayUri({
     poster: item.poster,
     animeId: item.animeId,
   });
+  const sharp = usePosterDisplayUri({
+    poster: showingSharp ? sharpPoster : undefined,
+  });
+  const imageSource =
+    showingSharp && sharp.imageSource ? sharp.imageSource : base.imageSource;
   const decodeSize = continuePosterDecodeSize(CARD_WIDTH);
 
   useEffect(
@@ -329,13 +343,25 @@ const ContinueCard = forwardRef<
           {imageSource ? (
             <Image
               source={{ ...imageSource, width: decodeSize.width, height: decodeSize.height }}
+              placeholder={
+                showingSharp && sharp.imageSource && base.imageSource
+                  ? { ...base.imageSource, width: decodeSize.width, height: decodeSize.height }
+                  : undefined
+              }
+              placeholderContentFit="cover"
               style={styles.poster}
               contentFit="cover"
               cachePolicy="memory-disk"
-              recyclingKey={displayUrl}
+              recyclingKey={item.id}
               transition={0}
-              onLoad={onLoad}
-              onError={onError}
+              onLoad={showingSharp && sharp.imageSource ? sharp.onLoad : base.onLoad}
+              onError={() => {
+                if (showingSharp && sharp.imageSource) {
+                  setUpgradeFailed(true);
+                  return;
+                }
+                base.onError();
+              }}
             />
           ) : (
             <View style={[styles.poster, styles.posterFallback]}>

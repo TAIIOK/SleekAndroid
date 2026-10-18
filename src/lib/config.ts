@@ -28,7 +28,7 @@ export function watchHubUrl(path: string): string {
   return `${WATCHHUB_BASE}${p}`;
 }
 
-export type LampaPosterSize = 'w185' | 'w342' | 'w500' | 'w700' | 'w780' | 'original';
+export type LampaPosterSize = 'w185' | 'w342' | 'w500' | 'w700' | 'w780' | 'w1280' | 'original';
 
 export function resolveLampaPosterUrl(
   path: string | null | undefined,

@@ -20,12 +20,14 @@ Home «Продолжить просмотр» shows unfinished anime, movies, a
 14. [x] Persist title/poster locally when playback starts (`watchHistoryMeta`) so progress-only rows still show artwork.
 15. [x] Enrich missing Lampa posters from title detail; do not stringify poster objects (`[object Object]`).
 16. [x] Continue cards use the same display pipeline as catalog `PosterCard` (`usePosterDisplayUri`): yani host rewrite, Anilib hotlink prefetch, dead-poster refresh when `animeId` is known.
+17. [x] Continue-watching artwork upgrades in place: cards request a larger rendition (`w780` / Yani `huge`) while the stored poster stays as the placeholder. The TV hero keeps that poster visible, then replaces it with an `original` backdrop once detail loads. A failed upgrade falls back to the stored poster.
 
 ## Acceptance Criteria
 
 - After watching part of a movie or series, it appears in «Продолжить просмотр» on Home without requiring a manual library status.
 - Continue cards show real posters for anime and Lampa titles (not a letter fallback) once library, history, local watch cache, or detail enrich has a path.
 - Continue-card artwork loads through the same rewrite + hotlink prefetch path as anime catalog posters (TV Glide does not wait on `onError`).
+- Continue cards and the TV hero show the stored poster immediately, then replace it with a larger rendition (card `w780` / hero `original` backdrop) without clearing the image. If the larger file fails, the stored poster remains.
 - Anime continue cards still deep-link to the unfinished episode when possible.
 - Titles at 90–100% progress stay on the rail. Opening a card starts playback at the saved position (including 90–100%).
 - Phone: tapping a Lampa continue card opens `/movies/:id` or `/series/:id` immediately; Home does not poll WatchHub on the card.
